@@ -90,7 +90,7 @@ Validation checks:
   - Python: `grpcio`, `protobuf` in `requirements.txt`
   - Node.js: `@grpc/grpc-js`, `google-protobuf` in `package.json`
   - Go: `google.golang.org/grpc`, `google.golang.org/protobuf` in `go.mod`
-- `input_schema.json` root fields, unique property names, supported types/editors, documented editor/type pairings, selector `options`, and default value shapes
+- `input_schema.json` root fields, unique property names, supported types/editors, documented editor/type pairings, selector `options`, `requestListSource.param_list`, and default value shapes
 - `input_schema.b` points to an array property
 - `output_schema.json` column names and supported types when present
 
@@ -98,7 +98,7 @@ CoreClaw installs dependencies from `requirements.txt`, `package.json`, or `go.m
 
 At run time, the CLI also validates the actual input assembled from defaults, `--input`, or `--json`. If a field marked `"required": true` is missing or empty, if a declared input field has the wrong JSON type, if a `select`/`radio`/`checkbox` value is outside `options`, or if list editor items do not match the documented shape, the command fails before creating run artifacts or starting the worker, matching CoreClaw's form-level launch behavior.
 
-For list editors, `requestList` items must include a non-empty `url`, `stringList` items must include a non-empty `string`, and `requestListSource` items may use custom fields declared in `param_list`. Required `param_list` fields, their JSON types, and their selector options are validated per list item.
+For list editors, `requestList` items must include a non-empty `url`, `stringList` items must include a non-empty `string`, and `requestListSource` items may use custom fields declared in `param_list`. Static validation checks the `param_list` structure, duplicate param names, supported param types/editors, selector options, and editor/type pairings. Run-time validation then checks required `param_list` fields, JSON types, and selector options per list item.
 
 CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
 

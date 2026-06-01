@@ -89,7 +89,7 @@ node ./bin/coreclaw.js validate ./examples/node-hello
   - Python: `requirements.txt` 中的 `grpcio`、`protobuf`
   - Node.js: `package.json` 中的 `@grpc/grpc-js`、`google-protobuf`
   - Go: `go.mod` 中的 `google.golang.org/grpc`、`google.golang.org/protobuf`
-- `input_schema.json` 根字段、唯一 property name、受支持的类型/editor、官方文档中的 editor/type 搭配、selector `options` 和 default 形态。
+- `input_schema.json` 根字段、唯一 property name、受支持的类型/editor、官方文档中的 editor/type 搭配、selector `options`、`requestListSource.param_list` 和 default 形态。
 - `input_schema.b` 必须指向一个 array property。
 - 存在 `output_schema.json` 时校验列名和受支持类型。
 
@@ -97,7 +97,7 @@ CoreClaw 上传后会从 `requirements.txt`、`package.json` 或 `go.mod` 安装
 
 运行时，CLI 还会校验由默认值、`--input` 或 `--json` 拼出的实际输入。如果某个字段标记了 `"required": true` 但本次输入缺失或为空，或者声明字段的 JSON 类型不匹配，或者 `select`/`radio`/`checkbox` 的值不在 `options` 中，或者列表编辑器项结构不符合文档，命令会在创建 run 产物和启动 worker 前失败，贴近 CoreClaw 表单层的启动行为。
 
-列表编辑器中，`requestList` 项必须包含非空 `url`，`stringList` 项必须包含非空 `string`，`requestListSource` 项可以使用 `param_list` 声明的自定义字段。CLI 会逐项校验 `param_list` required 字段、JSON 类型和 selector options。
+列表编辑器中，`requestList` 项必须包含非空 `url`，`stringList` 项必须包含非空 `string`，`requestListSource` 项可以使用 `param_list` 声明的自定义字段。静态校验会检查 `param_list` 结构、重复 param name、受支持的 param type/editor、selector options 以及 editor/type 搭配；运行时再逐项校验 required 字段、JSON 类型和 selector options。
 
 官方文档把 `output_schema.json` 描述为上传就绪项目文件，但当前平台仍兼容没有 `output_schema.json` 的老 worker。因此 CLI 把缺失 `output_schema.json` 作为 warning，而不是阻塞错误。没有 output schema 时，本地 `export.ndjson` 会保留完整原始结果行。
 

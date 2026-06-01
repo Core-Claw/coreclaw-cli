@@ -94,6 +94,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     }
 
     issues.push(...validatePropertyOptions(property, prefix));
+    issues.push(...validatePropertyParamList(property, prefix));
     issues.push(...validatePropertyDefault(property, prefix));
   }
 
@@ -155,23 +156,90 @@ function normalizeType(type) {
 }
 
 function validatePropertyOptions(property, prefix) {
+  return validateSelectorOptions(property, prefix, {
+    missingCode: 'input_selector_missing_options',
+    invalidCode: 'input_selector_option_invalid',
+  });
+}
+
+function validatePropertyParamList(property, prefix) {
+  if (property.editor !== 'requestListSource' || property.param_list === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(property.param_list)) {
+    return [warn(`${prefix}.param_list should be an array of requestListSource parameter definitions.`, 'input_param_list_invalid')];
+  }
+
   const issues = [];
-  if (!SELECTOR_EDITORS.has(property.editor)) {
+  const names = new Set();
+  for (const [index, param] of property.param_list.entries()) {
+    const paramPrefix = `${prefix}.param_list[${index}]`;
+    if (!param || typeof param !== 'object' || Array.isArray(param)) {
+      issues.push(warn(`${paramPrefix} should be an object.`, 'input_param_invalid'));
+      continue;
+    }
+
+    const name = param.param ?? param.name;
+    if (!name || typeof name !== 'string') {
+      issues.push(warn(`${paramPrefix}.param is required and must be a string.`, 'input_param_missing_name'));
+    } else {
+      if (/[^\w.-]/.test(name)) {
+        issues.push(warn(`${paramPrefix}.param "${name}" contains unsupported characters. Use ASCII letters, numbers, underscore, dash, or dot.`, 'input_param_name_invalid'));
+      }
+      if (names.has(name)) {
+        issues.push(warn(`${paramPrefix}.param "${name}" is duplicated.`, 'input_param_duplicate_name'));
+      }
+      names.add(name);
+    }
+
+    if (param.type && !SUPPORTED_TYPES.has(param.type)) {
+      if (!LEGACY_COMPAT_TYPES.has(param.type)) {
+        issues.push(warn(`${paramPrefix}.type "${param.type}" is not documented by CoreClaw. Use ${[...SUPPORTED_TYPES].join(', ')}.`, 'input_param_unsupported_type'));
+      }
+    }
+
+    if (param.editor && !SUPPORTED_EDITORS.has(param.editor)) {
+      issues.push(warn(`${paramPrefix}.editor "${param.editor}" is not documented by CoreClaw. Verify platform rendering before upload.`, 'input_param_unsupported_editor'));
+    }
+
+    if (param.editor && EDITOR_EXPECTED_TYPES.has(param.editor)) {
+      const expectedTypes = EDITOR_EXPECTED_TYPES.get(param.editor);
+      const normalizedType = normalizeType(param.type);
+      if (!expectedTypes.includes(normalizedType)) {
+        issues.push(warn(
+          `${paramPrefix}.editor "${param.editor}" is documented for type ${formatTypeList(expectedTypes)}, but param type is "${normalizedType}".`,
+          'input_param_editor_type_mismatch',
+        ));
+      }
+    }
+
+    issues.push(...validateSelectorOptions(param, paramPrefix, {
+      missingCode: 'input_param_selector_missing_options',
+      invalidCode: 'input_param_selector_option_invalid',
+    }));
+  }
+  return issues;
+}
+
+function validateSelectorOptions(item, prefix, codes) {
+  const issues = [];
+  if (!SELECTOR_EDITORS.has(item.editor)) {
     return issues;
   }
 
-  if (!Array.isArray(property.options) || property.options.length === 0) {
-    issues.push(warn(`${prefix}.editor "${property.editor}" should define a non-empty options array so CoreClaw can render selectable values.`, 'input_selector_missing_options'));
+  if (!Array.isArray(item.options) || item.options.length === 0) {
+    issues.push(warn(`${prefix}.editor "${item.editor}" should define a non-empty options array so CoreClaw can render selectable values.`, codes.missingCode));
     return issues;
   }
 
-  for (const [index, option] of property.options.entries()) {
+  for (const [index, option] of item.options.entries()) {
     if (!option || typeof option !== 'object' || Array.isArray(option)) {
-      issues.push(warn(`${prefix}.options[${index}] should be an object with label and value.`, 'input_selector_option_invalid'));
+      issues.push(warn(`${prefix}.options[${index}] should be an object with label and value.`, codes.invalidCode));
       continue;
     }
     if (!Object.prototype.hasOwnProperty.call(option, 'label') || !Object.prototype.hasOwnProperty.call(option, 'value')) {
-      issues.push(warn(`${prefix}.options[${index}] should include both label and value.`, 'input_selector_option_invalid'));
+      issues.push(warn(`${prefix}.options[${index}] should include both label and value.`, codes.invalidCode));
     }
   }
   return issues;

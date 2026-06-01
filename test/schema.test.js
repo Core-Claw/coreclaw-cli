@@ -277,3 +277,45 @@ test('warns about selector option and default drift in input schema', () => {
     'input_default_list_item_invalid',
   ]);
 });
+
+test('warns about invalid requestListSource param_list definitions', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        param_list: [
+          { title: 'Missing param', type: 'string', editor: 'input' },
+          { param: 'query', type: 'string', editor: 'input' },
+          { param: 'query', type: 'string', editor: 'input' },
+          { param: 'limit', type: 'string', editor: 'number' },
+          { param: 'mode', type: 'string', editor: 'select' },
+          { param: 'badType', type: 'float', editor: 'input' },
+          { param: 'badEditor', type: 'string', editor: 'slider' },
+          { param: 'choice', type: 'string', editor: 'radio', options: [{ label: 'Missing value' }] },
+        ],
+      },
+      {
+        name: 'brokenSources',
+        type: 'array',
+        editor: 'requestListSource',
+        param_list: {},
+      },
+    ],
+  });
+
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  assert.deepEqual(issues.filter((issue) => issue.code?.startsWith('input_param')).map((issue) => issue.code), [
+    'input_param_missing_name',
+    'input_param_duplicate_name',
+    'input_param_editor_type_mismatch',
+    'input_param_selector_missing_options',
+    'input_param_unsupported_type',
+    'input_param_unsupported_editor',
+    'input_param_selector_option_invalid',
+    'input_param_list_invalid',
+  ]);
+});
