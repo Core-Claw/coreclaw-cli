@@ -24,7 +24,7 @@ Chinese documentation: [README_CN.md](./README_CN.md).
 - Run lifecycle artifacts under `.coreclaw/runs/<run-id>/`
 - Upload ZIP structure validation and packaging
 
-It does not emulate CoreClaw's real remote fingerprint browser pool or real SOCKS5 proxy. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP endpoint with `--chrome-ws`. For proxy-sensitive workers, use `--cloud-proxy` to expose local placeholder proxy variables, or pass real proxy values with `--proxy-auth` / `--proxy-domain`.
+It does not emulate CoreClaw's real remote fingerprint browser pool. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP endpoint with `--chrome-ws`. For HTTP workers, use `--local-proxy --require-proxy-usage` to expose a local SOCKS5 proxy through `PROXY_AUTH` / `PROXY_DOMAIN` and fail the run if the worker bypasses it.
 
 ## Install
 
@@ -106,6 +106,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://exam
 node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 ```
 
 The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then executes the worker.
@@ -188,6 +189,15 @@ Default local runs use direct outbound network:
 - `PROXY_AUTH` is unset
 - `PROXY_DOMAIN` is unset
 - `ChromeWs` is auto-discovered from local Chrome CDP when available; otherwise `127.0.0.1:9222`
+
+To emulate CoreClaw's SOCKS5 proxy path for HTTP workers, start the local proxy:
+
+```bash
+node ./bin/coreclaw.js run ./worker --local-proxy
+node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage
+```
+
+`--local-proxy` starts an authenticated SOCKS5 proxy on `127.0.0.1:<port>` and injects matching `PROXY_AUTH` / `PROXY_DOMAIN` values. `--require-proxy-usage` also enables the proxy and fails the run if the worker never opens a SOCKS5 CONNECT request. Use this gate for HTTP request workers so local verification catches code that succeeds only by using direct host networking.
 
 To emulate CoreClaw cloud proxy variables without a real proxy, opt in explicitly:
 

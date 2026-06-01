@@ -23,7 +23,7 @@ CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平
 - 上传 ZIP 结构验证和打包。
 - `verify` 默认从上传包视角的临时 staging 目录运行，并在该目录安装依赖。
 
-它不会模拟 CoreClaw 真实的远程指纹浏览器池或真实 SOCKS5 代理。浏览器 worker 可以启动本地 Chrome remote debugging `127.0.0.1:9222`，或用 `--chrome-ws` 传入真实远程 CDP 端点。代理敏感 worker 可以用 `--cloud-proxy` 暴露本地占位代理变量，或用 `--proxy-auth` / `--proxy-domain` 传入真实代理参数。
+它不会模拟 CoreClaw 真实的远程指纹浏览器池。浏览器 worker 可以启动本地 Chrome remote debugging `127.0.0.1:9222`，或用 `--chrome-ws` 传入真实远程 CDP 端点。HTTP worker 可以使用 `--local-proxy --require-proxy-usage` 通过 `PROXY_AUTH` / `PROXY_DOMAIN` 暴露本地 SOCKS5 代理，并在 worker 绕过代理时让 run 失败。
 
 ## 安装
 
@@ -105,6 +105,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://exam
 node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 ```
 
 `run` 会启动本地 CoreClaw SDK gRPC server，监听 `127.0.0.1:20086`，然后执行 worker。
@@ -189,6 +190,15 @@ node ./bin/coreclaw.js run ./worker \
 - 不设置 `PROXY_AUTH`
 - 不设置 `PROXY_DOMAIN`
 - `ChromeWs` 优先从本地 Chrome CDP 自动发现；否则为 `127.0.0.1:9222`
+
+如需模拟 CoreClaw 的 SOCKS5 代理路径，可以启动本地代理：
+
+```bash
+node ./bin/coreclaw.js run ./worker --local-proxy
+node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage
+```
+
+`--local-proxy` 会在 `127.0.0.1:<port>` 启动带认证的 SOCKS5 代理，并注入匹配的 `PROXY_AUTH` / `PROXY_DOMAIN`。`--require-proxy-usage` 也会启用该代理，并在 worker 从未发起 SOCKS5 CONNECT 时让 run 失败。HTTP 请求型 worker 应使用这个门槛，避免代码只是因为本机直连网络而跑通。
 
 如需模拟 CoreClaw 云端代理变量但没有真实代理，可以显式使用：
 

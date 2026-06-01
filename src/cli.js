@@ -139,6 +139,8 @@ function isBooleanOption(name) {
     'recursive',
     'all',
     'cloudProxy',
+    'localProxy',
+    'requireProxyUsage',
     'discoverChrome',
     'pack',
   ]).has(name);
@@ -163,9 +165,11 @@ Usage:
   coreclaw validate [project]
   coreclaw run [project] [--input input.json | --json '{"url":"..."}'] [--split 0] [--min-results 1]
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
+  coreclaw run [project] [--local-proxy] [--require-proxy-usage]
   coreclaw run [project] [--chrome-ws host[:port][/path] | --no-discover-chrome]
   coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
   coreclaw verify [project] [--no-staging] [--no-install]
+  coreclaw verify [project] [--local-proxy] [--require-proxy-usage]
   coreclaw verify [project] --cloud-output cloud.json [--min-shared 1] [--compare-output report.json]
   coreclaw pack [project] --output worker.zip
   coreclaw audit [root] --output audit.json --markdown audit.md [--all]
