@@ -62,6 +62,14 @@ export function validateProject(projectDir, options = {}) {
     }
   }
 
+  if (!fs.existsSync(path.join(projectDir, 'README.md'))) {
+    issues.push({
+      severity: 'warn',
+      code: 'missing_readme',
+      message: 'Missing README.md. CoreClaw project structure documents README.md as an upload-ready worker file for user-facing usage notes.',
+    });
+  }
+
   const inputPath = path.join(projectDir, 'input_schema.json');
   const outputPath = path.join(projectDir, 'output_schema.json');
 
