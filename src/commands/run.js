@@ -243,18 +243,33 @@ export function enforceOutputSchemaMatch(store, options) {
 }
 
 export function enforceCaptchaSolverGate(store, captchaShim, options) {
-  if (!options.requireCaptchaSolver) {
-    return;
-  }
-
   if (!captchaShim) {
+    if (!options.requireCaptchaSolver) {
+      return;
+    }
     const message = '--require-captcha-solver requires the local CAPTCHA CDP shim to be enabled.';
     store.finish({ exitCode: 1, error: message });
     throw new CliError(message);
   }
 
+  if ((captchaShim.stats.calls?.length ?? 0) > 0 || options.requireCaptchaSolver) {
+    store.writeJson?.('captcha_solver_calls.json', captchaShim.stats.calls ?? []);
+  }
+
+  if (!options.requireCaptchaSolver) {
+    return;
+  }
+
   if (captchaShim.stats.automaticSolverCalls < 1) {
     const message = 'Worker did not call Captchas.automaticSolver through the local CAPTCHA CDP shim.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
+  }
+
+  const invalidCalls = captchaShim.stats.invalidCalls ?? [];
+  if (invalidCalls.length > 0) {
+    const issueCount = invalidCalls.reduce((total, call) => total + call.issues.length, 0);
+    const message = `Worker called Captchas.automaticSolver with ${issueCount} invalid parameter issue(s). See captcha_solver_calls.json in ${store.runDir}.`;
     store.finish({ exitCode: 1, error: message });
     throw new CliError(message);
   }

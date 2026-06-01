@@ -28,6 +28,34 @@ test('captcha CDP shim handles Captchas.automaticSolver', async () => {
       timeout: 120,
       solverType: 'tiktok_slide_simple',
     });
+    assert.deepEqual(shim.stats.calls[0].issues, []);
+    assert.deepEqual(shim.stats.invalidCalls, []);
+    socket.close();
+  } finally {
+    await shim.stop();
+  }
+});
+
+test('captcha CDP shim records invalid automaticSolver params', async () => {
+  const shim = await startCaptchaCdpShim();
+  try {
+    const socket = await connect(shim.cdpEndpoint);
+    const response = await sendCommand(socket, {
+      id: 2,
+      method: 'Captchas.automaticSolver',
+      params: {
+        timeout: '120',
+        solverType: 'unknown_solver',
+      },
+    });
+
+    assert.equal(response.result.status, true);
+    assert.equal(shim.stats.automaticSolverCalls, 1);
+    assert.deepEqual(shim.stats.calls[0].issues, [
+      'timeout must be a positive number',
+      'solverType "unknown_solver" is not documented by CoreClaw',
+    ]);
+    assert.equal(shim.stats.invalidCalls.length, 1);
     socket.close();
   } finally {
     await shim.stop();

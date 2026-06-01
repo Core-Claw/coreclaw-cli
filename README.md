@@ -33,7 +33,7 @@ Chinese documentation: [README_CN.md](./README_CN.md).
 
 It does not emulate CoreClaw's real remote fingerprint browser pool. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP/WebDriver endpoint with `--chrome-ws` / `--chrome-http`, then use `--require-browser` to fail fast if the endpoint is not reachable. For HTTP workers, use `--local-proxy --require-proxy-usage` to expose a local SOCKS5 proxy through `PROXY_AUTH` / `PROXY_DOMAIN` and fail the run if the worker bypasses it.
 
-It also does not solve real CAPTCHAs locally. Use `--captcha-solver` to expose a local CDP shim for CoreClaw's custom `Captchas.automaticSolver` command, and `--require-captcha-solver` to fail a smoke run if the worker never calls that command. This verifies the integration contract before upload; real CAPTCHA bypass still happens only in CoreClaw's hosted fingerprint browser.
+It also does not solve real CAPTCHAs locally. Use `--captcha-solver` to expose a local CDP shim for CoreClaw's custom `Captchas.automaticSolver` command, and `--require-captcha-solver` to fail a smoke run if the worker never calls that command or calls it with params outside the documented `timeout` / `solverType` contract. This verifies the integration contract before upload; real CAPTCHA bypass still happens only in CoreClaw's hosted fingerprint browser.
 
 ## Install
 
@@ -159,7 +159,7 @@ Use `--require-browser` for browser worker smoke tests. It turns browser availab
 
 Use `--browser-cdp-shim` when testing browser workers that should connect through CoreClaw's host-style `ChromeWs` variable. The CLI starts a local CDP WebSocket shim, injects `ChromeWs=<host:port>`, `ChromeHttp=<host:port>`, and a full `CDP_ENDPOINT`, and accepts both `ws://<ChromeWs>/devtools/browser/<id>` and DrissionPage's documented `ws://<ChromeWs>/ws?apiKey=<PROXY_AUTH>` path. Add `--require-browser-cdp-shim` to fail the run if the worker never connects to that shim.
 
-Use `--captcha-solver` when testing workers that call CoreClaw's documented custom CDP method `Captchas.automaticSolver`. The CLI starts the same local CDP WebSocket shape, injects it through `ChromeWs`, `CDP_ENDPOINT`, and `BROWSER_WS_ENDPOINT`, and returns `{ "status": true }` for `Captchas.automaticSolver`. Other CDP messages are forwarded to the discovered or explicit upstream CDP endpoint when one exists. Add `--require-captcha-solver` to fail the run if no solver call was observed.
+Use `--captcha-solver` when testing workers that call CoreClaw's documented custom CDP method `Captchas.automaticSolver`. The CLI starts the same local CDP WebSocket shape, injects it through `ChromeWs`, `CDP_ENDPOINT`, and `BROWSER_WS_ENDPOINT`, and returns `{ "status": true }` for `Captchas.automaticSolver`. Other CDP messages are forwarded to the discovered or explicit upstream CDP endpoint when one exists. Add `--require-captcha-solver` to fail the run if no solver call was observed, `timeout` is not a positive number, or `solverType` is not one of CoreClaw's documented values. Observed solver calls are written to `captcha_solver_calls.json`.
 
 Artifacts are written to:
 
@@ -173,6 +173,7 @@ Artifacts are written to:
   results.ndjson      # raw SDK push_data payloads
   export.ndjson       # CoreClaw-style output_schema-projected rows
   output_schema_issues.json # present when pushed rows drift from output_schema.json
+  captcha_solver_calls.json # present when --require-captcha-solver observes solver calls
   table_headers.json
   tmp/                # per-run temporary state
   summary.json
@@ -272,7 +273,7 @@ For CAPTCHA-aware browser workers:
 node ./bin/coreclaw.js verify ./worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
-This local shim proves that your code sends `Captchas.automaticSolver` with the expected CDP shape. It intentionally does not bypass real website challenges; run the same worker on CoreClaw to validate the hosted solver against real targets.
+This local shim proves that your code sends `Captchas.automaticSolver` with the expected CDP shape. With `--require-captcha-solver`, it also validates that `timeout` is a positive number and `solverType` is one of CoreClaw's documented values: `cloudflare`, `datadome`, `google-v2`, `google-v3`, `oocl_slide`, `perimeterx`, `shein_same_object_click`, `temu_auto`, `tiktok_slide_simple`, or `tiktok_slide_auto`. It intentionally does not bypass real website challenges; run the same worker on CoreClaw to validate the hosted solver against real targets.
 
 To emulate CoreClaw cloud proxy variables without a real proxy, opt in explicitly:
 

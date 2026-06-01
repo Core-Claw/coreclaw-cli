@@ -93,10 +93,56 @@ test('enforceCaptchaSolverGate allows runs that called the local CAPTCHA solver'
   const captchaShim = {
     stats: {
       automaticSolverCalls: 1,
+      calls: [{ params: { timeout: 30, solverType: 'cloudflare' }, issues: [] }],
+      invalidCalls: [],
     },
   };
 
   assert.doesNotThrow(() => enforceCaptchaSolverGate(store, captchaShim, { requireCaptchaSolver: true }));
+  assert.equal(store.files['captcha_solver_calls.json'].length, 1);
+});
+
+test('enforceCaptchaSolverGate records observed solver calls in compatibility mode', () => {
+  const store = makeStore(1);
+  const captchaShim = {
+    stats: {
+      automaticSolverCalls: 1,
+      calls: [{ params: { timeout: '30', solverType: 'unknown_solver' }, issues: ['timeout must be a positive number'] }],
+      invalidCalls: [{ params: { timeout: '30', solverType: 'unknown_solver' }, issues: ['timeout must be a positive number'] }],
+    },
+  };
+
+  assert.doesNotThrow(() => enforceCaptchaSolverGate(store, captchaShim, { captchaSolver: true }));
+  assert.equal(store.files['captcha_solver_calls.json'].length, 1);
+  assert.equal(store.finished, null);
+});
+
+test('enforceCaptchaSolverGate rejects invalid solver params when required', () => {
+  const store = makeStore(1);
+  const captchaShim = {
+    stats: {
+      automaticSolverCalls: 1,
+      calls: [
+        {
+          params: { timeout: '30', solverType: 'unknown_solver' },
+          issues: ['timeout must be a positive number', 'solverType "unknown_solver" is not documented by CoreClaw'],
+        },
+      ],
+      invalidCalls: [
+        {
+          params: { timeout: '30', solverType: 'unknown_solver' },
+          issues: ['timeout must be a positive number', 'solverType "unknown_solver" is not documented by CoreClaw'],
+        },
+      ],
+    },
+  };
+
+  assert.throws(
+    () => enforceCaptchaSolverGate(store, captchaShim, { requireCaptchaSolver: true }),
+    (error) => error instanceof CliError && /invalid parameter issue/.test(error.message),
+  );
+  assert.equal(store.finished.exitCode, 1);
+  assert.equal(store.files['captcha_solver_calls.json'].length, 1);
 });
 
 test('enforceBrowserCdpShimGate marks the run failed when required but unused', () => {
@@ -508,6 +554,10 @@ function makeStore(resultCount, options = {}) {
     runDir: 'E:\\worker\\fixture\\.coreclaw\\runs\\run-id',
     outputSchema: options.outputSchema ?? [],
     finished: null,
+    files: {},
+    writeJson(fileName, value) {
+      this.files[fileName] = value;
+    },
     finish(result) {
       this.finished = result;
     },

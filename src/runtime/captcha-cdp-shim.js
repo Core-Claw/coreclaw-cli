@@ -7,6 +7,19 @@ const DEFAULT_RESULT = {
   message: 'CoreClaw local CAPTCHA solver shim',
 };
 
+const SUPPORTED_SOLVER_TYPES = new Set([
+  'cloudflare',
+  'datadome',
+  'google-v2',
+  'google-v3',
+  'oocl_slide',
+  'perimeterx',
+  'shein_same_object_click',
+  'temu_auto',
+  'tiktok_slide_simple',
+  'tiktok_slide_auto',
+]);
+
 export async function startCaptchaCdpShim({
   upstreamUrl,
   result = DEFAULT_RESULT,
@@ -17,6 +30,7 @@ export async function startCaptchaCdpShim({
     paths: [],
     automaticSolverCalls: 0,
     calls: [],
+    invalidCalls: [],
   };
   const server = http.createServer((request, response) => {
     if (request.url === '/json/version') {
@@ -117,16 +131,46 @@ function handleClientMessage({ message, client, stats, result, store }) {
   }
 
   stats.automaticSolverCalls += 1;
+  const issues = validateAutomaticSolverParams(payload.params);
   stats.calls.push({
     time: new Date().toISOString(),
     params: payload.params ?? {},
+    issues,
   });
-  store?.recordLog('INFO', `Local CAPTCHA solver shim handled Captchas.automaticSolver (${JSON.stringify(payload.params ?? {})})`, 'coreclaw-captcha');
+  if (issues.length > 0) {
+    stats.invalidCalls.push({
+      time: new Date().toISOString(),
+      params: payload.params ?? {},
+      issues,
+    });
+    store?.recordLog('WARN', `Local CAPTCHA solver shim saw invalid Captchas.automaticSolver params: ${issues.join('; ')}`, 'coreclaw-captcha');
+  } else {
+    store?.recordLog('INFO', `Local CAPTCHA solver shim handled Captchas.automaticSolver (${JSON.stringify(payload.params ?? {})})`, 'coreclaw-captcha');
+  }
   safeSend(client, JSON.stringify({
     id: payload.id,
     result,
   }));
   return true;
+}
+
+function validateAutomaticSolverParams(params) {
+  const issues = [];
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    return ['params must be an object with timeout and solverType'];
+  }
+
+  if (typeof params.timeout !== 'number' || !Number.isFinite(params.timeout) || params.timeout <= 0) {
+    issues.push('timeout must be a positive number');
+  }
+
+  if (typeof params.solverType !== 'string' || params.solverType.length === 0) {
+    issues.push('solverType must be a non-empty string');
+  } else if (!SUPPORTED_SOLVER_TYPES.has(params.solverType)) {
+    issues.push(`solverType "${params.solverType}" is not documented by CoreClaw`);
+  }
+
+  return issues;
 }
 
 function localAddress(server) {
