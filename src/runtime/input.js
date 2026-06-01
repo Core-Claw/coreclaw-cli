@@ -142,6 +142,8 @@ function inputValueMatchesType(value, type) {
       return typeof value === 'string';
     case 'integer':
       return Number.isInteger(value);
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
     case 'boolean':
       return typeof value === 'boolean';
     case 'array':
@@ -158,6 +160,9 @@ function inputTypeLabel(type) {
   if (normalized === 'integer') {
     return 'an integer';
   }
+  if (normalized === 'number') {
+    return 'a number';
+  }
   if (normalized === 'array' || normalized === 'object') {
     return `an ${normalized}`;
   }
@@ -166,14 +171,17 @@ function inputTypeLabel(type) {
 
 function normalizeInputType(type) {
   if (type === 'number') {
-    return 'integer';
+    return 'number';
   }
   return type;
 }
 
 function inputEditorIssues(property, value) {
-  if (property.editor === 'requestList' || property.editor === 'requestListSource') {
+  if (property.editor === 'requestList') {
     return requestListIssues(property.name, value);
+  }
+  if (property.editor === 'requestListSource') {
+    return requestListSourceIssues(property, value);
   }
   if (property.editor === 'stringList') {
     return stringListIssues(property.name, value);
@@ -199,6 +207,49 @@ function requestListIssues(name, value) {
   });
 }
 
+function requestListSourceIssues(property, value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item, index) => {
+    const itemName = `${property.name}[${index}]`;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return [`field "${itemName}" must be an object`];
+    }
+    if (!Array.isArray(property.param_list)) {
+      return [];
+    }
+    return property.param_list.flatMap((param) => requestListSourceParamIssues(itemName, item, param));
+  });
+}
+
+function requestListSourceParamIssues(itemName, item, param) {
+  const name = param?.param ?? param?.name;
+  if (!name || typeof name !== 'string') {
+    return [];
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(item, name)) {
+    if (param.required === true) {
+      return [`required field "${itemName}.${name}" is missing or empty`];
+    }
+    return [];
+  }
+
+  const value = item[name];
+  if (param.required === true && isEmptyInputValue(value)) {
+    return [`required field "${itemName}.${name}" is missing or empty`];
+  }
+  if (!inputValueMatchesType(value, param.type)) {
+    return [`field "${itemName}.${name}" must be ${inputTypeLabel(param.type)}`];
+  }
+  if (param.editor === 'select' || param.editor === 'radio' || param.editor === 'checkbox') {
+    return optionValueIssues(param, value, `${itemName}.${name}`);
+  }
+  return [];
+}
+
 function stringListIssues(name, value) {
   if (!Array.isArray(value)) {
     return [];
@@ -214,7 +265,7 @@ function stringListIssues(name, value) {
   });
 }
 
-function optionValueIssues(property, value) {
+function optionValueIssues(property, value, displayName = property.name) {
   if (!Array.isArray(property.options) || property.options.length === 0) {
     return [];
   }
@@ -228,7 +279,7 @@ function optionValueIssues(property, value) {
   const values = Array.isArray(value) ? value : [value];
   return values
     .filter((item) => !allowed.has(comparableValue(item)))
-    .map((item) => `field "${property.name}" value ${formatInputValue(item)} is not declared in input_schema options`);
+    .map((item) => `field "${displayName}" value ${formatInputValue(item)} is not declared in input_schema options`);
 }
 
 function comparableValue(value) {

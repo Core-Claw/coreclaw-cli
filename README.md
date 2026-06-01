@@ -90,13 +90,15 @@ Validation checks:
   - Python: `grpcio`, `protobuf` in `requirements.txt`
   - Node.js: `@grpc/grpc-js`, `google-protobuf` in `package.json`
   - Go: `google.golang.org/grpc`, `google.golang.org/protobuf` in `go.mod`
-- `input_schema.json` root fields, unique property names, supported types/editors, and documented editor/type pairings
+- `input_schema.json` root fields, unique property names, supported types/editors, documented editor/type pairings, selector `options`, and default value shapes
 - `input_schema.b` points to an array property
 - `output_schema.json` column names and supported types when present
 
 CoreClaw installs dependencies from `requirements.txt`, `package.json`, or `go.mod` after upload. The CLI therefore rejects workers that rely on locally installed SDK packages but do not declare those packages for the cloud installer.
 
-At run time, the CLI also validates the actual input assembled from defaults, `--input`, or `--json`. If a field marked `"required": true` is missing or empty, if a declared input field has the wrong JSON type, if a `select`/`radio`/`checkbox` value is outside `options`, or if `requestList`/`stringList` items do not match the documented shape, the command fails before creating run artifacts or starting the worker, matching CoreClaw's form-level launch behavior.
+At run time, the CLI also validates the actual input assembled from defaults, `--input`, or `--json`. If a field marked `"required": true` is missing or empty, if a declared input field has the wrong JSON type, if a `select`/`radio`/`checkbox` value is outside `options`, or if list editor items do not match the documented shape, the command fails before creating run artifacts or starting the worker, matching CoreClaw's form-level launch behavior.
+
+For list editors, `requestList` items must include a non-empty `url`, `stringList` items must include a non-empty `string`, and `requestListSource` items may use custom fields declared in `param_list`. Required `param_list` fields, their JSON types, and their selector options are validated per list item.
 
 CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
 
@@ -134,7 +136,7 @@ The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then execu
 
 Use `--timeout-ms` to cap the whole worker process and `--idle-timeout-ms` to stop a worker that has stopped producing output but still has open Node/Python/Go handles. Durations accept milliseconds, `s`, or `m`.
 
-If the input schema marks a field as required, local runs require a non-empty value for that field. Declared fields must also match their schema type, for example `integer` must be an integer, `boolean` must be a boolean, and `array` must be a JSON array. Selector inputs must use values declared in `options`, `requestList` items must contain a non-empty `url`, and `stringList` items must contain a non-empty `string`. Use `--input input.json` or `--json '{"field":"value"}'` when the schema does not provide a default.
+If the input schema marks a field as required, local runs require a non-empty value for that field. Declared fields must also match their schema type, for example `integer` must be an integer, `boolean` must be a boolean, and `array` must be a JSON array. Selector inputs must use values declared in `options`; `requestList`, `requestListSource`, and `stringList` values are validated against their documented item shapes. Use `--input input.json` or `--json '{"field":"value"}'` when the schema does not provide a default.
 
 Use `--min-results` for real worker smoke tests. Some existing workers can exit with code `0` after logging an upstream or browser error, so result count is the reliable success gate.
 

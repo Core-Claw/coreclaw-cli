@@ -23,6 +23,7 @@ const EDITOR_EXPECTED_TYPES = new Map([
   ['requestListSource', ['array']],
   ['stringList', ['array']],
 ]);
+const SELECTOR_EDITORS = new Set(['select', 'radio', 'checkbox']);
 
 export function validateInputSchema(schema, filePath = 'input_schema.json') {
   const issues = [];
@@ -67,7 +68,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
     if (!SUPPORTED_TYPES.has(property.type)) {
       if (LEGACY_COMPAT_TYPES.has(property.type)) {
-        issues.push(warn(`${prefix}.type "${property.type}" is accepted as a legacy compatibility alias for "${LEGACY_COMPAT_TYPES.get(property.type)}"; prefer documented CoreClaw type "${LEGACY_COMPAT_TYPES.get(property.type)}".`));
+        issues.push(warn(`${prefix}.type "${property.type}" is accepted for legacy compatibility, but CoreClaw documents "${LEGACY_COMPAT_TYPES.get(property.type)}"; prefer "${LEGACY_COMPAT_TYPES.get(property.type)}" for whole-number fields.`));
       } else {
         issues.push(error(`${prefix}.type "${property.type}" is not supported. Use ${[...SUPPORTED_TYPES].join(', ')}.`));
       }
@@ -91,6 +92,9 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     if (property.required === true && property.default === undefined) {
       issues.push(warn(`${prefix} is required but has no default. Local default runs will need --input or --json.`));
     }
+
+    issues.push(...validatePropertyOptions(property, prefix));
+    issues.push(...validatePropertyDefault(property, prefix));
   }
 
   if (schema.b && !splitProperty) {
@@ -148,6 +152,200 @@ function warn(message, code) {
 
 function normalizeType(type) {
   return LEGACY_COMPAT_TYPES.get(type) ?? type;
+}
+
+function validatePropertyOptions(property, prefix) {
+  const issues = [];
+  if (!SELECTOR_EDITORS.has(property.editor)) {
+    return issues;
+  }
+
+  if (!Array.isArray(property.options) || property.options.length === 0) {
+    issues.push(warn(`${prefix}.editor "${property.editor}" should define a non-empty options array so CoreClaw can render selectable values.`, 'input_selector_missing_options'));
+    return issues;
+  }
+
+  for (const [index, option] of property.options.entries()) {
+    if (!option || typeof option !== 'object' || Array.isArray(option)) {
+      issues.push(warn(`${prefix}.options[${index}] should be an object with label and value.`, 'input_selector_option_invalid'));
+      continue;
+    }
+    if (!Object.prototype.hasOwnProperty.call(option, 'label') || !Object.prototype.hasOwnProperty.call(option, 'value')) {
+      issues.push(warn(`${prefix}.options[${index}] should include both label and value.`, 'input_selector_option_invalid'));
+    }
+  }
+  return issues;
+}
+
+function validatePropertyDefault(property, prefix) {
+  if (!Object.prototype.hasOwnProperty.call(property, 'default')) {
+    return [];
+  }
+
+  const issues = [];
+  const expectedType = inputTypeLabel(property.type);
+  if (!valueMatchesInputType(property.default, property.type)) {
+    issues.push(warn(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}.`, 'input_default_type_mismatch'));
+    return issues;
+  }
+
+  if (SELECTOR_EDITORS.has(property.editor) && Array.isArray(property.options) && property.options.length > 0) {
+    const allowed = new Set(property.options
+      .filter((option) => option && typeof option === 'object' && Object.prototype.hasOwnProperty.call(option, 'value'))
+      .map((option) => comparableValue(option.value)));
+    const values = Array.isArray(property.default) ? property.default : [property.default];
+    for (const item of values) {
+      if (!allowed.has(comparableValue(item))) {
+        issues.push(warn(`${prefix}.default value ${formatValue(item)} is not declared in options.`, 'input_default_option_not_declared'));
+      }
+    }
+  }
+
+  if (property.editor === 'requestList') {
+    issues.push(...validateRequestListDefault(property, prefix));
+  } else if (property.editor === 'requestListSource') {
+    issues.push(...validateRequestListSourceDefault(property, prefix));
+  } else if (property.editor === 'stringList') {
+    issues.push(...validateStringListDefault(property, prefix));
+  }
+
+  return issues;
+}
+
+function validateRequestListDefault(property, prefix) {
+  if (!Array.isArray(property.default)) {
+    return [];
+  }
+  return property.default.flatMap((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return [warn(`${prefix}.default[${index}] should be an object with a url field.`, 'input_default_list_item_invalid')];
+    }
+    if (typeof item.url !== 'string' || item.url.length === 0) {
+      return [warn(`${prefix}.default[${index}].url should be a non-empty string.`, 'input_default_list_item_invalid')];
+    }
+    return [];
+  });
+}
+
+function validateRequestListSourceDefault(property, prefix) {
+  if (!Array.isArray(property.default)) {
+    return [];
+  }
+  return property.default.flatMap((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return [warn(`${prefix}.default[${index}] should be an object.`, 'input_default_list_item_invalid')];
+    }
+    if (!Array.isArray(property.param_list)) {
+      return [];
+    }
+    return property.param_list.flatMap((param) => validateParamDefault(item, param, `${prefix}.default[${index}]`));
+  });
+}
+
+function validateParamDefault(item, param, prefix) {
+  const name = param?.param ?? param?.name;
+  if (!name || typeof name !== 'string') {
+    return [];
+  }
+  if (!Object.prototype.hasOwnProperty.call(item, name)) {
+    if (param.required === true) {
+      return [warn(`${prefix}.${name} is required by param_list but missing from the default item.`, 'input_default_param_missing')];
+    }
+    return [];
+  }
+
+  const issues = [];
+  if (!valueMatchesInputType(item[name], param.type)) {
+    issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(param.type)}", but got ${valueType(item[name])}.`, 'input_default_param_type_mismatch'));
+  }
+  if (SELECTOR_EDITORS.has(param.editor) && Array.isArray(param.options) && param.options.length > 0) {
+    const allowed = new Set(param.options
+      .filter((option) => option && typeof option === 'object' && Object.prototype.hasOwnProperty.call(option, 'value'))
+      .map((option) => comparableValue(option.value)));
+    const values = Array.isArray(item[name]) ? item[name] : [item[name]];
+    for (const value of values) {
+      if (!allowed.has(comparableValue(value))) {
+        issues.push(warn(`${prefix}.${name} value ${formatValue(value)} is not declared in param_list options.`, 'input_default_param_option_not_declared'));
+      }
+    }
+  }
+  return issues;
+}
+
+function validateStringListDefault(property, prefix) {
+  if (!Array.isArray(property.default)) {
+    return [];
+  }
+  return property.default.flatMap((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return [warn(`${prefix}.default[${index}] should be an object with a string field.`, 'input_default_list_item_invalid')];
+    }
+    if (typeof item.string !== 'string' || item.string.length === 0) {
+      return [warn(`${prefix}.default[${index}].string should be a non-empty string.`, 'input_default_list_item_invalid')];
+    }
+    return [];
+  });
+}
+
+function valueMatchesInputType(value, type) {
+  switch (inputTypeLabel(type)) {
+    case 'string':
+      return typeof value === 'string';
+    case 'integer':
+      return Number.isInteger(value);
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'boolean':
+      return typeof value === 'boolean';
+    case 'array':
+      return Array.isArray(value);
+    case 'object':
+      return value !== null && typeof value === 'object' && !Array.isArray(value);
+    default:
+      return true;
+  }
+}
+
+function inputTypeLabel(type) {
+  if (type === 'number') {
+    return 'number';
+  }
+  return normalizeType(type);
+}
+
+function valueType(value) {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+  if (Number.isInteger(value)) {
+    return 'integer';
+  }
+  return typeof value;
+}
+
+function comparableValue(value) {
+  if (value && typeof value === 'object') {
+    return stableJson(value);
+  }
+  return `${typeof value}:${String(value)}`;
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function formatValue(value) {
+  const json = JSON.stringify(value);
+  return json === undefined ? String(value) : json;
 }
 
 function formatTypeList(types) {

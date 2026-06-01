@@ -81,6 +81,7 @@ test('validates actual run input types against input schema fields', () => {
       { name: 'keyword', type: 'string' },
       { name: 'limit', type: 'integer' },
       { name: 'legacyLimit', type: 'number' },
+      { name: 'legacyDelay', type: 'number' },
       { name: 'enabled', type: 'boolean' },
       { name: 'items', type: 'array' },
       { name: 'options', type: 'object' },
@@ -91,6 +92,7 @@ test('validates actual run input types against input schema fields', () => {
     keyword: 'coreclaw',
     limit: 3,
     legacyLimit: 4,
+    legacyDelay: 0.5,
     enabled: false,
     items: [],
     options: {},
@@ -100,13 +102,15 @@ test('validates actual run input types against input schema fields', () => {
     keyword: 123,
     limit: 1.5,
     legacyLimit: '4',
+    legacyDelay: '0.5',
     enabled: 'false',
     items: {},
     options: [],
   }, schema), [
     'field "keyword" must be a string',
     'field "limit" must be an integer',
-    'field "legacyLimit" must be an integer',
+    'field "legacyLimit" must be a number',
+    'field "legacyDelay" must be a number',
     'field "enabled" must be a boolean',
     'field "items" must be an array',
     'field "options" must be an object',
@@ -157,24 +161,36 @@ test('validates documented list editor item shapes', () => {
   const schema = {
     properties: [
       { name: 'startUrls', type: 'array', editor: 'requestList' },
-      { name: 'sources', type: 'array', editor: 'requestListSource' },
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        param_list: [
+          { param: 'query', type: 'string', required: true },
+          { param: 'limit', type: 'integer' },
+          { param: 'mode', type: 'string', editor: 'select', options: [{ label: 'Search', value: 'search' }] },
+        ],
+      },
       { name: 'searchTerms', type: 'array', editor: 'stringList' },
     ],
   };
 
   assert.deepEqual(inputSchemaInputIssues({
     startUrls: [{ url: 'https://example.com' }],
-    sources: [{ url: 'https://example.com', method: 'GET' }],
+    sources: [{ query: 'restaurant', limit: 2, mode: 'search' }],
     searchTerms: [{ string: 'restaurant' }],
   }, schema), []);
   assert.deepEqual(inputSchemaInputIssues({
     startUrls: [{ link: 'https://example.com' }, 'https://example.com'],
-    sources: [{ url: '' }],
+    sources: [{}, 'restaurant', { query: 'school', limit: '2', mode: 'bad' }],
     searchTerms: [{ value: 'restaurant' }, 'school'],
   }, schema), [
     'field "startUrls[0].url" must be a non-empty string',
     'field "startUrls[1]" must be an object with a "url" field',
-    'field "sources[0].url" must be a non-empty string',
+    'required field "sources[0].query" is missing or empty',
+    'field "sources[1]" must be an object',
+    'field "sources[2].limit" must be an integer',
+    'field "sources[2].mode" value "bad" is not declared in input_schema options',
     'field "searchTerms[0].string" must be a non-empty string',
     'field "searchTerms[1]" must be an object with a "string" field',
   ]);
@@ -203,7 +219,7 @@ test('accepts legacy number type as compatibility warning', () => {
 
   assert.equal(inputIssues.some((issue) => issue.severity === 'error'), false);
   assert.equal(outputIssues.some((issue) => issue.severity === 'error'), false);
-  assert.equal(inputIssues.some((issue) => issue.severity === 'warn' && issue.message.includes('legacy compatibility alias')), true);
+  assert.equal(inputIssues.some((issue) => issue.severity === 'warn' && issue.message.includes('legacy compatibility')), true);
   assert.equal(outputIssues.some((issue) => issue.severity === 'warn' && issue.message.includes('legacy compatibility alias')), true);
 });
 
@@ -227,5 +243,37 @@ test('warns when input editor does not match the documented type', () => {
     'input_schema.properties[3].editor "checkbox" is documented for type "array", but property type is "string".',
     'input_schema.properties[4].editor "requestList" is documented for type "array", but property type is "string".',
     'input_schema.properties[5].editor "stringList" is documented for type "array", but property type is "string".',
+  ]);
+});
+
+test('warns about selector option and default drift in input schema', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList', default: [{ value: 'missing-string' }] },
+      { name: 'language', type: 'string', editor: 'select', default: 'de', options: [{ label: 'English', value: 'en' }] },
+      { name: 'category', type: 'integer', editor: 'radio', options: [{ label: 'Missing value' }, { value: 2 }] },
+      { name: 'sections', type: 'array', editor: 'checkbox' },
+      { name: 'limit', type: 'integer', editor: 'number', default: '10' },
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        default: [{}, 'bad'],
+        param_list: [{ param: 'query', type: 'string', required: true }],
+      },
+    ],
+  });
+
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  assert.deepEqual(issues.filter((issue) => issue.code?.startsWith('input_')).map((issue) => issue.code), [
+    'input_default_list_item_invalid',
+    'input_default_option_not_declared',
+    'input_selector_option_invalid',
+    'input_selector_option_invalid',
+    'input_selector_missing_options',
+    'input_default_type_mismatch',
+    'input_default_param_missing',
+    'input_default_list_item_invalid',
   ]);
 });
