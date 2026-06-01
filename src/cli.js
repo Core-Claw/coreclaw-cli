@@ -5,6 +5,7 @@ import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
 import { auditCommand } from './commands/audit.js';
 import { inspectRunCommand } from './commands/inspect-run.js';
+import { verifyCommand } from './commands/verify.js';
 import { CliError } from './utils/errors.js';
 
 export async function runCli(argv) {
@@ -32,6 +33,9 @@ export async function runCli(argv) {
       return;
     case 'run':
       await runCommand(parsed.positionals[0] ?? '.', withDefaults(parsed.options, { python: 'python', node: 'node', go: 'go' }));
+      return;
+    case 'verify':
+      await verifyCommand(parsed.positionals[0] ?? '.', parsed.options);
       return;
     case 'pack':
       await packCommand(parsed.positionals[0] ?? '.', normalizePackOptions(parsed.options));
@@ -132,6 +136,7 @@ function isBooleanOption(name) {
     'all',
     'cloudProxy',
     'discoverChrome',
+    'pack',
   ]).has(name);
 }
 
@@ -155,6 +160,7 @@ Usage:
   coreclaw run [project] [--input input.json | --json '{"url":"..."}'] [--split 0] [--min-results 1]
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
   coreclaw run [project] [--chrome-ws host[:port][/path] | --no-discover-chrome]
+  coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
   coreclaw pack [project] --output worker.zip
   coreclaw audit [root] --output audit.json --markdown audit.md [--all]
   coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1]
@@ -164,6 +170,7 @@ Core commands:
   init       Create an upload-ready worker with official SDK files
   validate   Check required files, input_schema.json, and output_schema.json
   run        Start local gRPC runtime emulator and execute the worker
+  verify     Run upload preflight: validate, local run, result gate, and package
   pack       Create a CoreClaw upload ZIP with entry file at archive root
   audit      Validate worker-* projects under a root and write a report
   inspect-run Validate a local run artifact directory

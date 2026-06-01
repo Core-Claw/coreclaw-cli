@@ -17,7 +17,7 @@
   "scripts": {
     "start": "node ./bin/coreclaw.js",
     "test": "node --test",
-    "verify": "npm test && node ./bin/coreclaw.js validate ./examples/node-hello && node ./bin/coreclaw.js run ./examples/node-hello --min-results 1 && node ./bin/coreclaw.js pack ./examples/node-hello --output ./tmp/node-hello.zip"
+    "verify": "npm test && node ./bin/coreclaw.js verify ./examples/node-hello --output ./tmp/node-hello.zip"
   },
   "files": [
     "bin",

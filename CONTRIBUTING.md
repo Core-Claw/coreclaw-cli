@@ -11,12 +11,12 @@ npm ci
 npm run verify
 ```
 
-`npm run verify` runs the unit suite, validates the Node example worker, executes it through the local CoreClaw gRPC runtime, checks that it emits at least one row, and creates an upload ZIP.
+`npm run verify` runs the unit suite and then runs `coreclaw verify` against the Node example worker.
 
-For real workers, use a result-count gate:
+For real workers, use the upload preflight command:
 
 ```bash
-node ./bin/coreclaw.js run E:/worker/worker-yfinance \
+node ./bin/coreclaw.js verify E:/worker/worker-yfinance \
   --input %TEMP%/coreclaw-yfinance-smoke-input.json \
   --command "py -3 main.py" \
   --timeout-ms 60s \

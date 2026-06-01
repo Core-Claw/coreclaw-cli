@@ -45,7 +45,7 @@ Before pushing CLI changes:
 npm run verify
 ```
 
-This runs the unit suite, validates the Node example, executes it through the local runtime with `--min-results 1`, and creates a CoreClaw upload ZIP.
+This runs the unit suite and then executes `coreclaw verify` against the Node example.
 
 ## Commands
 
@@ -130,6 +130,16 @@ Artifacts are written to:
   tmp/                # per-run temporary state
   summary.json
 ```
+
+### Upload Preflight
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
+node ./bin/coreclaw.js verify ./worker --no-pack
+```
+
+`verify` is the upload-before-you-upload gate. It runs static validation, executes the worker in the local CoreClaw runtime, enforces a result-count gate, and creates an upload ZIP unless `--no-pack` is passed. By default, packages are written under `.coreclaw/verify/<verify-id>/`.
 
 ### Inspect a Run
 
