@@ -8,6 +8,7 @@ import {
   buildVerifyRunOptions,
   resolveVerifyCompareOutput,
   resolveVerifyOutput,
+  stageVerifyProject,
 } from '../src/commands/verify.js';
 
 test('buildVerifyRunOptions defaults to a one-row upload preflight gate', () => {
@@ -17,6 +18,7 @@ test('buildVerifyRunOptions defaults to a one-row upload preflight gate', () => 
     node: 'node',
     go: 'go',
     minResults: '1',
+    install: true,
   });
 });
 
@@ -26,11 +28,13 @@ test('buildVerifyRunOptions preserves explicit runtime options', () => {
     python: 'py -3',
     command: 'py -3 main.py',
     noPack: true,
+    install: false,
   }), {
     minResults: '5',
     python: 'py -3',
     command: 'py -3 main.py',
     noPack: true,
+    install: false,
     node: 'node',
     go: 'go',
   });
@@ -85,4 +89,35 @@ test('resolveVerifyCompareOutput respects explicit compare report path', () => {
   const reportPath = path.join(dir, 'reports', 'compare.json');
 
   assert.equal(resolveVerifyCompareOutput(path.join(dir, 'run'), { compareOutput: reportPath }), reportPath);
+});
+
+test('stageVerifyProject copies only uploadable files to a temporary project', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-stage-source-'));
+  fs.writeFileSync(path.join(dir, 'main.js'), '');
+  fs.writeFileSync(path.join(dir, 'input_schema.json'), '{}');
+  fs.mkdirSync(path.join(dir, '.coreclaw'));
+  fs.writeFileSync(path.join(dir, '.coreclaw', 'summary.json'), '{}');
+  fs.mkdirSync(path.join(dir, 'node_modules'));
+  fs.writeFileSync(path.join(dir, 'node_modules', 'dep.js'), '');
+
+  const staged = stageVerifyProject(dir);
+
+  assert.equal(staged.staged, true);
+  assert.notEqual(staged.projectDir, dir);
+  assert.deepEqual(staged.manifest.sort(), ['input_schema.json', 'main.js']);
+  assert.equal(fs.existsSync(path.join(staged.projectDir, 'main.js')), true);
+  assert.equal(fs.existsSync(path.join(staged.projectDir, '.coreclaw')), false);
+  assert.equal(fs.existsSync(path.join(staged.projectDir, 'node_modules')), false);
+
+  fs.rmSync(staged.projectDir, { recursive: true, force: true });
+});
+
+test('stageVerifyProject can be disabled for source-directory debugging', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-no-stage-'));
+
+  assert.deepEqual(stageVerifyProject(dir, { staging: false }), {
+    projectDir: dir,
+    staged: false,
+    manifest: null,
+  });
 });

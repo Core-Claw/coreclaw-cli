@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { collectFiles, createWorkerZip } from '../src/pack/zip.js';
+import { collectFiles, copyWorkerFiles, createWorkerZip } from '../src/pack/zip.js';
 
 test('collectFiles excludes cloud-irrelevant local artifacts', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-pack-'));
@@ -29,6 +29,30 @@ test('createWorkerZip creates a portable archive with only worker files', () => 
 
   assert.equal(fs.existsSync(outFile), true);
   assert.deepEqual(listZipEntries(outFile).sort(), ['input_schema.json', 'main.js']);
+});
+
+test('copyWorkerFiles stages only uploadable worker files', () => {
+  const source = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-pack-stage-source-'));
+  const target = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-pack-stage-target-'));
+  fs.writeFileSync(path.join(source, 'main.js'), 'console.log("ok")\n');
+  fs.writeFileSync(path.join(source, 'input_schema.json'), '{}\n');
+  fs.mkdirSync(path.join(source, 'lib'));
+  fs.writeFileSync(path.join(source, 'lib', 'helper.js'), 'module.exports = {}\n');
+  fs.mkdirSync(path.join(source, '.coreclaw'));
+  fs.writeFileSync(path.join(source, '.coreclaw', 'summary.json'), '{}\n');
+  fs.mkdirSync(path.join(source, 'node_modules'));
+  fs.writeFileSync(path.join(source, 'node_modules', 'dep.js'), '');
+  fs.mkdirSync(path.join(source, 'dist'));
+  fs.writeFileSync(path.join(source, 'dist', 'worker.zip'), '');
+
+  const manifest = copyWorkerFiles(source, target);
+
+  assert.deepEqual(manifest.sort(), ['input_schema.json', 'lib/helper.js', 'main.js']);
+  assert.equal(fs.existsSync(path.join(target, 'main.js')), true);
+  assert.equal(fs.existsSync(path.join(target, 'lib', 'helper.js')), true);
+  assert.equal(fs.existsSync(path.join(target, '.coreclaw')), false);
+  assert.equal(fs.existsSync(path.join(target, 'node_modules')), false);
+  assert.equal(fs.existsSync(path.join(target, 'dist')), false);
 });
 
 function listZipEntries(filePath) {

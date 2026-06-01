@@ -4,6 +4,8 @@ Local development CLI for CoreClaw workers.
 
 CoreClaw's official developer guide currently documents upload-ready worker projects, cloud-injected SDK files, `input_schema.json`, `output_schema.json`, the gRPC SDK endpoint `127.0.0.1:20086`, and runtime variables such as `PROXY_AUTH`, `PROXY_DOMAIN`, and `ChromeWs`. It also says local SDK worker mode is not yet available. This CLI fills that gap for local development.
 
+Chinese documentation: [README_CN.md](./README_CN.md).
+
 ## What It Emulates
 
 - CoreClaw SDK gRPC services:
@@ -129,6 +131,7 @@ Artifacts are written to:
   input.json
   env.json
   command.json
+  upload_manifest.json # files used by staged upload-like preflight runs
   logs.ndjson
   results.ndjson      # raw SDK push_data payloads
   export.ndjson       # CoreClaw-style output_schema-projected rows
@@ -137,16 +140,21 @@ Artifacts are written to:
   summary.json
 ```
 
+`summary.json` records both `project_dir` and `worker_dir`. In regular `run` commands these paths are the same. In staged `verify` commands, `project_dir` is the original worker directory where artifacts are stored, while `worker_dir` is the temporary upload-like execution directory.
+
 ### Upload Preflight
 
 ```bash
 node ./bin/coreclaw.js verify ./examples/node-hello --min-results 1
 node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
 node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud-output.json --min-shared 1 --max-diff 0
+node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 ```
 
-`verify` is the upload-before-you-upload gate. It runs static validation, executes the worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. By default, packages are written under `.coreclaw/verify/<verify-id>/`, and cloud comparison reports are written to `.coreclaw/runs/<run-id>/cloud-comparison.json`. Use `--compare-output <file>` to write the comparison report somewhere else.
+`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to a temporary staging directory, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
+
+By default, run artifacts are still written under the original project `.coreclaw/runs/<run-id>/`, packages are written under `.coreclaw/verify/<verify-id>/`, and cloud comparison reports are written to `.coreclaw/runs/<run-id>/cloud-comparison.json`. Staged preflight runs also write `upload_manifest.json` into the run directory so you can audit exactly which files were copied into the upload-like execution directory. Use `--compare-output <file>` to write the comparison report somewhere else. Use `--no-staging` or `--no-install` only when debugging the source directory directly.
 
 ### Inspect a Run
 

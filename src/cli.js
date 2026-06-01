@@ -165,6 +165,7 @@ Usage:
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
   coreclaw run [project] [--chrome-ws host[:port][/path] | --no-discover-chrome]
   coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
+  coreclaw verify [project] [--no-staging] [--no-install]
   coreclaw verify [project] --cloud-output cloud.json [--min-shared 1] [--compare-output report.json]
   coreclaw pack [project] --output worker.zip
   coreclaw audit [root] --output audit.json --markdown audit.md [--all]
@@ -176,7 +177,7 @@ Core commands:
   init       Create an upload-ready worker with official SDK files
   validate   Check required files, input_schema.json, and output_schema.json
   run        Start local gRPC runtime emulator and execute the worker
-  verify     Run upload preflight: validate, local run, optional cloud compare, and package
+  verify     Run upload preflight from a clean upload-like staging directory
   pack       Create a CoreClaw upload ZIP with entry file at archive root
   audit      Validate worker-* projects under a root and write a report
   inspect-run Validate a local run artifact directory

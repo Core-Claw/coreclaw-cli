@@ -13,6 +13,9 @@ import { RunStore } from '../runtime/run-store.js';
 export async function runCommand(projectPath = '.', options = {}) {
   const projectDir = resolveProjectPath(projectPath);
   const project = validateProject(projectDir);
+  const artifactProjectDir = options.artifactProjectDir
+    ? path.resolve(process.cwd(), options.artifactProjectDir)
+    : projectDir;
 
   if (!project.ok && !options.skipValidate) {
     for (const issue of project.issues) {
@@ -31,10 +34,12 @@ export async function runCommand(projectPath = '.', options = {}) {
   const [command, args] = commandForProject(project, options);
   const store = new RunStore({
     projectDir,
+    artifactProjectDir,
     input,
     env: {},
     command: { command, args, cwd: projectDir },
     outputSchema: readOptionalJson(path.join(projectDir, 'output_schema.json'), []),
+    uploadManifest: options.uploadManifest ?? null,
   });
   store.init();
 

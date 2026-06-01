@@ -8,15 +8,17 @@ export function makeRunId(date = new Date()) {
 }
 
 export class RunStore {
-  constructor({ projectDir, runId = makeRunId(), input, env, command, outputSchema = [] }) {
-    this.projectDir = projectDir;
+  constructor({ projectDir, artifactProjectDir = projectDir, runId = makeRunId(), input, env, command, outputSchema = [], uploadManifest = null }) {
+    this.projectDir = artifactProjectDir;
+    this.workerDir = projectDir;
     this.runId = runId;
-    this.runDir = path.join(projectDir, '.coreclaw', 'runs', runId);
+    this.runDir = path.join(artifactProjectDir, '.coreclaw', 'runs', runId);
     this.tmpDir = path.join(this.runDir, 'tmp');
     this.input = input;
     this.env = env;
     this.command = command;
     this.outputSchema = outputSchema;
+    this.uploadManifest = uploadManifest;
     this.tableHeaders = [];
     this.resultCount = 0;
     this.logCount = 0;
@@ -32,6 +34,9 @@ export class RunStore {
     this.writeJson('env.json', this.env);
     this.writeJson('command.json', this.command);
     this.writeJson('output_schema_snapshot.json', this.outputSchema);
+    if (this.uploadManifest) {
+      this.writeJson('upload_manifest.json', this.uploadManifest);
+    }
     this.writeJson('summary.json', this.summary());
   }
 
@@ -118,6 +123,8 @@ export class RunStore {
       run_id: this.runId,
       status: this.status,
       status_code: statusCode(this.status),
+      project_dir: this.projectDir,
+      worker_dir: this.workerDir,
       started_at: this.startedAt.toISOString(),
       finished_at: finishedAt ? finishedAt.toISOString() : null,
       duration_ms: finishedAt ? finishedAt.getTime() - this.startedAt.getTime() : null,
@@ -129,6 +136,7 @@ export class RunStore {
       results_path: path.join(this.runDir, 'results.ndjson'),
       export_path: path.join(this.runDir, 'export.ndjson'),
       table_headers_path: path.join(this.runDir, 'table_headers.json'),
+      upload_manifest_path: this.uploadManifest ? path.join(this.runDir, 'upload_manifest.json') : null,
       tmp_path: this.tmpDir,
       result_count: this.resultCount,
       log_count: this.logCount,

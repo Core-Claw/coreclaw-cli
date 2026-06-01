@@ -32,6 +32,17 @@ export function createWorkerZip({ projectDir, outFile }) {
   return outFile;
 }
 
+export function copyWorkerFiles(projectDir, targetDir) {
+  const manifest = collectFiles(projectDir);
+  for (const relative of manifest) {
+    const source = path.join(projectDir, relative);
+    const target = path.join(targetDir, relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(source, target);
+  }
+  return manifest;
+}
+
 export function buildZipArchive(entries) {
   const localParts = [];
   const centralParts = [];

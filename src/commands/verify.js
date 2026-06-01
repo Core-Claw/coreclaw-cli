@@ -1,8 +1,10 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { CliError } from '../utils/errors.js';
 import { resolveProjectPath } from '../utils/paths.js';
 import { formatIssues, validateProject } from '../validation/project.js';
+import { copyWorkerFiles } from '../pack/zip.js';
 import { runCommand } from './run.js';
 import { packCommand } from './pack.js';
 import { compareCommand } from './compare.js';
@@ -23,7 +25,17 @@ export async function verifyCommand(projectPath = '.', options = {}) {
 
   console.log(`\n[${step}/${stepCount}] Running worker locally...`);
   step += 1;
-  const runSummary = await runCommand(projectDir, buildVerifyRunOptions(options));
+  const stagedProject = stageVerifyProject(projectDir, options);
+  let runSummary;
+  try {
+    runSummary = await runCommand(stagedProject.projectDir, buildVerifyRunOptions({
+      ...options,
+      artifactProjectDir: projectDir,
+      uploadManifest: stagedProject.manifest,
+    }));
+  } finally {
+    cleanupVerifyStage(stagedProject);
+  }
   const runDir = runSummary.results_path ? path.dirname(runSummary.results_path) : null;
 
   let compareReport = null;
@@ -73,6 +85,24 @@ export async function verifyCommand(projectPath = '.', options = {}) {
   return result;
 }
 
+export function stageVerifyProject(projectDir, options = {}) {
+  if (options.staging === false) {
+    return {
+      projectDir,
+      staged: false,
+      manifest: null,
+    };
+  }
+
+  const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-stage-'));
+  const manifest = copyWorkerFiles(projectDir, stageDir);
+  return {
+    projectDir: stageDir,
+    staged: true,
+    manifest,
+  };
+}
+
 export function buildVerifyRunOptions(options = {}) {
   return {
     ...options,
@@ -80,6 +110,7 @@ export function buildVerifyRunOptions(options = {}) {
     node: options.node ?? 'node',
     go: options.go ?? 'go',
     minResults: options.minResults ?? '1',
+    install: options.install ?? true,
   };
 }
 
@@ -124,4 +155,10 @@ function createVerifyId() {
     .replace('T', '-');
   const suffix = Math.random().toString(36).slice(2, 8);
   return `${stamp}-${suffix}`;
+}
+
+function cleanupVerifyStage(stagedProject) {
+  if (stagedProject?.staged) {
+    fs.rmSync(stagedProject.projectDir, { recursive: true, force: true });
+  }
 }
