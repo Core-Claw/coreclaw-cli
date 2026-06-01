@@ -63,11 +63,23 @@ export function inputSchemaInputIssues(input, schema) {
 
   const issues = [];
   for (const property of schema.properties) {
-    if (!property || property.required !== true || typeof property.name !== 'string') {
+    if (!property || typeof property.name !== 'string') {
       continue;
     }
-    if (!Object.prototype.hasOwnProperty.call(input, property.name) || isEmptyInputValue(input[property.name])) {
+    if (!Object.prototype.hasOwnProperty.call(input, property.name)) {
+      if (property.required === true) {
+        issues.push(`required field "${property.name}" is missing or empty`);
+      }
+      continue;
+    }
+
+    if (property.required === true && isEmptyInputValue(input[property.name])) {
       issues.push(`required field "${property.name}" is missing or empty`);
+      continue;
+    }
+
+    if (!inputValueMatchesType(input[property.name], property.type)) {
+      issues.push(`field "${property.name}" must be ${inputTypeLabel(property.type)}`);
     }
   }
   return issues;
@@ -118,6 +130,41 @@ function isEmptyInputValue(value) {
     return Object.keys(value).length === 0;
   }
   return false;
+}
+
+function inputValueMatchesType(value, type) {
+  switch (normalizeInputType(type)) {
+    case 'string':
+      return typeof value === 'string';
+    case 'integer':
+      return Number.isInteger(value);
+    case 'boolean':
+      return typeof value === 'boolean';
+    case 'array':
+      return Array.isArray(value);
+    case 'object':
+      return value !== null && typeof value === 'object' && !Array.isArray(value);
+    default:
+      return true;
+  }
+}
+
+function inputTypeLabel(type) {
+  const normalized = normalizeInputType(type);
+  if (normalized === 'integer') {
+    return 'an integer';
+  }
+  if (normalized === 'array' || normalized === 'object') {
+    return `an ${normalized}`;
+  }
+  return `a ${normalized}`;
+}
+
+function normalizeInputType(type) {
+  if (type === 'number') {
+    return 'integer';
+  }
+  return type;
 }
 
 function singularize(key) {

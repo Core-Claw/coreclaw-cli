@@ -75,6 +75,44 @@ test('validates actual run input against required schema fields', () => {
   );
 });
 
+test('validates actual run input types against input schema fields', () => {
+  const schema = {
+    properties: [
+      { name: 'keyword', type: 'string' },
+      { name: 'limit', type: 'integer' },
+      { name: 'legacyLimit', type: 'number' },
+      { name: 'enabled', type: 'boolean' },
+      { name: 'items', type: 'array' },
+      { name: 'options', type: 'object' },
+    ],
+  };
+
+  assert.deepEqual(inputSchemaInputIssues({
+    keyword: 'coreclaw',
+    limit: 3,
+    legacyLimit: 4,
+    enabled: false,
+    items: [],
+    options: {},
+    extra: 'allowed',
+  }, schema), []);
+  assert.deepEqual(inputSchemaInputIssues({
+    keyword: 123,
+    limit: 1.5,
+    legacyLimit: '4',
+    enabled: 'false',
+    items: {},
+    options: [],
+  }, schema), [
+    'field "keyword" must be a string',
+    'field "limit" must be an integer',
+    'field "legacyLimit" must be an integer',
+    'field "enabled" must be a boolean',
+    'field "items" must be an array',
+    'field "options" must be an object',
+  ]);
+});
+
 test('validates output schema', () => {
   const issues = validateOutputSchema([
     { name: 'url', type: 'string', description: 'URL' },

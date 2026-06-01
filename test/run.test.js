@@ -185,6 +185,30 @@ main().catch((error) => {
   assert.equal(fs.existsSync(path.join(dir, '.coreclaw')), false);
 });
 
+test('runCommand fails before creating run artifacts when input type is invalid', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+async function main() {
+  await coresdk.result.pushData({ ok: true })
+}
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  await assert.rejects(
+    () => runCommand(dir, {
+      node: process.execPath,
+      json: '{"items":"not a list"}',
+      tmpHook: false,
+    }),
+    (error) => error instanceof CliError && /field "items" must be an array/.test(error.message),
+  );
+
+  assert.equal(fs.existsSync(path.join(dir, '.coreclaw')), false);
+});
+
 test('runCommand fails upload parity when proxy usage is required but worker does not use it', async () => {
   const dir = createNodeFixture(`
 const coresdk = require('./sdk')
