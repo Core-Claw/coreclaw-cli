@@ -113,6 +113,73 @@ test('validates actual run input types against input schema fields', () => {
   ]);
 });
 
+test('validates selector inputs against declared schema options', () => {
+  const schema = {
+    properties: [
+      {
+        name: 'language',
+        type: 'string',
+        editor: 'select',
+        options: [{ label: 'English', value: 'en' }, { label: 'Chinese', value: 'zh' }],
+      },
+      {
+        name: 'category',
+        type: 'integer',
+        editor: 'radio',
+        options: [{ label: 'Hotel', value: 1 }, { label: 'Restaurant', value: 2 }],
+      },
+      {
+        name: 'sections',
+        type: 'array',
+        editor: 'checkbox',
+        options: [{ label: 'Reviews', value: 'reviews' }, { label: 'Address', value: 'address' }],
+      },
+    ],
+  };
+
+  assert.deepEqual(inputSchemaInputIssues({
+    language: 'en',
+    category: 2,
+    sections: ['reviews', 'address'],
+  }, schema), []);
+  assert.deepEqual(inputSchemaInputIssues({
+    language: 'de',
+    category: 3,
+    sections: ['reviews', 'hours'],
+  }, schema), [
+    'field "language" value "de" is not declared in input_schema options',
+    'field "category" value 3 is not declared in input_schema options',
+    'field "sections" value "hours" is not declared in input_schema options',
+  ]);
+});
+
+test('validates documented list editor item shapes', () => {
+  const schema = {
+    properties: [
+      { name: 'startUrls', type: 'array', editor: 'requestList' },
+      { name: 'sources', type: 'array', editor: 'requestListSource' },
+      { name: 'searchTerms', type: 'array', editor: 'stringList' },
+    ],
+  };
+
+  assert.deepEqual(inputSchemaInputIssues({
+    startUrls: [{ url: 'https://example.com' }],
+    sources: [{ url: 'https://example.com', method: 'GET' }],
+    searchTerms: [{ string: 'restaurant' }],
+  }, schema), []);
+  assert.deepEqual(inputSchemaInputIssues({
+    startUrls: [{ link: 'https://example.com' }, 'https://example.com'],
+    sources: [{ url: '' }],
+    searchTerms: [{ value: 'restaurant' }, 'school'],
+  }, schema), [
+    'field "startUrls[0].url" must be a non-empty string',
+    'field "startUrls[1]" must be an object with a "url" field',
+    'field "sources[0].url" must be a non-empty string',
+    'field "searchTerms[0].string" must be a non-empty string',
+    'field "searchTerms[1]" must be an object with a "string" field',
+  ]);
+});
+
 test('validates output schema', () => {
   const issues = validateOutputSchema([
     { name: 'url', type: 'string', description: 'URL' },

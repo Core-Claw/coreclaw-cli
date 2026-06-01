@@ -14,7 +14,7 @@ Chinese documentation: [README_CN.md](./README_CN.md).
   - `Result/PushData`
   - `Log/Debug`, `Log/Info`, `Log/Warn`, `Log/Error`
 - Runtime input injection from `input_schema.json` defaults, `--input`, or `--json`
-- Run input validation for required fields and declared value types in `input_schema.json` before the worker starts
+- Run input validation for required fields, declared value types, selector options, and list editor item shapes in `input_schema.json` before the worker starts
 - Platform environment variables:
   - `ChromeWs`
   - `CDP_ENDPOINT` / `BROWSER_WS_ENDPOINT`
@@ -93,7 +93,7 @@ Validation checks:
 
 CoreClaw installs dependencies from `requirements.txt`, `package.json`, or `go.mod` after upload. The CLI therefore rejects workers that rely on locally installed SDK packages but do not declare those packages for the cloud installer.
 
-At run time, the CLI also validates the actual input assembled from defaults, `--input`, or `--json`. If a field marked `"required": true` is missing or empty, or if a declared input field has the wrong JSON type, the command fails before creating run artifacts or starting the worker, matching CoreClaw's form-level launch behavior.
+At run time, the CLI also validates the actual input assembled from defaults, `--input`, or `--json`. If a field marked `"required": true` is missing or empty, if a declared input field has the wrong JSON type, if a `select`/`radio`/`checkbox` value is outside `options`, or if `requestList`/`stringList` items do not match the documented shape, the command fails before creating run artifacts or starting the worker, matching CoreClaw's form-level launch behavior.
 
 CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
 
@@ -128,7 +128,7 @@ The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then execu
 
 Use `--timeout-ms` to cap the whole worker process and `--idle-timeout-ms` to stop a worker that has stopped producing output but still has open Node/Python/Go handles. Durations accept milliseconds, `s`, or `m`.
 
-If the input schema marks a field as required, local runs require a non-empty value for that field. Declared fields must also match their schema type, for example `integer` must be an integer, `boolean` must be a boolean, and `array` must be a JSON array. Use `--input input.json` or `--json '{"field":"value"}'` when the schema does not provide a default.
+If the input schema marks a field as required, local runs require a non-empty value for that field. Declared fields must also match their schema type, for example `integer` must be an integer, `boolean` must be a boolean, and `array` must be a JSON array. Selector inputs must use values declared in `options`, `requestList` items must contain a non-empty `url`, and `stringList` items must contain a non-empty `string`. Use `--input input.json` or `--json '{"field":"value"}'` when the schema does not provide a default.
 
 Use `--min-results` for real worker smoke tests. Some existing workers can exit with code `0` after logging an upstream or browser error, so result count is the reliable success gate.
 

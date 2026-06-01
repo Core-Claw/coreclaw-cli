@@ -73,14 +73,18 @@ export function inputSchemaInputIssues(input, schema) {
       continue;
     }
 
-    if (property.required === true && isEmptyInputValue(input[property.name])) {
+    const value = input[property.name];
+    if (property.required === true && isEmptyInputValue(value)) {
       issues.push(`required field "${property.name}" is missing or empty`);
       continue;
     }
 
-    if (!inputValueMatchesType(input[property.name], property.type)) {
+    if (!inputValueMatchesType(value, property.type)) {
       issues.push(`field "${property.name}" must be ${inputTypeLabel(property.type)}`);
+      continue;
     }
+
+    issues.push(...inputEditorIssues(property, value));
   }
   return issues;
 }
@@ -165,6 +169,88 @@ function normalizeInputType(type) {
     return 'integer';
   }
   return type;
+}
+
+function inputEditorIssues(property, value) {
+  if (property.editor === 'requestList' || property.editor === 'requestListSource') {
+    return requestListIssues(property.name, value);
+  }
+  if (property.editor === 'stringList') {
+    return stringListIssues(property.name, value);
+  }
+  if (property.editor === 'select' || property.editor === 'radio' || property.editor === 'checkbox') {
+    return optionValueIssues(property, value);
+  }
+  return [];
+}
+
+function requestListIssues(name, value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return [`field "${name}[${index}]" must be an object with a "url" field`];
+    }
+    if (typeof item.url !== 'string' || item.url.length === 0) {
+      return [`field "${name}[${index}].url" must be a non-empty string`];
+    }
+    return [];
+  });
+}
+
+function stringListIssues(name, value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return [`field "${name}[${index}]" must be an object with a "string" field`];
+    }
+    if (typeof item.string !== 'string' || item.string.length === 0) {
+      return [`field "${name}[${index}].string" must be a non-empty string`];
+    }
+    return [];
+  });
+}
+
+function optionValueIssues(property, value) {
+  if (!Array.isArray(property.options) || property.options.length === 0) {
+    return [];
+  }
+  const allowed = new Set(property.options
+    .filter((option) => option && typeof option === 'object' && Object.prototype.hasOwnProperty.call(option, 'value'))
+    .map((option) => comparableValue(option.value)));
+  if (allowed.size === 0) {
+    return [];
+  }
+
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .filter((item) => !allowed.has(comparableValue(item)))
+    .map((item) => `field "${property.name}" value ${formatInputValue(item)} is not declared in input_schema options`);
+}
+
+function comparableValue(value) {
+  if (value && typeof value === 'object') {
+    return stableJson(value);
+  }
+  return `${typeof value}:${String(value)}`;
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function formatInputValue(value) {
+  const json = JSON.stringify(value);
+  return json === undefined ? String(value) : json;
 }
 
 function singularize(key) {

@@ -12,7 +12,7 @@ CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平
   - `Result/PushData`
   - `Log/Debug`、`Log/Info`、`Log/Warn`、`Log/Error`
 - 从 `input_schema.json` 默认值、`--input` 或 `--json` 注入运行输入。
-- worker 启动前校验实际输入是否满足 `input_schema.json` 的 required 字段和声明类型。
+- worker 启动前校验实际输入是否满足 `input_schema.json` 的 required 字段、声明类型、选择器选项和列表编辑器项结构。
 - 平台环境变量：
   - `ChromeWs`
   - `CDP_ENDPOINT` / `BROWSER_WS_ENDPOINT`
@@ -92,7 +92,7 @@ node ./bin/coreclaw.js validate ./examples/node-hello
 
 CoreClaw 上传后会从 `requirements.txt`、`package.json` 或 `go.mod` 安装依赖。因此 CLI 会拒绝那些本地机器因为已安装 SDK 包而能运行、但云端安装文件没有声明这些包的 worker。
 
-运行时，CLI 还会校验由默认值、`--input` 或 `--json` 拼出的实际输入。如果某个字段标记了 `"required": true` 但本次输入缺失或为空，或者声明字段的 JSON 类型不匹配，命令会在创建 run 产物和启动 worker 前失败，贴近 CoreClaw 表单层的启动行为。
+运行时，CLI 还会校验由默认值、`--input` 或 `--json` 拼出的实际输入。如果某个字段标记了 `"required": true` 但本次输入缺失或为空，或者声明字段的 JSON 类型不匹配，或者 `select`/`radio`/`checkbox` 的值不在 `options` 中，或者 `requestList`/`stringList` 项结构不符合文档，命令会在创建 run 产物和启动 worker 前失败，贴近 CoreClaw 表单层的启动行为。
 
 官方文档把 `output_schema.json` 描述为上传就绪项目文件，但当前平台仍兼容没有 `output_schema.json` 的老 worker。因此 CLI 把缺失 `output_schema.json` 作为 warning，而不是阻塞错误。没有 output schema 时，本地 `export.ndjson` 会保留完整原始结果行。
 
@@ -127,7 +127,7 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
 
 `--timeout-ms` 用于限制整个 worker 进程运行时间；`--idle-timeout-ms` 用于停止已经不再输出但仍有 Node/Python/Go handle 未退出的 worker。时长支持毫秒、`s` 和 `m`。
 
-如果 input schema 把某个字段标记为 required，本地 run 也要求该字段有非空值。声明字段还必须匹配 schema 类型，例如 `integer` 必须是整数，`boolean` 必须是布尔值，`array` 必须是 JSON 数组。schema 没有提供 default 时，使用 `--input input.json` 或 `--json '{"field":"value"}'` 传入。
+如果 input schema 把某个字段标记为 required，本地 run 也要求该字段有非空值。声明字段还必须匹配 schema 类型，例如 `integer` 必须是整数，`boolean` 必须是布尔值，`array` 必须是 JSON 数组。选择器输入必须使用 `options` 里声明的值，`requestList` 项必须包含非空 `url`，`stringList` 项必须包含非空 `string`。schema 没有提供 default 时，使用 `--input input.json` 或 `--json '{"field":"value"}'` 传入。
 
 真实 worker 冒烟测试应使用 `--min-results`。有些 worker 会在上游或浏览器失败后仍以 exit code `0` 退出，因此结果行数才是更可靠的成功门槛。
 
