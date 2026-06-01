@@ -27,7 +27,7 @@ CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平
   - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`。
   - ZIP 根目录包含可执行文件 `main`。
 
-它不会模拟 CoreClaw 真实的远程指纹浏览器池。浏览器 worker 可以启动本地 Chrome remote debugging `127.0.0.1:9222`，或用 `--chrome-ws` 传入真实远程 CDP 端点。HTTP worker 可以使用 `--local-proxy --require-proxy-usage` 通过 `PROXY_AUTH` / `PROXY_DOMAIN` 暴露本地 SOCKS5 代理，并在 worker 绕过代理时让 run 失败。
+它不会模拟 CoreClaw 真实的远程指纹浏览器池。浏览器 worker 可以启动本地 Chrome remote debugging `127.0.0.1:9222`，或用 `--chrome-ws` / `--chrome-http` 传入真实远程 CDP/WebDriver 端点，再配合 `--require-browser` 在端点不可用时提前失败。HTTP worker 可以使用 `--local-proxy --require-proxy-usage` 通过 `PROXY_AUTH` / `PROXY_DOMAIN` 暴露本地 SOCKS5 代理，并在 worker 绕过代理时让 run 失败。
 
 ## 安装
 
@@ -110,6 +110,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
 node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
+node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
 ```
 
 `run` 会启动本地 CoreClaw SDK gRPC server，监听 `127.0.0.1:20086`，然后执行 worker。
@@ -128,6 +129,8 @@ node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 - `BROWSER_WS_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
 
 用 `--no-discover-chrome` 可关闭自动发现。未检测到浏览器时，`ChromeWs` 和 `ChromeHttp` 都会回退为 `127.0.0.1:9222`，保持与 CoreClaw 文档中 host-style browser 变量一致的环境形态。`ChromeHttp` 用于 Selenium Remote WebDriver worker；`ChromeWs` 用于 Playwright、Puppeteer 和 DrissionPage CDP worker。
+
+浏览器 worker 的 smoke test 建议加 `--require-browser`。它会把浏览器可用性变成预检门槛：本地 Chrome 自动发现成功时直接通过，host-style CDP 端点会检查 `/json/version`，Selenium 风格端点会检查 `/status`。如果没有任何端点可访问，命令会在创建 run 产物前失败，避免 worker 内部才报出不明确的浏览器连接错误。
 
 运行产物：
 
@@ -156,6 +159,7 @@ node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
+node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 ```
 
 `verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
@@ -211,6 +215,15 @@ node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage
 ```
 
 `--local-proxy` 会在 `127.0.0.1:<port>` 启动带认证的 SOCKS5 代理，并注入匹配的 `PROXY_AUTH` / `PROXY_DOMAIN`。`--require-proxy-usage` 也会启用该代理，并在 worker 从未发起 SOCKS5 CONNECT 时让 run 失败。HTTP 请求型 worker 应使用这个门槛，避免代码只是因为本机直连网络而跑通。
+
+浏览器 worker 使用非默认端点时，把 `--require-browser` 和 `--chrome-ws` 或 `--chrome-http` 搭配使用：
+
+```bash
+node ./bin/coreclaw.js verify ./worker --chrome-ws "127.0.0.1:9222/devtools/browser/<id>" --require-browser --min-results 1
+node ./bin/coreclaw.js verify ./worker --chrome-http "127.0.0.1:9515" --require-browser --min-results 1
+```
+
+第一种对应 Playwright、Puppeteer 和 DrissionPage CDP worker；第二种对应 Selenium Remote WebDriver worker。
 
 如需模拟 CoreClaw 云端代理变量但没有真实代理，可以显式使用：
 
@@ -288,7 +301,7 @@ node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-dedup-d
 node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-yfinance --input %TEMP%/coreclaw-yfinance-smoke-input.json --command "py -3 main.py" --timeout-ms 60s --idle-timeout-ms 20s --min-results 1
 
 # Go，浏览器/CDP worker
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --chrome-ws 127.0.0.1:9222/devtools/browser/<id> --timeout-ms 90s --idle-timeout-ms 30s
+node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --chrome-ws 127.0.0.1:9222/devtools/browser/<id> --require-browser --timeout-ms 90s --idle-timeout-ms 30s
 node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-google-maps-scraper/.coreclaw/runs/<run-id> --min-results 1
 ```
 

@@ -28,7 +28,7 @@ Chinese documentation: [README_CN.md](./README_CN.md).
   - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`
   - executable `main` at the ZIP root
 
-It does not emulate CoreClaw's real remote fingerprint browser pool. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP endpoint with `--chrome-ws`. For HTTP workers, use `--local-proxy --require-proxy-usage` to expose a local SOCKS5 proxy through `PROXY_AUTH` / `PROXY_DOMAIN` and fail the run if the worker bypasses it.
+It does not emulate CoreClaw's real remote fingerprint browser pool. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP/WebDriver endpoint with `--chrome-ws` / `--chrome-http`, then use `--require-browser` to fail fast if the endpoint is not reachable. For HTTP workers, use `--local-proxy --require-proxy-usage` to expose a local SOCKS5 proxy through `PROXY_AUTH` / `PROXY_DOMAIN` and fail the run if the worker bypasses it.
 
 ## Install
 
@@ -111,6 +111,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
 node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
+node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
 ```
 
 The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then executes the worker.
@@ -129,6 +130,8 @@ If Chrome remote debugging is reachable at `http://127.0.0.1:9222/json/version`,
 - `BROWSER_WS_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
 
 Use `--no-discover-chrome` to disable this discovery. Without a detected browser, `ChromeWs` and `ChromeHttp` fall back to `127.0.0.1:9222` so the environment still looks like CoreClaw's documented host-style browser variables. `ChromeHttp` is used by Selenium Remote WebDriver workers, while `ChromeWs` is used by Playwright, Puppeteer, and DrissionPage CDP workers.
+
+Use `--require-browser` for browser worker smoke tests. It turns browser availability into a preflight gate: local Chrome discovery passes immediately, host-style CDP endpoints are checked through `/json/version`, and Selenium-style endpoints are checked through `/status`. If no endpoint is reachable, the run fails before creating run artifacts instead of letting a browser worker fail later with a less specific connection error.
 
 Artifacts are written to:
 
@@ -157,6 +160,7 @@ node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
+node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 ```
 
 `verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
@@ -210,6 +214,15 @@ node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage
 ```
 
 `--local-proxy` starts an authenticated SOCKS5 proxy on `127.0.0.1:<port>` and injects matching `PROXY_AUTH` / `PROXY_DOMAIN` values. `--require-proxy-usage` also enables the proxy and fails the run if the worker never opens a SOCKS5 CONNECT request. Use this gate for HTTP request workers so local verification catches code that succeeds only by using direct host networking.
+
+For browser workers, pair `--require-browser` with `--chrome-ws` or `--chrome-http` when using a non-default endpoint:
+
+```bash
+node ./bin/coreclaw.js verify ./worker --chrome-ws "127.0.0.1:9222/devtools/browser/<id>" --require-browser --min-results 1
+node ./bin/coreclaw.js verify ./worker --chrome-http "127.0.0.1:9515" --require-browser --min-results 1
+```
+
+The first form matches Playwright, Puppeteer, and DrissionPage CDP workers. The second form matches Selenium Remote WebDriver workers.
 
 To emulate CoreClaw cloud proxy variables without a real proxy, opt in explicitly:
 
@@ -287,11 +300,11 @@ node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-dedup-d
 node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-yfinance --input %TEMP%/coreclaw-yfinance-smoke-input.json --command "py -3 main.py" --timeout-ms 60s --idle-timeout-ms 20s --min-results 1
 
 # Go, browser/CDP worker. Start Chrome remote debugging first, then run:
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --timeout-ms 90s --idle-timeout-ms 30s --min-results 1
-node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-yfinance/.coreclaw/runs/<run-id> --min-results 1
+node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --require-browser --timeout-ms 90s --idle-timeout-ms 30s --min-results 1
+node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-google-maps-scraper/.coreclaw/runs/<run-id> --min-results 1
 
 # Go, browser worker with a local Chrome CDP endpoint
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --chrome-ws 127.0.0.1:9222/devtools/browser/<id> --timeout-ms 90s --idle-timeout-ms 30s
+node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --chrome-ws 127.0.0.1:9222/devtools/browser/<id> --require-browser --timeout-ms 90s --idle-timeout-ms 30s
 node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-google-maps-scraper/.coreclaw/runs/<run-id> --min-results 1
 ```
 

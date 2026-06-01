@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceMinimumResults, enforcePostRunGates, runCommand } from '../src/commands/run.js';
+import { enforceMinimumResults, enforcePostRunGates, enforceRequiredBrowser, runCommand } from '../src/commands/run.js';
 import { CliError } from '../src/utils/errors.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -32,6 +32,60 @@ test('enforcePostRunGates marks the run failed when proxy usage is required but 
     (error) => error instanceof CliError && /did not use the local CoreClaw SOCKS5 proxy/.test(error.message),
   );
   assert.equal(store.finished.exitCode, 1);
+});
+
+test('enforceRequiredBrowser rejects fallback browser endpoints when requested', async () => {
+  await assert.rejects(
+    () => enforceRequiredBrowser(
+      {
+        chromeWs: '127.0.0.1:9222',
+        chromeHttp: '127.0.0.1:9222',
+        discoveredLocalChrome: false,
+      },
+      {
+        requireBrowser: true,
+        browserFetchImpl: async () => ({
+          ok: false,
+          status: 404,
+          async json() {
+            return {};
+          },
+        }),
+      },
+    ),
+    (error) => error instanceof CliError && /no reachable local browser endpoint/.test(error.message),
+  );
+});
+
+test('runCommand fails before creating run artifacts when browser is required but unavailable', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+async function main() {
+  await coresdk.result.pushData({ ok: true })
+}
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  await assert.rejects(
+    () => runCommand(dir, {
+      node: process.execPath,
+      requireBrowser: true,
+      browserFetchImpl: async () => ({
+        ok: false,
+        status: 404,
+        async json() {
+          return {};
+        },
+      }),
+      tmpHook: false,
+    }),
+    (error) => error instanceof CliError && /no reachable local browser endpoint/.test(error.message),
+  );
+
+  assert.equal(fs.existsSync(path.join(dir, '.coreclaw')), false);
 });
 
 test('runCommand fails upload parity when proxy usage is required but worker does not use it', async () => {

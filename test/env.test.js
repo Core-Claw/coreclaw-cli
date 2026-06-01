@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRuntimeEnv, publicEnvSnapshot, resolveBrowserEndpoints } from '../src/runtime/env.js';
+import { buildRuntimeEnv, checkBrowserAvailability, publicEnvSnapshot, resolveBrowserEndpoints } from '../src/runtime/env.js';
 
 test('buildRuntimeEnv defaults to local direct network without proxy variables', () => {
   const env = buildRuntimeEnv({
@@ -136,4 +136,88 @@ test('resolveBrowserEndpoints falls back to local Chrome host when discovery is 
     browserWsEndpoint: undefined,
     discoveredLocalChrome: false,
   });
+});
+
+test('checkBrowserAvailability accepts discovered Chrome without probing again', async () => {
+  const result = await checkBrowserAvailability({
+    browserEndpoints: {
+      discoveredLocalChrome: true,
+      cdpEndpoint: 'ws://127.0.0.1:9222/devtools/browser/test-id',
+    },
+    fetchImpl: async () => {
+      throw new Error('should not probe discovered Chrome');
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.kind, 'cdp');
+  assert.equal(result.source, 'discovery');
+});
+
+test('checkBrowserAvailability probes host-style Chrome CDP endpoints', async () => {
+  const urls = [];
+  const result = await checkBrowserAvailability({
+    browserEndpoints: {
+      chromeWs: '127.0.0.1:9222',
+      chromeHttp: '127.0.0.1:9222',
+      discoveredLocalChrome: false,
+    },
+    fetchImpl: async (url) => {
+      urls.push(url);
+      assert.equal(url, 'http://127.0.0.1:9222/json/version');
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/browser/test-id',
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.kind, 'cdp');
+  assert.equal(result.endpoint, 'ws://127.0.0.1:9222/devtools/browser/test-id');
+  assert.deepEqual(urls, ['http://127.0.0.1:9222/json/version']);
+});
+
+test('checkBrowserAvailability can accept Selenium WebDriver status endpoints', async () => {
+  const urls = [];
+  const result = await checkBrowserAvailability({
+    browserEndpoints: {
+      chromeWs: '127.0.0.1:9333',
+      chromeHttp: '127.0.0.1:9515',
+      discoveredLocalChrome: false,
+    },
+    fetchImpl: async (url) => {
+      urls.push(url);
+      if (url.endsWith('/json/version')) {
+        return {
+          ok: false,
+          status: 404,
+          async json() {
+            return {};
+          },
+        };
+      }
+      assert.equal(url, 'http://127.0.0.1:9515/status');
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { value: { ready: true } };
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.kind, 'webdriver');
+  assert.deepEqual(urls, [
+    'http://127.0.0.1:9515/json/version',
+    'http://127.0.0.1:9333/json/version',
+    'http://127.0.0.1:9515/status',
+  ]);
 });

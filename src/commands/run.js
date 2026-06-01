@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { CliError } from '../utils/errors.js';
 import { resolveProjectPath } from '../utils/paths.js';
 import { readJson, validateProject } from '../validation/project.js';
-import { buildRuntimeEnv, publicEnvSnapshot, resolveBrowserEndpoints, withNodeTmpHook } from '../runtime/env.js';
+import { buildRuntimeEnv, checkBrowserAvailability, publicEnvSnapshot, resolveBrowserEndpoints, withNodeTmpHook } from '../runtime/env.js';
 import { buildInput } from '../runtime/input.js';
 import { commandForProject, installCommandForProject, runProcess } from '../runtime/executor.js';
 import { startRuntimeGrpcServer } from '../runtime/grpc-server.js';
@@ -32,6 +32,14 @@ export async function runCommand(projectPath = '.', options = {}) {
     splitIndex: options.split ?? null,
   });
 
+  const browserEndpoints = await resolveBrowserEndpoints({
+    chromeWs: options.chromeWs,
+    chromeHttp: options.chromeHttp,
+    discoverLocalChrome: options.discoverChrome !== false,
+    fetchImpl: options.browserFetchImpl ?? globalThis.fetch,
+  });
+  await enforceRequiredBrowser(browserEndpoints, options);
+
   const [command, args] = commandForProject(project, options);
   const store = new RunStore({
     projectDir,
@@ -44,11 +52,6 @@ export async function runCommand(projectPath = '.', options = {}) {
   });
   store.init();
 
-  const browserEndpoints = await resolveBrowserEndpoints({
-    chromeWs: options.chromeWs,
-    chromeHttp: options.chromeHttp,
-    discoverLocalChrome: options.discoverChrome !== false,
-  });
   const env = buildRuntimeEnv({
     proxyAuth: options.proxyAuth,
     proxyDomain: options.proxyDomain,
@@ -179,6 +182,26 @@ export function enforcePostRunGates(store, localProxy, options) {
   }
 }
 
+export async function enforceRequiredBrowser(browserEndpoints, options = {}) {
+  if (!options.requireBrowser) {
+    return;
+  }
+
+  const result = await checkBrowserAvailability({
+    browserEndpoints,
+    fetchImpl: options.browserFetchImpl ?? globalThis.fetch,
+    timeoutMs: parseDurationMs(options.browserTimeoutMs ?? '1s'),
+  });
+  if (result.ok) {
+    return;
+  }
+
+  const probeSummary = result.probes.length > 0
+    ? ` Probes: ${result.probes.map(formatBrowserProbe).join('; ')}.`
+    : '';
+  throw new CliError(`--require-browser requested, but no reachable local browser endpoint was found. Start Chrome with remote debugging, pass --chrome-ws/--chrome-http, or remove --require-browser for non-browser runs.${probeSummary}`);
+}
+
 function parseDurationMs(value) {
   if (value === undefined || value === null || value === false || value === '') {
     return 0;
@@ -199,6 +222,12 @@ function parseDurationMs(value) {
     return amount * 1000;
   }
   return amount;
+}
+
+function formatBrowserProbe(probe) {
+  const status = probe.status ? ` status=${probe.status}` : '';
+  const error = probe.error ? ` error=${probe.error}` : '';
+  return `${probe.kind} ${probe.url}${status}${error}`;
 }
 
 async function validateRunOutputs(projectDir, store, options) {

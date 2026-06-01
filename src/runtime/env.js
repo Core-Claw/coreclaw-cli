@@ -122,6 +122,82 @@ export async function resolveBrowserEndpoints({
   };
 }
 
+export async function checkBrowserAvailability({
+  browserEndpoints,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 1000,
+} = {}) {
+  if (browserEndpoints?.discoveredLocalChrome && browserEndpoints.cdpEndpoint) {
+    return {
+      ok: true,
+      kind: 'cdp',
+      source: 'discovery',
+      endpoint: browserEndpoints.cdpEndpoint,
+      probes: [],
+    };
+  }
+
+  const probes = [];
+  if (!fetchImpl) {
+    return { ok: false, probes };
+  }
+
+  const cdpUrls = unique([
+    browserProbeUrl(browserEndpoints?.chromeHttp, '/json/version'),
+    browserProbeUrl(chromeHttpFromChromeWs(browserEndpoints?.chromeWs), '/json/version'),
+  ].filter(Boolean));
+
+  for (const url of cdpUrls) {
+    const probe = { kind: 'cdp', url: maskEndpoint(url) };
+    probes.push(probe);
+    try {
+      const response = await fetchWithTimeout(url, fetchImpl, timeoutMs);
+      probe.status = response.status ?? null;
+      if (!response.ok) {
+        continue;
+      }
+      const metadata = await response.json();
+      if (typeof metadata?.webSocketDebuggerUrl === 'string' && metadata.webSocketDebuggerUrl.startsWith('ws')) {
+        return {
+          ok: true,
+          kind: 'cdp',
+          source: 'probe',
+          endpoint: metadata.webSocketDebuggerUrl,
+          probes,
+        };
+      }
+    } catch (error) {
+      probe.error = error.message;
+    }
+  }
+
+  const webdriverUrls = unique([
+    browserProbeUrl(browserEndpoints?.chromeHttp, '/status'),
+  ].filter(Boolean));
+
+  for (const url of webdriverUrls) {
+    const probe = { kind: 'webdriver', url: maskEndpoint(url) };
+    probes.push(probe);
+    try {
+      const response = await fetchWithTimeout(url, fetchImpl, timeoutMs);
+      probe.status = response.status ?? null;
+      if (response.ok) {
+        return {
+          ok: true,
+          kind: 'webdriver',
+          source: 'probe',
+          endpoint: url,
+          probes,
+        };
+      }
+    } catch (error) {
+      probe.error = error.message;
+    }
+  }
+
+  return { ok: false, probes };
+}
+
 export function withNodeTmpHook(env, hookPath, options = {}) {
   const hookOption = `--require=${hookPath}`;
   const currentOptions = env.NODE_OPTIONS ?? '';
@@ -191,4 +267,37 @@ async function discoverLocalChromeEndpoint(host, fetchImpl) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchWithTimeout(url, fetchImpl, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchImpl(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function browserProbeUrl(value, pathname) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return null;
+  }
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(text)
+    ? text.replace(/^ws:/i, 'http:').replace(/^wss:/i, 'https:')
+    : `http://${text}`;
+  try {
+    const url = new URL(withProtocol);
+    url.pathname = pathname;
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function unique(values) {
+  return Array.from(new Set(values));
 }
