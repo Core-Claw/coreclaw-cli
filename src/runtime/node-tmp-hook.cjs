@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const runtimeTmp = process.env.CORECLAW_TMP_DIR;
+const workerDir = process.env.CORECLAW_WORKER_DIR ? normalizePath(process.env.CORECLAW_WORKER_DIR) : null;
 
 if (runtimeTmp) {
   const originalFsPromisesMkdir = fs.promises.mkdir;
@@ -37,6 +38,9 @@ function mapTmpPath(filePath) {
   }
 
   const normalized = filePath.replace(/\\/g, '/');
+  if (workerDir && isInsidePath(normalized, workerDir)) {
+    return filePath;
+  }
   if (normalized === '/tmp') {
     return runtimeTmp;
   }
@@ -45,4 +49,12 @@ function mapTmpPath(filePath) {
   }
 
   return path.join(runtimeTmp, normalized.slice('/tmp/'.length));
+}
+
+function normalizePath(filePath) {
+  return path.resolve(filePath).replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function isInsidePath(filePath, rootDir) {
+  return filePath === rootDir || filePath.startsWith(`${rootDir}/`);
 }

@@ -104,6 +104,7 @@ test('stageVerifyProject copies only uploadable files to a temporary project', (
 
   assert.equal(staged.staged, true);
   assert.notEqual(staged.projectDir, dir);
+  assert.equal(path.dirname(staged.projectDir), path.join(dir, '.coreclaw', 'staging'));
   assert.deepEqual(staged.manifest.sort(), ['input_schema.json', 'main.js']);
   assert.equal(fs.existsSync(path.join(staged.projectDir, 'main.js')), true);
   assert.equal(fs.existsSync(path.join(staged.projectDir, '.coreclaw')), false);

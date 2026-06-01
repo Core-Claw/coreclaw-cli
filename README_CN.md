@@ -1,6 +1,6 @@
 # CoreClaw CLI
 
-CoreClaw worker 本地开发、验证和上传前预检 CLI。
+CoreClaw worker 本地运行时、验证器和上传前预检 CLI。
 
 CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平台注入的 SDK 文件、`input_schema.json`、`output_schema.json`、SDK gRPC 端点 `127.0.0.1:20086`，以及 `PROXY_AUTH`、`PROXY_DOMAIN`、`ChromeWs` 等运行时变量。同时，官方文档也说明本地 SDK worker 模式尚不可用。本 CLI 的目标就是补齐这个缺口，让开发者在上传前尽量做到“本地跑通 = 平台跑通”。
 
@@ -151,7 +151,7 @@ node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 ```
 
-`verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到临时 staging 目录，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
+`verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
 
 这种默认行为能捕获只因为源目录里存在 `.coreclaw`、`node_modules`、`dist` 或其他不会上传的文件而本地跑通的假阳性。
 

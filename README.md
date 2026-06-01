@@ -1,6 +1,6 @@
 # CoreClaw CLI
 
-Local development CLI for CoreClaw workers.
+Local CoreClaw worker runtime, verifier, and upload preflight CLI.
 
 CoreClaw's official developer guide currently documents upload-ready worker projects, cloud-injected SDK files, `input_schema.json`, `output_schema.json`, the gRPC SDK endpoint `127.0.0.1:20086`, and runtime variables such as `PROXY_AUTH`, `PROXY_DOMAIN`, and `ChromeWs`. It also says local SDK worker mode is not yet available. This CLI fills that gap for local development.
 
@@ -152,7 +152,7 @@ node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 ```
 
-`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to a temporary staging directory, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
+`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
 
 By default, run artifacts are still written under the original project `.coreclaw/runs/<run-id>/`, packages are written under `.coreclaw/verify/<verify-id>/`, and cloud comparison reports are written to `.coreclaw/runs/<run-id>/cloud-comparison.json`. Staged preflight runs also write `upload_manifest.json` into the run directory so you can audit exactly which files were copied into the upload-like execution directory. Use `--compare-output <file>` to write the comparison report somewhere else. Use `--no-staging` or `--no-install` only when debugging the source directory directly.
 

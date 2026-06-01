@@ -58,7 +58,7 @@ export async function runCommand(projectPath = '.', options = {}) {
     runtimeTmpDir: store.tmpDir,
   });
   const workerEnv = project.language === 'node' && options.tmpHook !== false
-    ? withNodeTmpHook(env, nodeTmpHookPath())
+    ? withNodeTmpHook(env, nodeTmpHookPath(), { workerDir: projectDir })
     : env;
   store.env = publicEnvSnapshot(workerEnv);
   store.writeJson('env.json', store.env);

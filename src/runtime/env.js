@@ -113,17 +113,21 @@ export async function resolveBrowserEndpoints({
   };
 }
 
-export function withNodeTmpHook(env, hookPath) {
+export function withNodeTmpHook(env, hookPath, options = {}) {
   const hookOption = `--require=${hookPath}`;
   const currentOptions = env.NODE_OPTIONS ?? '';
   const nodeOptions = currentOptions.includes(hookOption)
     ? currentOptions
     : [currentOptions, hookOption].filter(Boolean).join(' ');
-  return {
+  const nextEnv = {
     ...env,
     NODE_OPTIONS: nodeOptions,
     CORECLAW_NODE_TMP_HOOK: '1',
   };
+  if (options.workerDir) {
+    nextEnv.CORECLAW_WORKER_DIR = options.workerDir;
+  }
+  return nextEnv;
 }
 
 function maskSecret(value) {

@@ -94,12 +94,15 @@ export function stageVerifyProject(projectDir, options = {}) {
     };
   }
 
-  const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-stage-'));
+  const stageRoot = path.join(projectDir, '.coreclaw', 'staging');
+  fs.mkdirSync(stageRoot, { recursive: true });
+  const stageDir = fs.mkdtempSync(path.join(stageRoot, 'coreclaw-verify-stage-'));
   const manifest = copyWorkerFiles(projectDir, stageDir);
   return {
     projectDir: stageDir,
     staged: true,
     manifest,
+    stageRoot,
   };
 }
 
@@ -160,5 +163,12 @@ function createVerifyId() {
 function cleanupVerifyStage(stagedProject) {
   if (stagedProject?.staged) {
     fs.rmSync(stagedProject.projectDir, { recursive: true, force: true });
+    if (stagedProject.stageRoot) {
+      try {
+        fs.rmdirSync(stagedProject.stageRoot);
+      } catch {
+        // Keep the staging root when another process or artifact is still using it.
+      }
+    }
   }
 }

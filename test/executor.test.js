@@ -67,3 +67,35 @@ test('node tmp hook maps absolute /tmp paths into the run temp directory', async
   assert.equal(fs.existsSync(hostTmpPath), false);
   assert.equal(fs.readFileSync(path.join(runtimeTmp, 'coreclaw-hook-test', 'value.txt'), 'utf8'), 'ok');
 });
+
+test('node tmp hook does not remap worker files under /tmp', { skip: process.platform === 'win32' }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-tmp-hook-worker-'));
+  const runtimeTmp = path.join(tmpRoot, 'runtime-tmp');
+  const workerDir = `/tmp/coreclaw-hook-worker-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const workerFile = `${workerDir}/main.js`;
+  fs.mkdirSync(runtimeTmp, { recursive: true });
+  fs.rmSync(workerDir, { recursive: true, force: true });
+  fs.mkdirSync(workerDir, { recursive: true });
+  fs.writeFileSync(workerFile, 'module.exports = "ok";\n');
+
+  const result = await runProcess({
+    command: process.execPath,
+    args: [
+      '-r',
+      path.resolve('src/runtime/node-tmp-hook.cjs'),
+      '-e',
+      `require(${JSON.stringify(workerFile)});`,
+    ],
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      CORECLAW_TMP_DIR: runtimeTmp,
+      CORECLAW_WORKER_DIR: workerDir,
+    },
+    label: 'tmp-hook-worker',
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(fs.existsSync(path.join(runtimeTmp, path.basename(workerDir), 'main.js')), false);
+  fs.rmSync(workerDir, { recursive: true, force: true });
+});
