@@ -9,18 +9,21 @@ export const LANGUAGE_SPECS = {
     entry: 'main.py',
     dependencyFile: 'requirements.txt',
     required: ['main.py', 'requirements.txt', 'input_schema.json', 'sdk.py', 'sdk_pb2.py', 'sdk_pb2_grpc.py'],
+    runtimeDependencies: ['grpcio', 'protobuf'],
   },
   node: {
     label: 'Node.js',
     entry: 'main.js',
     dependencyFile: 'package.json',
     required: ['main.js', 'package.json', 'input_schema.json', 'sdk.js', 'sdk_pb.js', 'sdk_grpc_pb.js'],
+    runtimeDependencies: ['@grpc/grpc-js', 'google-protobuf'],
   },
   go: {
     label: 'Go',
     entry: 'main.go',
     dependencyFile: 'go.mod',
     required: ['main.go', 'go.mod', 'go.sum', 'input_schema.json', 'GoSdk/sdk.go', 'GoSdk/sdk.pb.go', 'GoSdk/sdk_grpc.pb.go'],
+    runtimeDependencies: ['google.golang.org/grpc', 'google.golang.org/protobuf'],
   },
 };
 
@@ -66,6 +69,8 @@ export function validateProject(projectDir, options = {}) {
     issues.push(...validateInputSchema(readJson(inputPath), inputPath));
   }
 
+  issues.push(...validateRuntimeDependencies(project));
+
   if (fs.existsSync(outputPath)) {
     issues.push(...validateOutputSchema(readJson(outputPath), outputPath));
   } else {
@@ -85,6 +90,47 @@ export function validateProject(projectDir, options = {}) {
     issues,
     ok: !issues.some((issue) => issue.severity === 'error'),
   };
+}
+
+function validateRuntimeDependencies(project) {
+  const filePath = path.join(project.projectDir, project.spec.dependencyFile);
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+
+  const declared = readDeclaredDependencies(project.language, filePath);
+  return project.spec.runtimeDependencies
+    .filter((name) => !declared.has(name))
+    .map((name) => ({
+      severity: 'error',
+      code: 'missing_runtime_dependency',
+      message: `Missing SDK runtime dependency "${name}" in ${project.spec.dependencyFile}. CoreClaw installs dependencies from this file after upload, so local runs can pass while cloud runs fail if it is omitted.`,
+    }));
+}
+
+function readDeclaredDependencies(language, filePath) {
+  if (language === 'node') {
+    const manifest = readJson(filePath);
+    return new Set([
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.optionalDependencies ?? {}),
+    ]);
+  }
+
+  const text = fs.readFileSync(filePath, 'utf8');
+  if (language === 'python') {
+    return new Set(text.split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+      .map((line) => line.split(/[<>=!~;\s[]/, 1)[0].toLowerCase()));
+  }
+
+  if (language === 'go') {
+    const matches = text.matchAll(/(?:^|\s)([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)\s+v[0-9]/gm);
+    return new Set(Array.from(matches, (match) => match[1]));
+  }
+
+  return new Set();
 }
 
 export function readJson(filePath) {

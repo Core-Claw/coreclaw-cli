@@ -73,9 +73,15 @@ Validation checks:
 
 - Exactly one entry file: `main.py`, `main.js`, or `main.go`
 - Required dependency, SDK, and input schema files
+- SDK runtime dependencies declared in the platform dependency file:
+  - Python: `grpcio`, `protobuf` in `requirements.txt`
+  - Node.js: `@grpc/grpc-js`, `google-protobuf` in `package.json`
+  - Go: `google.golang.org/grpc`, `google.golang.org/protobuf` in `go.mod`
 - `input_schema.json` root fields, unique property names, supported types/editors
 - `input_schema.b` points to an array property
 - `output_schema.json` column names and supported types when present
+
+CoreClaw installs dependencies from `requirements.txt`, `package.json`, or `go.mod` after upload. The CLI therefore rejects workers that rely on locally installed SDK packages but do not declare those packages for the cloud installer.
 
 CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
 

@@ -41,6 +41,7 @@ node ./bin/coreclaw.js compare E:/worker/cloud-output.json E:/worker/worker-name
 ## Runtime Compatibility Rules
 
 - Do not make `output_schema.json` mandatory. CoreClaw currently accepts older workers without it, so the CLI treats it as a warning.
+- Keep SDK runtime dependency checks strict. CoreClaw installs from `requirements.txt`, `package.json`, or `go.mod` after upload, so missing `grpcio`/`protobuf`, `@grpc/grpc-js`/`google-protobuf`, or `google.golang.org/grpc`/`google.golang.org/protobuf` should fail before packaging.
 - Keep local proxy defaults direct. `PROXY_AUTH` and `PROXY_DOMAIN` must stay unset unless the user passes `--cloud-proxy` or explicit proxy options.
 - Preserve per-run temporary state isolation. Node workers must not read stale host `/tmp` state during local verification.
 - Browser workers should use CoreClaw's documented `ChromeWs` style. Local Chrome CDP discovery must keep working on Windows and Linux CI.
