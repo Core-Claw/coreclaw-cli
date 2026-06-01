@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { compareCommand } from '../src/commands/compare.js';
-import { compareRows, resolveLocalRowsPath } from '../src/compare/rows.js';
+import { compareRows, readCloudRows, resolveLocalRowsPath } from '../src/compare/rows.js';
 import { CliError } from '../src/utils/errors.js';
 
 test('compareRows reports shared, local-only, cloud-only, and changed rows', () => {
@@ -44,6 +44,14 @@ test('resolveLocalRowsPath accepts a run directory and prefers export.ndjson', (
   fs.writeFileSync(path.join(runDir, 'export.ndjson'), '{"value":{"projected":true}}\n');
 
   assert.equal(resolveLocalRowsPath(runDir), path.join(runDir, 'export.ndjson'));
+});
+
+test('readCloudRows accepts UTF-8 BOM cloud exports generated on Windows', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-compare-bom-'));
+  const cloudPath = path.join(dir, 'cloud.json');
+  fs.writeFileSync(cloudPath, '\ufeff[{"url":"https://example.com"}]\n', 'utf8');
+
+  assert.deepEqual(readCloudRows(cloudPath), [{ url: 'https://example.com' }]);
 });
 
 test('compareCommand writes reports and enforces thresholds', async () => {

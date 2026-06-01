@@ -95,10 +95,14 @@ export function assertCompareThresholds(report, options = {}) {
 
 function readJson(filePath) {
   try {
-    return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), filePath), 'utf8'));
+    return JSON.parse(stripBom(fs.readFileSync(path.resolve(process.cwd(), filePath), 'utf8')));
   } catch (error) {
     throw new CliError(`Invalid JSON in ${filePath}: ${error.message}`);
   }
+}
+
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 function parseKeyFields(value) {

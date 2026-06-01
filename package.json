@@ -17,7 +17,7 @@
   "scripts": {
     "start": "node ./bin/coreclaw.js",
     "test": "node --test",
-    "verify": "npm test && node ./bin/coreclaw.js verify ./examples/node-hello --output ./tmp/node-hello.zip"
+    "verify": "npm test && node ./bin/coreclaw.js verify ./examples/node-hello --cloud-output ./examples/node-hello-cloud-output.json --compare-output ./tmp/node-hello-comparison.json --min-shared 1 --max-diff 0 --output ./tmp/node-hello.zip"
   },
   "files": [
     "bin",

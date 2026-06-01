@@ -5,6 +5,7 @@ import { resolveProjectPath } from '../utils/paths.js';
 import { formatIssues, validateProject } from '../validation/project.js';
 import { runCommand } from './run.js';
 import { packCommand } from './pack.js';
+import { compareCommand } from './compare.js';
 
 export async function verifyCommand(projectPath = '.', options = {}) {
   const projectDir = resolveProjectPath(projectPath);
@@ -17,18 +18,36 @@ export async function verifyCommand(projectPath = '.', options = {}) {
     throw new CliError('Preflight validation failed.');
   }
 
-  console.log('\n[1/2] Running worker locally...');
+  const stepCount = 1 + (options.cloudOutput ? 1 : 0) + (options.pack === false ? 0 : 1);
+  let step = 1;
+
+  console.log(`\n[${step}/${stepCount}] Running worker locally...`);
+  step += 1;
   const runSummary = await runCommand(projectDir, buildVerifyRunOptions(options));
+  const runDir = runSummary.results_path ? path.dirname(runSummary.results_path) : null;
+
+  let compareReport = null;
+  let compareReportPath = null;
+  if (options.cloudOutput) {
+    console.log(`\n[${step}/${stepCount}] Comparing cloud output...`);
+    step += 1;
+    compareReportPath = resolveVerifyCompareOutput(runDir, options);
+    compareReport = await compareCommand(
+      options.cloudOutput,
+      runDir,
+      buildVerifyCompareOptions(options, compareReportPath),
+    );
+  }
 
   let packagePath = null;
   if (options.pack !== false) {
-    console.log('\n[2/2] Creating upload package...');
+    console.log(`\n[${step}/${stepCount}] Creating upload package...`);
     packagePath = await packCommand(projectDir, {
       output: resolveVerifyOutput(projectDir, options),
       validate: true,
     });
   } else {
-    console.log('\n[2/2] Skipping upload package (--no-pack).');
+    console.log('\nSkipping upload package (--no-pack).');
   }
 
   const result = {
@@ -37,12 +56,17 @@ export async function verifyCommand(projectPath = '.', options = {}) {
     language: project.language,
     run_id: runSummary.run_id,
     result_count: runSummary.result_count,
-    run_dir: runSummary.results_path ? path.dirname(runSummary.results_path) : null,
+    run_dir: runDir,
+    compare_report_path: compareReportPath,
+    compare_report: compareReport,
     package_path: packagePath,
   };
 
   console.log('\nCoreClaw preflight passed.');
   console.log(`Run: ${runSummary.run_id} (${runSummary.result_count} result(s))`);
+  if (compareReportPath) {
+    console.log(`Cloud comparison: ${compareReportPath}`);
+  }
   if (packagePath) {
     console.log(`Package: ${packagePath}`);
   }
@@ -59,6 +83,17 @@ export function buildVerifyRunOptions(options = {}) {
   };
 }
 
+export function buildVerifyCompareOptions(options = {}, output) {
+  return {
+    keyFields: options.keyFields,
+    minShared: options.minShared,
+    maxDiff: options.maxDiff,
+    maxOnlyLocal: options.maxOnlyLocal,
+    maxOnlyCloud: options.maxOnlyCloud,
+    output,
+  };
+}
+
 export function resolveVerifyOutput(projectDir, options = {}) {
   if (options.output) {
     return path.resolve(process.cwd(), options.output);
@@ -67,6 +102,18 @@ export function resolveVerifyOutput(projectDir, options = {}) {
   const verifyDir = path.join(projectDir, '.coreclaw', 'verify', createVerifyId());
   fs.mkdirSync(verifyDir, { recursive: true });
   return path.join(verifyDir, `${path.basename(projectDir)}.zip`);
+}
+
+export function resolveVerifyCompareOutput(runDir, options = {}) {
+  if (options.compareOutput) {
+    return path.resolve(process.cwd(), options.compareOutput);
+  }
+
+  if (!runDir) {
+    throw new CliError('Cannot write cloud comparison report because the local run directory is unknown.');
+  }
+
+  return path.join(runDir, 'cloud-comparison.json');
 }
 
 function createVerifyId() {

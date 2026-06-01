@@ -45,7 +45,7 @@ Before pushing CLI changes:
 npm run verify
 ```
 
-This runs the unit suite and then executes `coreclaw verify` against the Node example.
+This runs the unit suite and then executes `coreclaw verify` against the Node example, including a cloud-output comparison against `examples/node-hello-cloud-output.json`.
 
 ## Commands
 
@@ -136,10 +136,11 @@ Artifacts are written to:
 ```bash
 node ./bin/coreclaw.js verify ./examples/node-hello --min-results 1
 node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
+node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud-output.json --min-shared 1 --max-diff 0
 node ./bin/coreclaw.js verify ./worker --no-pack
 ```
 
-`verify` is the upload-before-you-upload gate. It runs static validation, executes the worker in the local CoreClaw runtime, enforces a result-count gate, and creates an upload ZIP unless `--no-pack` is passed. By default, packages are written under `.coreclaw/verify/<verify-id>/`.
+`verify` is the upload-before-you-upload gate. It runs static validation, executes the worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. By default, packages are written under `.coreclaw/verify/<verify-id>/`, and cloud comparison reports are written to `.coreclaw/runs/<run-id>/cloud-comparison.json`. Use `--compare-output <file>` to write the comparison report somewhere else.
 
 ### Inspect a Run
 
@@ -195,7 +196,7 @@ The ZIP has the worker entry file at archive root and excludes `.coreclaw`, `nod
 
 ## Cloud Comparison Workflow
 
-For a cloud run exported as JSON, compare it with a local run's captured results:
+For a cloud run exported as JSON, compare it with a local run's captured results as a standalone step:
 
 ```bash
 node ./bin/coreclaw.js compare \
@@ -206,6 +207,18 @@ node ./bin/coreclaw.js compare \
 ```
 
 This compares row counts, shared keys, cloud-only rows, local-only rows, and value differences. The local path can be a run directory, `export.ndjson`, or `results.ndjson`. Use `--key-fields username,site,urlUser` when the default key is not specific enough, and CI gates such as `--min-shared`, `--max-diff`, `--max-only-local`, and `--max-only-cloud` when cloud parity should be strict. For network-heavy workers, expect output differences unless the local machine uses equivalent CoreClaw proxy/browser infrastructure.
+
+The same comparison can be folded into upload preflight:
+
+```bash
+node ./bin/coreclaw.js verify ./worker \
+  --input input.json \
+  --cloud-output E:/worker/coreclaw_UsernameFinder_v1.0.2_20260601.json \
+  --compare-output ./tmp/username-finder-comparison.json \
+  --key-fields username,site,urlUser \
+  --min-shared 1 \
+  --max-diff 0
+```
 
 ## Development
 

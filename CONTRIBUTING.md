@@ -11,7 +11,7 @@ npm ci
 npm run verify
 ```
 
-`npm run verify` runs the unit suite and then runs `coreclaw verify` against the Node example worker.
+`npm run verify` runs the unit suite and then runs `coreclaw verify` against the Node example worker, including a cloud-output comparison against `examples/node-hello-cloud-output.json`.
 
 For real workers, use the upload preflight command:
 
