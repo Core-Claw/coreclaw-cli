@@ -46,12 +46,14 @@ export async function runCommand(projectPath = '.', options = {}) {
 
   const browserEndpoints = await resolveBrowserEndpoints({
     chromeWs: options.chromeWs,
+    chromeHttp: options.chromeHttp,
     discoverLocalChrome: options.discoverChrome !== false,
   });
   const env = buildRuntimeEnv({
     proxyAuth: options.proxyAuth,
     proxyDomain: options.proxyDomain,
     chromeWs: browserEndpoints.chromeWs,
+    chromeHttp: browserEndpoints.chromeHttp,
     cdpEndpoint: browserEndpoints.cdpEndpoint,
     browserWsEndpoint: browserEndpoints.browserWsEndpoint,
     cloudProxy: options.cloudProxy,

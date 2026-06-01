@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { resolveBrowserEndpoints } from '../runtime/env.js';
 
 const CHECKS = [
   ['node', ['--version']],
@@ -7,7 +8,7 @@ const CHECKS = [
   ['go', ['version']],
 ];
 
-export async function doctorCommand() {
+export async function doctorCommand(options = {}) {
   console.log('CoreClaw CLI doctor');
   for (const [command, args] of CHECKS) {
     const result = spawnSync(command, args, { encoding: 'utf8', shell: false, windowsHide: true });
@@ -19,8 +20,24 @@ export async function doctorCommand() {
     console.log(`[ OK ] ${displayCommand(command, args)}: ${output}`);
   }
   console.log('[INFO] Local runtime gRPC endpoint: 127.0.0.1:20086');
-  console.log('[INFO] ChromeWs auto-discovers http://127.0.0.1:9222/json/version when local Chrome CDP is running');
+  const browser = await checkLocalChrome(options);
+  if (browser.discoveredLocalChrome) {
+    console.log(`[ OK ] Chrome CDP: ChromeWs=${browser.chromeWs}`);
+    console.log(`[ OK ] Chrome HTTP: ChromeHttp=${browser.chromeHttp}`);
+  } else {
+    console.log(`[WARN] Chrome CDP: not detected at http://${options.localChromeHost ?? '127.0.0.1:9222'}/json/version`);
+    console.log(`[INFO] ChromeWs fallback: ${browser.chromeWs}`);
+    console.log(`[INFO] ChromeHttp fallback: ${browser.chromeHttp}`);
+  }
   console.log('[INFO] PROXY_AUTH and PROXY_DOMAIN are disabled by default; use --cloud-proxy or explicit proxy options to emulate cloud proxy variables');
+}
+
+export async function checkLocalChrome(options = {}) {
+  return await resolveBrowserEndpoints({
+    baseEnv: {},
+    localChromeHost: options.localChromeHost ?? '127.0.0.1:9222',
+    fetchImpl: options.fetchImpl ?? globalThis.fetch,
+  });
 }
 
 function platformCheck(command, args) {

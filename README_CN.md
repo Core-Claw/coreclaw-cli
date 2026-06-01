@@ -119,10 +119,11 @@ node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 如果 `http://127.0.0.1:9222/json/version` 可访问，CLI 会自动发现本地 Chrome browser WebSocket 路径并注入：
 
 - `ChromeWs=127.0.0.1:9222/devtools/browser/<id>`
+- `ChromeHttp=127.0.0.1:9222`
 - `CDP_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
 - `BROWSER_WS_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
 
-用 `--no-discover-chrome` 可关闭自动发现。未检测到浏览器时，`ChromeWs` 回退为 `127.0.0.1:9222`，保持与 CoreClaw 文档中 host-style `ChromeWs` 一致的环境形态。
+用 `--no-discover-chrome` 可关闭自动发现。未检测到浏览器时，`ChromeWs` 和 `ChromeHttp` 都会回退为 `127.0.0.1:9222`，保持与 CoreClaw 文档中 host-style browser 变量一致的环境形态。`ChromeHttp` 用于 Selenium Remote WebDriver worker；`ChromeWs` 用于 Playwright、Puppeteer 和 DrissionPage CDP worker。
 
 运行产物：
 
@@ -182,7 +183,8 @@ node ./bin/coreclaw.js run ./examples/node-hello --split 0
 node ./bin/coreclaw.js run ./worker \
   --proxy-auth "user:pass" \
   --proxy-domain "proxy.example:6000" \
-  --chrome-ws "127.0.0.1:9222"
+  --chrome-ws "127.0.0.1:9222" \
+  --chrome-http "127.0.0.1:9222"
 ```
 
 默认本地运行使用直连网络：
@@ -190,6 +192,9 @@ node ./bin/coreclaw.js run ./worker \
 - 不设置 `PROXY_AUTH`
 - 不设置 `PROXY_DOMAIN`
 - `ChromeWs` 优先从本地 Chrome CDP 自动发现；否则为 `127.0.0.1:9222`
+- `ChromeHttp` 默认跟随 `ChromeWs` 的 host/port，也可以为 Selenium worker 显式设置
+
+`coreclaw doctor` 会检查 `127.0.0.1:9222` 的本地 Chrome CDP 是否可访问，并打印本地运行会注入的 browser 变量。
 
 如需模拟 CoreClaw 的 SOCKS5 代理路径，可以启动本地代理：
 

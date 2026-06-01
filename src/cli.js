@@ -166,7 +166,7 @@ Usage:
   coreclaw run [project] [--input input.json | --json '{"url":"..."}'] [--split 0] [--min-results 1]
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
   coreclaw run [project] [--local-proxy] [--require-proxy-usage]
-  coreclaw run [project] [--chrome-ws host[:port][/path] | --no-discover-chrome]
+  coreclaw run [project] [--chrome-ws host[:port][/path] [--chrome-http host:port] | --no-discover-chrome]
   coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
   coreclaw verify [project] [--no-staging] [--no-install]
   coreclaw verify [project] [--local-proxy] [--require-proxy-usage]

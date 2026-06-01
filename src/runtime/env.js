@@ -4,6 +4,7 @@ export function buildRuntimeEnv({
   proxyAuth,
   proxyDomain,
   chromeWs,
+  chromeHttp,
   cdpEndpoint,
   browserWsEndpoint,
   cloudProxy = false,
@@ -30,6 +31,7 @@ export function buildRuntimeEnv({
   delete env.BROWSER_WS_ENDPOINT;
 
   env.ChromeWs = chromeWs ?? baseEnv.ChromeWs ?? '127.0.0.1:9222';
+  env.ChromeHttp = chromeHttp ?? baseEnv.ChromeHttp ?? chromeHttpFromChromeWs(env.ChromeWs);
   if (cdpEndpoint !== undefined && cdpEndpoint !== '') {
     env.CDP_ENDPOINT = cdpEndpoint;
   }
@@ -58,6 +60,7 @@ export function publicEnvSnapshot(env) {
     PROXY_AUTH: env.PROXY_AUTH ? maskSecret(env.PROXY_AUTH) : null,
     PROXY_DOMAIN: env.PROXY_DOMAIN ?? null,
     ChromeWs: env.ChromeWs ?? null,
+    ChromeHttp: env.ChromeHttp ?? null,
     CDP_ENDPOINT: env.CDP_ENDPOINT ? maskEndpoint(env.CDP_ENDPOINT) : null,
     BROWSER_WS_ENDPOINT: env.BROWSER_WS_ENDPOINT ? maskEndpoint(env.BROWSER_WS_ENDPOINT) : null,
     CORECLAW_LOCAL: env.CORECLAW_LOCAL ?? null,
@@ -69,14 +72,17 @@ export function publicEnvSnapshot(env) {
 export async function resolveBrowserEndpoints({
   baseEnv = process.env,
   chromeWs,
+  chromeHttp,
   discoverLocalChrome = true,
   localChromeHost = '127.0.0.1:9222',
   fetchImpl = globalThis.fetch,
 } = {}) {
   const explicitChromeWs = chromeWs ?? baseEnv.ChromeWs;
+  const explicitChromeHttp = chromeHttp ?? baseEnv.ChromeHttp;
   if (explicitChromeWs) {
     return {
       chromeWs: explicitChromeWs,
+      chromeHttp: explicitChromeHttp ?? chromeHttpFromChromeWs(explicitChromeWs),
       cdpEndpoint: baseEnv.CDP_ENDPOINT ?? fullEndpointFromChromeWs(explicitChromeWs),
       browserWsEndpoint: baseEnv.BROWSER_WS_ENDPOINT ?? fullEndpointFromChromeWs(explicitChromeWs),
       discoveredLocalChrome: false,
@@ -87,6 +93,7 @@ export async function resolveBrowserEndpoints({
   if (existingFullEndpoint) {
     return {
       chromeWs: chromeWsAddressFromEndpoint(existingFullEndpoint),
+      chromeHttp: explicitChromeHttp ?? chromeHttpFromChromeWs(chromeWsAddressFromEndpoint(existingFullEndpoint)),
       cdpEndpoint: baseEnv.CDP_ENDPOINT ?? existingFullEndpoint,
       browserWsEndpoint: baseEnv.BROWSER_WS_ENDPOINT ?? existingFullEndpoint,
       discoveredLocalChrome: false,
@@ -98,6 +105,7 @@ export async function resolveBrowserEndpoints({
     if (discoveredEndpoint) {
       return {
         chromeWs: chromeWsAddressFromEndpoint(discoveredEndpoint),
+        chromeHttp: explicitChromeHttp ?? localChromeHost,
         cdpEndpoint: discoveredEndpoint,
         browserWsEndpoint: discoveredEndpoint,
         discoveredLocalChrome: true,
@@ -107,6 +115,7 @@ export async function resolveBrowserEndpoints({
 
   return {
     chromeWs: localChromeHost,
+    chromeHttp: explicitChromeHttp ?? localChromeHost,
     cdpEndpoint: undefined,
     browserWsEndpoint: undefined,
     discoveredLocalChrome: false,
@@ -152,6 +161,15 @@ function fullEndpointFromChromeWs(value) {
 
 function chromeWsAddressFromEndpoint(value) {
   return String(value).trim().replace(/^wss?:\/\//i, '');
+}
+
+function chromeHttpFromChromeWs(value) {
+  return String(value ?? '127.0.0.1:9222')
+    .trim()
+    .replace(/^wss?:\/\//i, '')
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/devtools\/browser\/.*$/i, '')
+    .replace(/\/ws\?.*$/i, '');
 }
 
 async function discoverLocalChromeEndpoint(host, fetchImpl) {

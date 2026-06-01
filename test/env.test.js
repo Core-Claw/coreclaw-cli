@@ -8,6 +8,7 @@ test('buildRuntimeEnv defaults to local direct network without proxy variables',
       PROXY_AUTH: 'cloud-user:cloud-pass',
       PROXY_DOMAIN: 'cloud-proxy:6000',
       ChromeWs: 'cloud-browser:9222',
+      ChromeHttp: 'cloud-http:9515',
       CDP_ENDPOINT: 'ws://stale-cdp',
       BROWSER_WS_ENDPOINT: 'ws://stale-browser',
     },
@@ -16,12 +17,14 @@ test('buildRuntimeEnv defaults to local direct network without proxy variables',
   assert.equal(env.PROXY_AUTH, undefined);
   assert.equal(env.PROXY_DOMAIN, undefined);
   assert.equal(env.ChromeWs, 'cloud-browser:9222');
+  assert.equal(env.ChromeHttp, 'cloud-http:9515');
   assert.equal(env.CDP_ENDPOINT, undefined);
   assert.equal(env.BROWSER_WS_ENDPOINT, undefined);
   assert.deepEqual(publicEnvSnapshot(env), {
     PROXY_AUTH: null,
     PROXY_DOMAIN: null,
     ChromeWs: 'cloud-browser:9222',
+    ChromeHttp: 'cloud-http:9515',
     CDP_ENDPOINT: null,
     BROWSER_WS_ENDPOINT: null,
     CORECLAW_LOCAL: '1',
@@ -57,6 +60,16 @@ test('buildRuntimeEnv uses explicit proxy and runtime temp overrides', () => {
   assert.equal(env.TEMP, 'E:\\worker\\tmp\\run');
 });
 
+test('buildRuntimeEnv derives ChromeHttp from explicit ChromeWs', () => {
+  const env = buildRuntimeEnv({
+    baseEnv: {},
+    chromeWs: '127.0.0.1:9222/devtools/browser/test-id',
+  });
+
+  assert.equal(env.ChromeWs, '127.0.0.1:9222/devtools/browser/test-id');
+  assert.equal(env.ChromeHttp, '127.0.0.1:9222');
+});
+
 test('resolveBrowserEndpoints discovers local Chrome CDP browser path', async () => {
   const endpoints = await resolveBrowserEndpoints({
     baseEnv: {},
@@ -72,6 +85,7 @@ test('resolveBrowserEndpoints discovers local Chrome CDP browser path', async ()
 
   assert.deepEqual(endpoints, {
     chromeWs: '127.0.0.1:9222/devtools/browser/test-id',
+    chromeHttp: '127.0.0.1:9222',
     cdpEndpoint: 'ws://127.0.0.1:9222/devtools/browser/test-id',
     browserWsEndpoint: 'ws://127.0.0.1:9222/devtools/browser/test-id',
     discoveredLocalChrome: true,
@@ -82,6 +96,7 @@ test('resolveBrowserEndpoints respects explicit ChromeWs and existing full endpo
   const explicit = await resolveBrowserEndpoints({
     baseEnv: {},
     chromeWs: 'browser.example/ws',
+    chromeHttp: 'browser-http.example:9515',
     fetchImpl: async () => {
       throw new Error('should not discover when explicit');
     },
@@ -96,8 +111,10 @@ test('resolveBrowserEndpoints respects explicit ChromeWs and existing full endpo
   });
 
   assert.equal(explicit.chromeWs, 'browser.example/ws');
+  assert.equal(explicit.chromeHttp, 'browser-http.example:9515');
   assert.equal(explicit.cdpEndpoint, undefined);
   assert.equal(inherited.chromeWs, '127.0.0.1:9222/devtools/browser/existing');
+  assert.equal(inherited.chromeHttp, '127.0.0.1:9222');
   assert.equal(inherited.browserWsEndpoint, 'ws://127.0.0.1:9222/devtools/browser/existing');
 });
 
@@ -114,6 +131,7 @@ test('resolveBrowserEndpoints falls back to local Chrome host when discovery is 
 
   assert.deepEqual(endpoints, {
     chromeWs: '127.0.0.1:9222',
+    chromeHttp: '127.0.0.1:9222',
     cdpEndpoint: undefined,
     browserWsEndpoint: undefined,
     discoveredLocalChrome: false,

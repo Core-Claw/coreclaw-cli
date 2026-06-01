@@ -120,10 +120,11 @@ Each run gets an isolated temporary directory at `.coreclaw/runs/<run-id>/tmp`. 
 If Chrome remote debugging is reachable at `http://127.0.0.1:9222/json/version`, the CLI automatically discovers the browser WebSocket path and injects:
 
 - `ChromeWs=127.0.0.1:9222/devtools/browser/<id>`
+- `ChromeHttp=127.0.0.1:9222`
 - `CDP_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
 - `BROWSER_WS_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
 
-Use `--no-discover-chrome` to disable this discovery. Without a detected browser, `ChromeWs` falls back to `127.0.0.1:9222` so the environment still looks like CoreClaw's documented host-style `ChromeWs`.
+Use `--no-discover-chrome` to disable this discovery. Without a detected browser, `ChromeWs` and `ChromeHttp` fall back to `127.0.0.1:9222` so the environment still looks like CoreClaw's documented host-style browser variables. `ChromeHttp` is used by Selenium Remote WebDriver workers, while `ChromeWs` is used by Playwright, Puppeteer, and DrissionPage CDP workers.
 
 Artifacts are written to:
 
@@ -181,7 +182,8 @@ For a `requestList` item like `{ "url": "https://example.com" }`, the worker rec
 node ./bin/coreclaw.js run ./worker \
   --proxy-auth "user:pass" \
   --proxy-domain "proxy.example:6000" \
-  --chrome-ws "127.0.0.1:9222"
+  --chrome-ws "127.0.0.1:9222" \
+  --chrome-http "127.0.0.1:9222"
 ```
 
 Default local runs use direct outbound network:
@@ -189,6 +191,9 @@ Default local runs use direct outbound network:
 - `PROXY_AUTH` is unset
 - `PROXY_DOMAIN` is unset
 - `ChromeWs` is auto-discovered from local Chrome CDP when available; otherwise `127.0.0.1:9222`
+- `ChromeHttp` follows `ChromeWs` host/port by default, or can be set explicitly for Selenium workers
+
+`coreclaw doctor` checks whether local Chrome CDP is reachable at `127.0.0.1:9222` and prints the browser variables that local runs will inject.
 
 To emulate CoreClaw's SOCKS5 proxy path for HTTP workers, start the local proxy:
 
