@@ -3,6 +3,8 @@ import path from 'node:path';
 import { CliError } from '../utils/errors.js';
 import { validateInputSchema, validateOutputSchema } from './schema.js';
 
+const RUNTIME_HEADER_FORMATS = new Set(['text', 'integer', 'boolean', 'array', 'object']);
+
 export const LANGUAGE_SPECS = {
   python: {
     label: 'Python',
@@ -192,19 +194,61 @@ export function formatIssues(issues) {
 
 function validateRuntimeHeaders(outputSchema, tableHeaders) {
   const issues = [];
-  const outputNames = new Set(Array.isArray(outputSchema) ? outputSchema.map((column) => column.name) : []);
+  const outputColumns = new Map(Array.isArray(outputSchema)
+    ? outputSchema
+      .filter((column) => typeof column?.name === 'string' && column.name.length > 0)
+      .map((column) => [column.name, column])
+    : []);
 
   for (const header of tableHeaders) {
-    if (header?.key && !outputNames.has(header.key)) {
+    if (!header?.key) {
+      issues.push({
+        severity: 'warn',
+        code: 'runtime_header_missing_key',
+        message: 'Runtime table header is missing required key. CoreClaw table header keys must match pushed result fields.',
+      });
+      continue;
+    }
+
+    if (header.format && !RUNTIME_HEADER_FORMATS.has(header.format)) {
+      issues.push({
+        severity: 'warn',
+        code: 'runtime_header_unsupported_format',
+        message: `Runtime table header "${header.key}" uses unsupported format "${header.format}". Use text, integer, boolean, array, or object.`,
+      });
+      continue;
+    }
+
+    if (!outputColumns.has(header.key)) {
       issues.push({
         severity: 'warn',
         code: 'runtime_header_not_in_output_schema',
         message: `Runtime table header "${header.key}" is not declared in output_schema.json.`,
       });
+      continue;
+    }
+
+    const outputType = outputSchemaTypeToHeaderFormat(outputColumns.get(header.key).type);
+    if (header.format && outputType && header.format !== outputType) {
+      issues.push({
+        severity: 'warn',
+        code: 'runtime_header_format_mismatch',
+        message: `Runtime table header "${header.key}" format "${header.format}" does not match output_schema.json type "${outputColumns.get(header.key).type}".`,
+      });
     }
   }
 
   return issues;
+}
+
+function outputSchemaTypeToHeaderFormat(type) {
+  if (type === 'string') {
+    return 'text';
+  }
+  if (type === 'number') {
+    return 'integer';
+  }
+  return RUNTIME_HEADER_FORMATS.has(type) ? type : null;
 }
 
 function stripJsonBom(text) {

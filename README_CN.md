@@ -98,7 +98,7 @@ CoreClaw 上传后会从 `requirements.txt`、`package.json` 或 `go.mod` 安装
 
 官方文档把 `output_schema.json` 描述为上传就绪项目文件，但当前平台仍兼容没有 `output_schema.json` 的老 worker。因此 CLI 把缺失 `output_schema.json` 作为 warning，而不是阻塞错误。没有 output schema 时，本地 `export.ndjson` 会保留完整原始结果行。
 
-当存在 `output_schema.json` 时，本地运行会按声明列生成 `export.ndjson`，并把 pushed result 与 schema 的漂移记录到 `output_schema_issues.json`。需要上传前严格门槛时，在 `run` 或 `verify` 中加入 `--require-output-schema-match`；如果结果行缺少声明字段、包含未声明字段、声明字段类型错误，或不是 JSON object，命令会失败。
+当存在 `output_schema.json` 时，本地运行会按声明列生成 `export.ndjson`，并把 pushed result 与 schema 的漂移记录到 `output_schema_issues.json`。runtime `set_table_header` 的 key 或 format 与 `output_schema.json` 不一致时也会给出 warning。需要上传前严格门槛时，在 `run` 或 `verify` 中加入 `--require-output-schema-match`；如果结果行缺少声明字段、包含未声明字段、声明字段类型错误，或不是 JSON object，命令会失败。
 
 ### 批量审计 Worker
 

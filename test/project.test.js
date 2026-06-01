@@ -101,6 +101,39 @@ test('validateProject warns about Node package fields that diverge from CoreClaw
   assert.equal(result.issues.some((issue) => issue.code === 'node_package_type_not_commonjs'), true);
 });
 
+test('validateProject warns about runtime table header drift', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'output_schema.json'), JSON.stringify([
+    { name: 'title', type: 'string' },
+    { name: 'count', type: 'integer' },
+    { name: 'enabled', type: 'boolean' },
+  ]));
+
+  const result = validateProject(dir, {
+    tableHeaders: [
+      { label: 'Title', key: 'title', format: 'text' },
+      { label: 'Count', key: 'count', format: 'text' },
+      { label: 'Missing key', key: '', format: 'text' },
+      { label: 'Bad format', key: 'enabled', format: 'date' },
+      { label: 'Extra', key: 'extra', format: 'text' },
+    ],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.issues.filter((issue) => issue.code?.startsWith('runtime_header_')).map((issue) => issue.code), [
+    'runtime_header_format_mismatch',
+    'runtime_header_missing_key',
+    'runtime_header_unsupported_format',
+    'runtime_header_not_in_output_schema',
+  ]);
+});
+
 test('validateProject rejects Python workers missing SDK runtime dependencies', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-python-'));
   for (const file of ['main.py', 'sdk.py', 'sdk_pb2.py', 'sdk_pb2_grpc.py']) {
