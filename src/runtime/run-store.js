@@ -189,6 +189,20 @@ export function validateOutputSchemaRow(outputSchema, value, index) {
         field: name,
         message: `Result row ${index} is missing output_schema field "${name}".`,
       });
+      continue;
+    }
+
+    const column = outputSchemaColumn(outputSchema, name);
+    if (column && !outputValueMatchesType(value[name], column.type)) {
+      issues.push({
+        severity: 'warn',
+        code: 'result_field_type_mismatch',
+        result_index: index,
+        field: name,
+        expected_type: normalizeOutputType(column.type),
+        actual_type: outputValueType(value[name]),
+        message: `Result row ${index} field "${name}" expected ${normalizeOutputType(column.type)} from output_schema.json, got ${outputValueType(value[name])}.`,
+      });
     }
   }
 
@@ -214,6 +228,50 @@ function outputSchemaNames(outputSchema) {
   return outputSchema
     .map((column) => column?.name)
     .filter((name) => typeof name === 'string' && name.length > 0);
+}
+
+function outputSchemaColumn(outputSchema, name) {
+  if (!Array.isArray(outputSchema)) {
+    return null;
+  }
+  return outputSchema.find((column) => column?.name === name) ?? null;
+}
+
+function outputValueMatchesType(value, type) {
+  switch (normalizeOutputType(type)) {
+    case 'string':
+      return typeof value === 'string';
+    case 'integer':
+      return Number.isInteger(value);
+    case 'boolean':
+      return typeof value === 'boolean';
+    case 'array':
+      return Array.isArray(value);
+    case 'object':
+      return value !== null && typeof value === 'object' && !Array.isArray(value);
+    default:
+      return true;
+  }
+}
+
+function normalizeOutputType(type) {
+  if (type === 'number') {
+    return 'integer';
+  }
+  return type;
+}
+
+function outputValueType(value) {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+  if (Number.isInteger(value)) {
+    return 'integer';
+  }
+  return typeof value;
 }
 
 function statusCode(status) {

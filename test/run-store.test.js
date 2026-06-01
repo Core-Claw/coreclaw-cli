@@ -21,6 +21,48 @@ test('validateOutputSchemaRow reports missing, extra, and non-object results', (
   );
 });
 
+test('validateOutputSchemaRow reports output field type drift', () => {
+  const outputSchema = [
+    { name: 'title', type: 'string' },
+    { name: 'count', type: 'integer' },
+    { name: 'ok', type: 'boolean' },
+    { name: 'tags', type: 'array' },
+    { name: 'meta', type: 'object' },
+    { name: 'legacy', type: 'number' },
+  ];
+
+  assert.deepEqual(validateOutputSchemaRow(outputSchema, {
+    title: 'Example',
+    count: 1,
+    ok: false,
+    tags: [],
+    meta: {},
+    legacy: 2,
+  }, 1), []);
+
+  const issues = validateOutputSchemaRow(outputSchema, {
+    title: 123,
+    count: 1.5,
+    ok: 'false',
+    tags: {},
+    meta: [],
+    legacy: '2',
+  }, 2);
+
+  assert.deepEqual(issues.map((issue) => issue.code), [
+    'result_field_type_mismatch',
+    'result_field_type_mismatch',
+    'result_field_type_mismatch',
+    'result_field_type_mismatch',
+    'result_field_type_mismatch',
+    'result_field_type_mismatch',
+  ]);
+  assert.equal(issues[0].field, 'title');
+  assert.match(issues[0].message, /expected string/);
+  assert.match(issues[1].message, /expected integer/);
+  assert.match(issues[5].message, /expected integer/);
+});
+
 test('RunStore writes upload manifests for staged preflight runs', () => {
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-run-store-project-'));
   const workerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-run-store-worker-'));

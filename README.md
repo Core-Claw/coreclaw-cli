@@ -97,7 +97,7 @@ At run time, the CLI also validates the actual input assembled from defaults, `-
 
 CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
 
-When `output_schema.json` exists, local runs project `export.ndjson` through the declared columns and record result/schema drift in `output_schema_issues.json`. Add `--require-output-schema-match` to `run` or `verify` when you want upload-preflight behavior to fail if pushed rows are missing declared fields, include undeclared fields, or are not JSON objects.
+When `output_schema.json` exists, local runs project `export.ndjson` through the declared columns and record result/schema drift in `output_schema_issues.json`. Add `--require-output-schema-match` to `run` or `verify` when you want upload-preflight behavior to fail if pushed rows are missing declared fields, include undeclared fields, have the wrong declared field type, or are not JSON objects.
 
 ### Audit Many Workers
 

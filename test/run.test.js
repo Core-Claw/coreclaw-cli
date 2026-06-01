@@ -293,6 +293,50 @@ main().catch((error) => {
   assert.equal(issues[0].code, 'result_field_not_in_output_schema');
 });
 
+test('runCommand can fail on output_schema type drift when requested', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+
+async function main() {
+  await coresdk.result.setTableHeader([{ label: 'ok', key: 'ok', format: 'boolean' }])
+  await coresdk.result.pushData({ ok: 'true' })
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+  try {
+    await assert.rejects(
+      () => runCommand(dir, {
+        node: process.execPath,
+        requireOutputSchemaMatch: true,
+        minResults: '1',
+        tmpHook: false,
+      }),
+      (error) => error instanceof CliError && /output_schema mismatch/.test(error.message),
+    );
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
+
+  const runs = fs.readdirSync(path.join(dir, '.coreclaw', 'runs'));
+  const runDir = path.join(dir, '.coreclaw', 'runs', runs[0]);
+  const summary = JSON.parse(fs.readFileSync(path.join(runDir, 'summary.json'), 'utf8'));
+  const issues = JSON.parse(fs.readFileSync(path.join(runDir, 'output_schema_issues.json'), 'utf8'));
+  assert.equal(summary.status, 'FAILED');
+  assert.equal(summary.output_schema_issue_count, 1);
+  assert.equal(issues[0].code, 'result_field_type_mismatch');
+});
+
 test('runCommand can require a browser CDP shim connection', async () => {
   const dir = createNodeFixture(`
 const coresdk = require('./sdk')
