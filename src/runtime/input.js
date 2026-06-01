@@ -84,6 +84,7 @@ export function inputSchemaInputIssues(input, schema) {
       continue;
     }
 
+    issues.push(...inputNumericBoundIssues(property.name, property, value));
     issues.push(...inputEditorIssues(property, value));
   }
   return issues;
@@ -244,10 +245,38 @@ function requestListSourceParamIssues(itemName, item, param) {
   if (!inputValueMatchesType(value, param.type)) {
     return [`field "${itemName}.${name}" must be ${inputTypeLabel(param.type)}`];
   }
+  const boundIssues = inputNumericBoundIssues(`${itemName}.${name}`, param, value);
+  if (boundIssues.length > 0) {
+    return boundIssues;
+  }
   if (param.editor === 'select' || param.editor === 'radio' || param.editor === 'checkbox') {
     return optionValueIssues(param, value, `${itemName}.${name}`);
   }
   return [];
+}
+
+function inputNumericBoundIssues(name, schemaItem, value) {
+  if (!isNumericSchemaItem(schemaItem) || typeof value !== 'number' || !Number.isFinite(value)) {
+    return [];
+  }
+
+  const issues = [];
+  if (isFiniteNumber(schemaItem.minimum) && value < schemaItem.minimum) {
+    issues.push(`field "${name}" must be >= ${schemaItem.minimum}`);
+  }
+  if (isFiniteNumber(schemaItem.maximum) && value > schemaItem.maximum) {
+    issues.push(`field "${name}" must be <= ${schemaItem.maximum}`);
+  }
+  return issues;
+}
+
+function isNumericSchemaItem(schemaItem) {
+  const type = normalizeInputType(schemaItem?.type);
+  return type === 'integer' || type === 'number' || schemaItem?.editor === 'number';
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function stringListIssues(name, value) {

@@ -117,6 +117,43 @@ test('validates actual run input types against input schema fields', () => {
   ]);
 });
 
+test('validates actual run input numeric bounds', () => {
+  const schema = {
+    properties: [
+      { name: 'minOnly', type: 'integer', minimum: 1 },
+      { name: 'maxOnly', type: 'integer', maximum: 10 },
+      { name: 'delay', type: 'number', minimum: 0.5, maximum: 2 },
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        param_list: [
+          { param: 'limit', type: 'integer', minimum: 1, maximum: 5 },
+        ],
+      },
+    ],
+  };
+
+  assert.deepEqual(inputSchemaInputIssues({
+    minOnly: 1,
+    maxOnly: 10,
+    delay: 0.5,
+    sources: [{ limit: 5 }],
+  }, schema), []);
+  assert.deepEqual(inputSchemaInputIssues({
+    minOnly: 0,
+    maxOnly: 11,
+    delay: 0.25,
+    sources: [{ limit: 0 }, { limit: 6 }],
+  }, schema), [
+    'field "minOnly" must be >= 1',
+    'field "maxOnly" must be <= 10',
+    'field "delay" must be >= 0.5',
+    'field "sources[0].limit" must be >= 1',
+    'field "sources[1].limit" must be <= 5',
+  ]);
+});
+
 test('validates selector inputs against declared schema options', () => {
   const schema = {
     properties: [
@@ -318,4 +355,35 @@ test('warns about invalid requestListSource param_list definitions', () => {
     'input_param_selector_option_invalid',
     'input_param_list_invalid',
   ]);
+});
+
+test('warns about invalid numeric bounds and default bounds drift', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'limit', type: 'integer', editor: 'number', minimum: 10, maximum: 5, default: 8 },
+      { name: 'delay', type: 'number', editor: 'number', minimum: '0', maximum: false, default: 0.5 },
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        default: [{ limit: 0, mode: 'slow' }],
+        param_list: [
+          { param: 'limit', type: 'integer', minimum: 1, maximum: 5 },
+          { param: 'mode', type: 'string', editor: 'select', options: [{ label: 'Fast', value: 'fast' }] },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  assert.deepEqual(issues.filter((issue) => issue.code?.includes('bound')).map((issue) => issue.code), [
+    'input_numeric_bound_invalid',
+    'input_default_bound_mismatch',
+    'input_numeric_bound_invalid',
+    'input_numeric_bound_invalid',
+    'input_default_param_bound_mismatch',
+  ]);
+  assert.equal(issues.some((issue) => issue.code === 'input_default_param_option_not_declared'), true);
 });

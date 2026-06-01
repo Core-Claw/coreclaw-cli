@@ -94,6 +94,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     }
 
     issues.push(...validatePropertyOptions(property, prefix));
+    issues.push(...validateNumericBounds(property, prefix, 'input_numeric_bound_invalid'));
     issues.push(...validatePropertyParamList(property, prefix));
     issues.push(...validatePropertyDefault(property, prefix));
   }
@@ -214,6 +215,7 @@ function validatePropertyParamList(property, prefix) {
       }
     }
 
+    issues.push(...validateNumericBounds(param, paramPrefix, 'input_param_numeric_bound_invalid'));
     issues.push(...validateSelectorOptions(param, paramPrefix, {
       missingCode: 'input_param_selector_missing_options',
       invalidCode: 'input_param_selector_option_invalid',
@@ -256,6 +258,8 @@ function validatePropertyDefault(property, prefix) {
     issues.push(warn(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}.`, 'input_default_type_mismatch'));
     return issues;
   }
+
+  issues.push(...defaultNumericBoundIssues(property.default, property, `${prefix}.default`, 'input_default_bound_mismatch'));
 
   if (SELECTOR_EDITORS.has(property.editor) && Array.isArray(property.options) && property.options.length > 0) {
     const allowed = new Set(property.options
@@ -326,6 +330,7 @@ function validateParamDefault(item, param, prefix) {
   if (!valueMatchesInputType(item[name], param.type)) {
     issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(param.type)}", but got ${valueType(item[name])}.`, 'input_default_param_type_mismatch'));
   }
+  issues.push(...defaultNumericBoundIssues(item[name], param, `${prefix}.${name}`, 'input_default_param_bound_mismatch'));
   if (SELECTOR_EDITORS.has(param.editor) && Array.isArray(param.options) && param.options.length > 0) {
     const allowed = new Set(param.options
       .filter((option) => option && typeof option === 'object' && Object.prototype.hasOwnProperty.call(option, 'value'))
@@ -355,6 +360,40 @@ function validateStringListDefault(property, prefix) {
   });
 }
 
+function validateNumericBounds(item, prefix, code) {
+  const issues = [];
+  if (!item || typeof item !== 'object' || !isNumericSchemaItem(item)) {
+    return issues;
+  }
+
+  const hasMinimum = Object.prototype.hasOwnProperty.call(item, 'minimum');
+  const hasMaximum = Object.prototype.hasOwnProperty.call(item, 'maximum');
+
+  if (hasMinimum && !isFiniteNumber(item.minimum)) {
+    issues.push(warn(`${prefix}.minimum should be a finite number.`, code));
+  }
+  if (hasMaximum && !isFiniteNumber(item.maximum)) {
+    issues.push(warn(`${prefix}.maximum should be a finite number.`, code));
+  }
+  if (hasMinimum && hasMaximum && isFiniteNumber(item.minimum) && isFiniteNumber(item.maximum) && item.minimum > item.maximum) {
+    issues.push(warn(`${prefix}.minimum should be less than or equal to maximum.`, code));
+  }
+  return issues;
+}
+
+function defaultNumericBoundIssues(value, item, prefix, code) {
+  if (!isNumericSchemaItem(item) || !isFiniteNumber(value)) {
+    return [];
+  }
+  if (isFiniteNumber(item.minimum) && value < item.minimum) {
+    return [warn(`${prefix} should be greater than or equal to ${item.minimum}, but got ${value}.`, code)];
+  }
+  if (isFiniteNumber(item.maximum) && value > item.maximum) {
+    return [warn(`${prefix} should be less than or equal to ${item.maximum}, but got ${value}.`, code)];
+  }
+  return [];
+}
+
 function valueMatchesInputType(value, type) {
   switch (inputTypeLabel(type)) {
     case 'string':
@@ -379,6 +418,18 @@ function inputTypeLabel(type) {
     return 'number';
   }
   return normalizeType(type);
+}
+
+function isNumericSchemaItem(item) {
+  if (!item || typeof item !== 'object') {
+    return false;
+  }
+  const type = inputTypeLabel(item.type);
+  return type === 'integer' || type === 'number' || item.editor === 'number';
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function valueType(value) {
