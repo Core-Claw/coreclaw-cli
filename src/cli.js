@@ -142,6 +142,8 @@ function isBooleanOption(name) {
     'localProxy',
     'requireProxyUsage',
     'requireBrowser',
+    'browserCdpShim',
+    'requireBrowserCdpShim',
     'captchaSolver',
     'requireCaptchaSolver',
     'requireOutputSchemaMatch',
@@ -172,12 +174,14 @@ Usage:
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
   coreclaw run [project] [--local-proxy] [--require-proxy-usage]
   coreclaw run [project] [--chrome-ws host[:port][/path] [--chrome-http host:port] | --no-discover-chrome] [--require-browser]
+  coreclaw run [project] [--browser-cdp-shim] [--require-browser-cdp-shim]
   coreclaw run [project] [--captcha-solver] [--require-captcha-solver]
   coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
   coreclaw verify [project] [--require-output-schema-match]
   coreclaw verify [project] [--no-staging] [--no-install] [--go go]
   coreclaw verify [project] [--local-proxy] [--require-proxy-usage]
   coreclaw verify [project] [--require-browser]
+  coreclaw verify [project] [--browser-cdp-shim] [--require-browser-cdp-shim]
   coreclaw verify [project] [--captcha-solver] [--require-captcha-solver]
   coreclaw verify [project] --cloud-output cloud.json [--min-shared 1] [--compare-output report.json]
   coreclaw pack [project] --output worker.zip [--go go]

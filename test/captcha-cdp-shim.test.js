@@ -6,7 +6,7 @@ import { startCaptchaCdpShim } from '../src/runtime/captcha-cdp-shim.js';
 test('captcha CDP shim handles Captchas.automaticSolver', async () => {
   const shim = await startCaptchaCdpShim();
   try {
-    const socket = await connect(`ws://${shim.chromeWs}`);
+    const socket = await connect(shim.cdpEndpoint);
     const response = await sendCommand(socket, {
       id: 1,
       method: 'Captchas.automaticSolver',
@@ -38,7 +38,7 @@ test('captcha CDP shim forwards non-captcha CDP commands upstream', async () => 
   const upstream = await startUpstreamCdpFixture();
   const shim = await startCaptchaCdpShim({ upstreamUrl: upstream.url });
   try {
-    const socket = await connect(`ws://${shim.chromeWs}`);
+    const socket = await connect(`ws://${shim.chromeWs}/ws?apiKey=coreclaw-local:coreclaw-local`);
     const response = await sendCommand(socket, {
       id: 7,
       method: 'Browser.getVersion',
@@ -46,6 +46,7 @@ test('captcha CDP shim forwards non-captcha CDP commands upstream', async () => 
 
     assert.equal(response.id, 7);
     assert.equal(response.result.product, 'upstream-fixture');
+    assert.deepEqual(shim.stats.paths, ['/ws?apiKey=coreclaw-local:coreclaw-local']);
     socket.close();
   } finally {
     await shim.stop();

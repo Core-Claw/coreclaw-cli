@@ -147,7 +147,9 @@ Use `--no-discover-chrome` to disable this discovery. Without a detected browser
 
 Use `--require-browser` for browser worker smoke tests. It turns browser availability into a preflight gate: local Chrome discovery passes immediately, host-style CDP endpoints are checked through `/json/version`, and Selenium-style endpoints are checked through `/status`. If no endpoint is reachable, the run fails before creating run artifacts instead of letting a browser worker fail later with a less specific connection error.
 
-Use `--captcha-solver` when testing workers that call CoreClaw's documented custom CDP method `Captchas.automaticSolver`. The CLI starts a local CDP WebSocket shim, injects its endpoint through `ChromeWs`, `CDP_ENDPOINT`, and `BROWSER_WS_ENDPOINT`, and returns `{ "status": true }` for `Captchas.automaticSolver`. Other CDP messages are forwarded to the discovered or explicit upstream CDP endpoint when one exists. Add `--require-captcha-solver` to fail the run if no solver call was observed.
+Use `--browser-cdp-shim` when testing browser workers that should connect through CoreClaw's host-style `ChromeWs` variable. The CLI starts a local CDP WebSocket shim, injects `ChromeWs=<host:port>`, `ChromeHttp=<host:port>`, and a full `CDP_ENDPOINT`, and accepts both `ws://<ChromeWs>/devtools/browser/<id>` and DrissionPage's documented `ws://<ChromeWs>/ws?apiKey=<PROXY_AUTH>` path. Add `--require-browser-cdp-shim` to fail the run if the worker never connects to that shim.
+
+Use `--captcha-solver` when testing workers that call CoreClaw's documented custom CDP method `Captchas.automaticSolver`. The CLI starts the same local CDP WebSocket shape, injects it through `ChromeWs`, `CDP_ENDPOINT`, and `BROWSER_WS_ENDPOINT`, and returns `{ "status": true }` for `Captchas.automaticSolver`. Other CDP messages are forwarded to the discovered or explicit upstream CDP endpoint when one exists. Add `--require-captcha-solver` to fail the run if no solver call was observed.
 
 Artifacts are written to:
 
@@ -179,6 +181,7 @@ node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
 node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
+node ./bin/coreclaw.js verify ./browser-worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
@@ -242,7 +245,15 @@ node ./bin/coreclaw.js verify ./worker --chrome-ws "127.0.0.1:9222/devtools/brow
 node ./bin/coreclaw.js verify ./worker --chrome-http "127.0.0.1:9515" --require-browser --min-results 1
 ```
 
-The first form matches Playwright, Puppeteer, and DrissionPage CDP workers. The second form matches Selenium Remote WebDriver workers.
+The first form matches Playwright, Puppeteer, and explicit CDP endpoint workers. The second form matches Selenium Remote WebDriver workers.
+
+For CoreClaw-style host-only CDP variables, including DrissionPage workers that build `ws://{ChromeWs}/ws?apiKey={PROXY_AUTH}`:
+
+```bash
+node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
+```
+
+The shim returns basic `Browser.getVersion` metadata even without an upstream browser, and forwards all other CDP traffic to a discovered or explicit upstream endpoint when one exists.
 
 For CAPTCHA-aware browser workers:
 

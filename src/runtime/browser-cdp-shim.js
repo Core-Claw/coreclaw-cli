@@ -1,31 +1,27 @@
 import http from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { forwardWhenOpen, handleLocalCdpMessage, safeClose, safeSend } from './browser-cdp-shim.js';
 
-const DEFAULT_RESULT = {
-  status: true,
-  message: 'CoreClaw local CAPTCHA solver shim',
-};
+const DEFAULT_BROWSER_ID = 'coreclaw-browser-shim';
 
-export async function startCaptchaCdpShim({
+export async function startBrowserCdpShim({
   upstreamUrl,
-  result = DEFAULT_RESULT,
   store,
+  browserId = DEFAULT_BROWSER_ID,
+  browserLabel = 'CoreClaw local browser CDP shim',
 } = {}) {
   const stats = {
     connections: 0,
     paths: [],
-    automaticSolverCalls: 0,
-    calls: [],
+    upstreamConnectionFailures: 0,
   };
   const server = http.createServer((request, response) => {
     if (request.url === '/json/version') {
       const host = request.headers.host ?? localAddress(server);
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(`${JSON.stringify({
-        Browser: 'CoreClaw local CAPTCHA CDP shim',
+        Browser: browserLabel,
         'Protocol-Version': '1.3',
-        webSocketDebuggerUrl: `ws://${host}/devtools/browser/coreclaw-captcha-shim`,
+        webSocketDebuggerUrl: `ws://${host}/devtools/browser/${browserId}`,
       })}\n`);
       return;
     }
@@ -46,6 +42,7 @@ export async function startCaptchaCdpShim({
     stats.connections += 1;
     stats.paths.push(request.url ?? '/');
     connections.add(client);
+
     let upstream = null;
     if (upstreamUrl) {
       upstream = new WebSocket(upstreamUrl);
@@ -53,27 +50,17 @@ export async function startCaptchaCdpShim({
       upstream.on('message', (message) => safeSend(client, message));
       upstream.on('close', () => safeClose(client));
       upstream.on('error', (error) => {
-        store?.recordLog('WARN', `Upstream CDP connection failed: ${error.message}`, 'coreclaw-captcha');
+        stats.upstreamConnectionFailures += 1;
+        store?.recordLog('WARN', `Upstream CDP connection failed: ${error.message}`, 'coreclaw-browser');
       });
     }
 
     client.on('message', (message) => {
-      const handled = handleClientMessage({
-        message: message.toString(),
-        client,
-        upstream,
-        stats,
-        result,
-        store,
-      });
-      if (handled) {
-        return;
-      }
       if (upstream) {
         forwardWhenOpen(upstream, message);
         return;
       }
-      if (handleLocalCdpMessage({ message: message.toString(), client, browserLabel: 'CoreClaw local CAPTCHA CDP shim' })) {
+      if (handleLocalCdpMessage({ message: message.toString(), client, browserLabel })) {
         return;
       }
     });
@@ -86,13 +73,14 @@ export async function startCaptchaCdpShim({
 
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const domain = localAddress(server);
+  const cdpEndpoint = `ws://${domain}/devtools/browser/${browserId}`;
 
   return {
     domain,
     chromeWs: domain,
     chromeHttp: domain,
-    cdpEndpoint: `ws://${domain}/devtools/browser/coreclaw-captcha-shim`,
-    browserWsEndpoint: `ws://${domain}/devtools/browser/coreclaw-captcha-shim`,
+    cdpEndpoint,
+    browserWsEndpoint: cdpEndpoint,
     stats,
     async stop() {
       for (const connection of connections) {
@@ -104,7 +92,7 @@ export async function startCaptchaCdpShim({
   };
 }
 
-function handleClientMessage({ message, client, stats, result, store }) {
+export function handleLocalCdpMessage({ message, client, browserLabel = 'CoreClaw local browser CDP shim' }) {
   let payload;
   try {
     payload = JSON.parse(message);
@@ -112,21 +100,41 @@ function handleClientMessage({ message, client, stats, result, store }) {
     return false;
   }
 
-  if (payload?.method !== 'Captchas.automaticSolver') {
+  if (payload?.method !== 'Browser.getVersion') {
     return false;
   }
 
-  stats.automaticSolverCalls += 1;
-  stats.calls.push({
-    time: new Date().toISOString(),
-    params: payload.params ?? {},
-  });
-  store?.recordLog('INFO', `Local CAPTCHA solver shim handled Captchas.automaticSolver (${JSON.stringify(payload.params ?? {})})`, 'coreclaw-captcha');
   safeSend(client, JSON.stringify({
     id: payload.id,
-    result,
+    result: {
+      protocolVersion: '1.3',
+      product: browserLabel,
+      revision: 'coreclaw-local',
+      userAgent: 'CoreClawLocalBrowserShim/1.0',
+      jsVersion: '0.0',
+    },
   }));
   return true;
+}
+
+export function safeSend(socket, message) {
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(message);
+  }
+}
+
+export function safeClose(socket) {
+  if (socket && socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
+    socket.close();
+  }
+}
+
+export function forwardWhenOpen(socket, message) {
+  if (socket.readyState === WebSocket.OPEN) {
+    socket.send(message);
+    return;
+  }
+  socket.once('open', () => safeSend(socket, message));
 }
 
 function localAddress(server) {

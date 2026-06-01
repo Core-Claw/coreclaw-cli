@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceCaptchaSolverGate, enforceMinimumResults, enforceOutputSchemaMatch, enforcePostRunGates, enforceRequiredBrowser, runCommand } from '../src/commands/run.js';
+import { enforceBrowserCdpShimGate, enforceCaptchaSolverGate, enforceMinimumResults, enforceOutputSchemaMatch, enforcePostRunGates, enforceRequiredBrowser, runCommand, shouldUseBrowserCdpShim } from '../src/commands/run.js';
 import { CliError } from '../src/utils/errors.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -82,6 +82,29 @@ test('enforceCaptchaSolverGate allows runs that called the local CAPTCHA solver'
   };
 
   assert.doesNotThrow(() => enforceCaptchaSolverGate(store, captchaShim, { requireCaptchaSolver: true }));
+});
+
+test('enforceBrowserCdpShimGate marks the run failed when required but unused', () => {
+  const store = makeStore(1);
+  const browserShim = {
+    stats: {
+      connections: 0,
+    },
+  };
+
+  assert.throws(
+    () => enforceBrowserCdpShimGate(store, browserShim, null, { requireBrowserCdpShim: true }),
+    (error) => error instanceof CliError && /did not connect to the local CoreClaw browser CDP shim/.test(error.message),
+  );
+  assert.equal(store.finished.exitCode, 1);
+});
+
+test('shouldUseBrowserCdpShim includes browser and CAPTCHA shim modes', () => {
+  assert.equal(shouldUseBrowserCdpShim({}), false);
+  assert.equal(shouldUseBrowserCdpShim({ browserCdpShim: true }), true);
+  assert.equal(shouldUseBrowserCdpShim({ requireBrowserCdpShim: true }), true);
+  assert.equal(shouldUseBrowserCdpShim({ captchaSolver: true }), true);
+  assert.equal(shouldUseBrowserCdpShim({ requireCaptchaSolver: true }), true);
 });
 
 test('enforceRequiredBrowser rejects fallback browser endpoints when requested', async () => {
@@ -244,6 +267,60 @@ main().catch((error) => {
   assert.equal(summary.status, 'FAILED');
   assert.equal(summary.output_schema_issue_count, 1);
   assert.equal(issues[0].code, 'result_field_not_in_output_schema');
+});
+
+test('runCommand can require a browser CDP shim connection', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+const { WebSocket } = require('ws')
+
+function sendBrowserCommand(url) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url)
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({ id: 1, method: 'Browser.getVersion' }))
+    })
+    socket.addEventListener('message', (event) => {
+      resolve(JSON.parse(event.data))
+      socket.close()
+    })
+    socket.addEventListener('error', reject)
+  })
+}
+
+async function main() {
+  const auth = process.env.PROXY_AUTH
+  const chromeWs = process.env.ChromeWs
+  const result = await sendBrowserCommand('ws://' + chromeWs + '/ws?apiKey=' + auth)
+  await coresdk.result.setTableHeader([{ label: 'ok', key: 'ok', format: 'boolean' }])
+  await coresdk.result.pushData({ ok: Boolean(result.id) })
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+  try {
+    const summary = await runCommand(dir, {
+      node: process.execPath,
+      requireBrowserCdpShim: true,
+      minResults: '1',
+      tmpHook: false,
+    });
+
+    assert.equal(summary.status, 'SUCCEEDED');
+    assert.equal(summary.result_count, 1);
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
 });
 
 test('runCommand can require Captchas.automaticSolver through the local CDP shim', async () => {

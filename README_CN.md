@@ -146,7 +146,9 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
 
 浏览器 worker 的 smoke test 建议加 `--require-browser`。它会把浏览器可用性变成预检门槛：本地 Chrome 自动发现成功时直接通过，host-style CDP 端点会检查 `/json/version`，Selenium 风格端点会检查 `/status`。如果没有任何端点可访问，命令会在创建 run 产物前失败，避免 worker 内部才报出不明确的浏览器连接错误。
 
-测试会调用 CoreClaw 自定义 CDP 方法 `Captchas.automaticSolver` 的 worker 时，使用 `--captcha-solver`。CLI 会启动本地 CDP WebSocket shim，并通过 `ChromeWs`、`CDP_ENDPOINT` 和 `BROWSER_WS_ENDPOINT` 注入该端点，对 `Captchas.automaticSolver` 返回 `{ "status": true }`。其它 CDP 消息会在存在本地或显式上游 CDP 端点时继续转发。加上 `--require-captcha-solver` 后，如果本次运行没有观察到 solver 调用，run 会失败。
+测试应通过 CoreClaw host-style `ChromeWs` 变量连接浏览器的 worker 时，使用 `--browser-cdp-shim`。CLI 会启动本地 CDP WebSocket shim，注入 `ChromeWs=<host:port>`、`ChromeHttp=<host:port>` 和完整 `CDP_ENDPOINT`，并同时接受 `ws://<ChromeWs>/devtools/browser/<id>` 以及 DrissionPage 文档里的 `ws://<ChromeWs>/ws?apiKey=<PROXY_AUTH>` 路径。加上 `--require-browser-cdp-shim` 后，如果 worker 从未连接该 shim，run 会失败。
+
+测试会调用 CoreClaw 自定义 CDP 方法 `Captchas.automaticSolver` 的 worker 时，使用 `--captcha-solver`。CLI 会启动相同形态的本地 CDP WebSocket shim，并通过 `ChromeWs`、`CDP_ENDPOINT` 和 `BROWSER_WS_ENDPOINT` 注入该端点，对 `Captchas.automaticSolver` 返回 `{ "status": true }`。其它 CDP 消息会在存在本地或显式上游 CDP 端点时继续转发。加上 `--require-captcha-solver` 后，如果本次运行没有观察到 solver 调用，run 会失败。
 
 运行产物：
 
@@ -178,6 +180,7 @@ node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
 node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
+node ./bin/coreclaw.js verify ./browser-worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
@@ -243,7 +246,15 @@ node ./bin/coreclaw.js verify ./worker --chrome-ws "127.0.0.1:9222/devtools/brow
 node ./bin/coreclaw.js verify ./worker --chrome-http "127.0.0.1:9515" --require-browser --min-results 1
 ```
 
-第一种对应 Playwright、Puppeteer 和 DrissionPage CDP worker；第二种对应 Selenium Remote WebDriver worker。
+第一种对应 Playwright、Puppeteer 和显式 CDP endpoint worker；第二种对应 Selenium Remote WebDriver worker。
+
+对于使用 CoreClaw host-only CDP 变量的 worker，尤其是会拼出 `ws://{ChromeWs}/ws?apiKey={PROXY_AUTH}` 的 DrissionPage worker：
+
+```bash
+node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
+```
+
+没有上游浏览器时，shim 也会返回基础 `Browser.getVersion` 元数据；存在本地发现或显式传入的上游 CDP endpoint 时，其它 CDP 流量会继续转发。
 
 对于带 CAPTCHA 处理逻辑的浏览器 worker：
 

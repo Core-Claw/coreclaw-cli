@@ -9,6 +9,7 @@ import { buildInput } from '../runtime/input.js';
 import { commandForProject, installCommandForProject, runProcess } from '../runtime/executor.js';
 import { startRuntimeGrpcServer } from '../runtime/grpc-server.js';
 import { RunStore } from '../runtime/run-store.js';
+import { startBrowserCdpShim } from '../runtime/browser-cdp-shim.js';
 import { startCaptchaCdpShim } from '../runtime/captcha-cdp-shim.js';
 import { assertSocksProxyUsed, startSocksProxy } from '../runtime/socks-proxy.js';
 
@@ -53,6 +54,7 @@ export async function runCommand(projectPath = '.', options = {}) {
   });
   store.init();
 
+  let browserShim = null;
   let captchaShim = null;
   if (options.captchaSolver || options.requireCaptchaSolver) {
     captchaShim = await startCaptchaCdpShim({
@@ -62,7 +64,16 @@ export async function runCommand(projectPath = '.', options = {}) {
     browserEndpoints.chromeWs = captchaShim.chromeWs;
     browserEndpoints.chromeHttp = captchaShim.domain;
     browserEndpoints.cdpEndpoint = captchaShim.cdpEndpoint;
-    browserEndpoints.browserWsEndpoint = captchaShim.cdpEndpoint;
+    browserEndpoints.browserWsEndpoint = captchaShim.browserWsEndpoint;
+  } else if (shouldUseBrowserCdpShim(options)) {
+    browserShim = await startBrowserCdpShim({
+      upstreamUrl: resolveUpstreamCdpUrl(browserEndpoints),
+      store,
+    });
+    browserEndpoints.chromeWs = browserShim.chromeWs;
+    browserEndpoints.chromeHttp = browserShim.chromeHttp;
+    browserEndpoints.cdpEndpoint = browserShim.cdpEndpoint;
+    browserEndpoints.browserWsEndpoint = browserShim.browserWsEndpoint;
   }
 
   const env = buildRuntimeEnv({
@@ -72,7 +83,7 @@ export async function runCommand(projectPath = '.', options = {}) {
     chromeHttp: browserEndpoints.chromeHttp,
     cdpEndpoint: browserEndpoints.cdpEndpoint,
     browserWsEndpoint: browserEndpoints.browserWsEndpoint,
-    cloudProxy: options.cloudProxy,
+    cloudProxy: options.cloudProxy || Boolean(browserShim || captchaShim),
     mockNetwork: options.mockNetwork,
     runtimeTmpDir: store.tmpDir,
   });
@@ -150,6 +161,7 @@ export async function runCommand(projectPath = '.', options = {}) {
     }
 
     enforcePostRunGates(store, localProxy, options);
+    enforceBrowserCdpShimGate(store, browserShim, captchaShim, options);
     enforceCaptchaSolverGate(store, captchaShim, options);
 
     console.log(`Run ${store.status}: ${store.runId}`);
@@ -170,6 +182,9 @@ export async function runCommand(projectPath = '.', options = {}) {
     }
     if (captchaShim) {
       await captchaShim.stop();
+    }
+    if (browserShim) {
+      await browserShim.stop();
     }
   }
 }
@@ -231,6 +246,29 @@ export function enforceCaptchaSolverGate(store, captchaShim, options) {
     store.finish({ exitCode: 1, error: message });
     throw new CliError(message);
   }
+}
+
+export function enforceBrowserCdpShimGate(store, browserShim, captchaShim, options) {
+  if (!options.requireBrowserCdpShim) {
+    return;
+  }
+
+  const shim = captchaShim ?? browserShim;
+  if (!shim) {
+    const message = '--require-browser-cdp-shim requires the local browser CDP shim to be enabled.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
+  }
+
+  if (shim.stats.connections < 1) {
+    const message = 'Worker did not connect to the local CoreClaw browser CDP shim.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
+  }
+}
+
+export function shouldUseBrowserCdpShim(options = {}) {
+  return Boolean(options.browserCdpShim || options.requireBrowserCdpShim || options.captchaSolver || options.requireCaptchaSolver);
 }
 
 export async function enforceRequiredBrowser(browserEndpoints, options = {}) {
