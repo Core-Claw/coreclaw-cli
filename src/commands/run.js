@@ -193,9 +193,25 @@ export function enforcePostRunGates(store, localProxy, options) {
   try {
     assertSocksProxyUsed(localProxy, options);
     enforceMinimumResults(store, options);
+    enforceOutputSchemaMatch(store, options);
   } catch (error) {
     store.finish({ exitCode: 1, error });
     throw error;
+  }
+}
+
+export function enforceOutputSchemaMatch(store, options) {
+  if (!options.requireOutputSchemaMatch) {
+    return;
+  }
+
+  if (!Array.isArray(store.outputSchema) || store.outputSchema.length === 0) {
+    throw new CliError('--require-output-schema-match requires output_schema.json with at least one declared column.');
+  }
+
+  const summary = store.summary();
+  if (summary.output_schema_issue_count > 0) {
+    throw new CliError(`Run produced ${summary.output_schema_issue_count} output_schema mismatch issue(s). See ${summary.output_schema_issues_path}.`);
   }
 }
 
@@ -287,6 +303,8 @@ async function validateRunOutputs(projectDir, store, options) {
     return;
   }
 
+  warnOutputSchemaIssues(store, options);
+
   const headerPath = path.join(store.runDir, 'table_headers.json');
   if (!fs.existsSync(headerPath)) {
     console.warn('[WARN] Worker did not call set_table_header. CoreClaw accepts output_schema.json, but runtime headers help catch drift.');
@@ -297,6 +315,17 @@ async function validateRunOutputs(projectDir, store, options) {
   const result = validateProject(projectDir, { tableHeaders });
   for (const issue of result.issues.filter((item) => item.code === 'runtime_header_not_in_output_schema')) {
     console.warn(`[WARN] ${issue.message}`);
+  }
+}
+
+function warnOutputSchemaIssues(store, options) {
+  if (options.requireOutputSchemaMatch) {
+    return;
+  }
+
+  const summary = store.summary();
+  if (summary.output_schema_issue_count > 0) {
+    console.warn(`[WARN] Worker pushed ${summary.output_schema_issue_count} field mismatch issue(s) against output_schema.json. See ${summary.output_schema_issues_path}. Use --require-output-schema-match to fail on this drift.`);
   }
 }
 

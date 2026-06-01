@@ -144,6 +144,7 @@ function isBooleanOption(name) {
     'requireBrowser',
     'captchaSolver',
     'requireCaptchaSolver',
+    'requireOutputSchemaMatch',
     'discoverChrome',
     'pack',
   ]).has(name);
@@ -167,11 +168,13 @@ Usage:
   coreclaw init [target] --language <python|node|go>
   coreclaw validate [project]
   coreclaw run [project] [--input input.json | --json '{"url":"..."}'] [--split 0] [--min-results 1]
+  coreclaw run [project] [--require-output-schema-match]
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
   coreclaw run [project] [--local-proxy] [--require-proxy-usage]
   coreclaw run [project] [--chrome-ws host[:port][/path] [--chrome-http host:port] | --no-discover-chrome] [--require-browser]
   coreclaw run [project] [--captcha-solver] [--require-captcha-solver]
   coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
+  coreclaw verify [project] [--require-output-schema-match]
   coreclaw verify [project] [--no-staging] [--no-install] [--go go]
   coreclaw verify [project] [--local-proxy] [--require-proxy-usage]
   coreclaw verify [project] [--require-browser]
@@ -179,7 +182,7 @@ Usage:
   coreclaw verify [project] --cloud-output cloud.json [--min-shared 1] [--compare-output report.json]
   coreclaw pack [project] --output worker.zip [--go go]
   coreclaw audit [root] --output audit.json --markdown audit.md [--all]
-  coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1]
+  coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1] [--require-output-schema-match]
   coreclaw compare cloud.json .coreclaw/runs/<run-id> [--min-shared 1] [--output report.json]
   coreclaw doctor
 

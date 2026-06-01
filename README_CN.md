@@ -20,6 +20,7 @@ CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平
   - `CORECLAW_TMP_DIR`
   - `TMPDIR` / `TMP` / `TEMP`
 - `.coreclaw/runs/<run-id>/` 下的运行生命周期产物。
+- `output_schema.json` 输出表投影，以及结果/schema 漂移记录。
 - 上传 ZIP 结构验证和打包。
 - `verify` 默认从上传包视角的临时 staging 目录运行，并在该目录安装依赖。
 - Go 上传打包：
@@ -92,6 +93,8 @@ CoreClaw 上传后会从 `requirements.txt`、`package.json` 或 `go.mod` 安装
 
 官方文档把 `output_schema.json` 描述为上传就绪项目文件，但当前平台仍兼容没有 `output_schema.json` 的老 worker。因此 CLI 把缺失 `output_schema.json` 作为 warning，而不是阻塞错误。没有 output schema 时，本地 `export.ndjson` 会保留完整原始结果行。
 
+当存在 `output_schema.json` 时，本地运行会按声明列生成 `export.ndjson`，并把 pushed result 与 schema 的漂移记录到 `output_schema_issues.json`。需要上传前严格门槛时，在 `run` 或 `verify` 中加入 `--require-output-schema-match`；如果结果行缺少声明字段、包含未声明字段，或不是 JSON object，命令会失败。
+
 ### 批量审计 Worker
 
 ```bash
@@ -111,6 +114,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://exam
 node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js run ./examples/node-hello --require-output-schema-match
 node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
 node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
@@ -121,6 +125,8 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
 `--timeout-ms` 用于限制整个 worker 进程运行时间；`--idle-timeout-ms` 用于停止已经不再输出但仍有 Node/Python/Go handle 未退出的 worker。时长支持毫秒、`s` 和 `m`。
 
 真实 worker 冒烟测试应使用 `--min-results`。有些 worker 会在上游或浏览器失败后仍以 exit code `0` 退出，因此结果行数才是更可靠的成功门槛。
+
+上传前验证建议加 `--require-output-schema-match`。默认行为继续兼容老 worker；显式启用后，输出字段和 `output_schema.json` 不一致会成为 hard failure。
 
 每次运行都会得到独立临时目录 `.coreclaw/runs/<run-id>/tmp`。Node.js worker 还会默认预加载一个本地 hook，把绝对路径 `/tmp/...` 文件操作映射到该运行目录，避免宿主机旧 `/tmp` 状态影响重复运行。
 
@@ -148,6 +154,7 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
   logs.ndjson
   results.ndjson      # SDK push_data 原始 payload
   export.ndjson       # 按 output_schema 投影后的 CoreClaw 风格输出
+  output_schema_issues.json # pushed rows 与 output_schema.json 不一致时存在
   table_headers.json
   tmp/                # 每次运行独立临时状态
   summary.json
@@ -164,11 +171,12 @@ node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
+node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
-`verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
+`verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选强制校验结果与 `output_schema.json` 一致，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
 
 这种默认行为能捕获只因为源目录里存在 `.coreclaw`、`node_modules`、`dist` 或其他不会上传的文件而本地跑通的假阳性。
 
@@ -180,9 +188,10 @@ node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captch
 
 ```bash
 node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --min-results 1
+node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-output-schema-match
 ```
 
-`inspect-run` 会检查 `summary.json`、`results.ndjson` 和 `export.ndjson` 的行数一致性。真实 worker 执行后应使用它，避免把“进程正常退出”误判为“产生了可用数据”。
+`inspect-run` 会检查 `summary.json`、`results.ndjson`、`export.ndjson` 和 `output_schema_issues.json` 的一致性。真实 worker 执行后应使用它，避免把“进程正常退出”误判为“产生了可用数据”。
 
 ### 模拟拆分任务
 

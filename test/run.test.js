@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceCaptchaSolverGate, enforceMinimumResults, enforcePostRunGates, enforceRequiredBrowser, runCommand } from '../src/commands/run.js';
+import { enforceCaptchaSolverGate, enforceMinimumResults, enforceOutputSchemaMatch, enforcePostRunGates, enforceRequiredBrowser, runCommand } from '../src/commands/run.js';
 import { CliError } from '../src/utils/errors.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -32,6 +32,30 @@ test('enforcePostRunGates marks the run failed when proxy usage is required but 
     (error) => error instanceof CliError && /did not use the local CoreClaw SOCKS5 proxy/.test(error.message),
   );
   assert.equal(store.finished.exitCode, 1);
+});
+
+test('enforceOutputSchemaMatch rejects schema drift when requested', () => {
+  const store = makeStore(1, {
+    outputSchema: [{ name: 'ok', type: 'boolean' }],
+    outputSchemaIssueCount: 1,
+  });
+
+  assert.throws(
+    () => enforceOutputSchemaMatch(store, { requireOutputSchemaMatch: true }),
+    (error) => error instanceof CliError && /output_schema mismatch/.test(error.message),
+  );
+});
+
+test('enforceOutputSchemaMatch requires a declared output schema', () => {
+  const store = makeStore(1, {
+    outputSchema: [],
+    outputSchemaIssueCount: 0,
+  });
+
+  assert.throws(
+    () => enforceOutputSchemaMatch(store, { requireOutputSchemaMatch: true }),
+    (error) => error instanceof CliError && /requires output_schema\.json/.test(error.message),
+  );
 });
 
 test('enforceCaptchaSolverGate marks the run failed when required but unused', () => {
@@ -154,6 +178,50 @@ main().catch((error) => {
   assert.equal(summary.status, 'FAILED');
 });
 
+test('runCommand can fail on output_schema drift when requested', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+
+async function main() {
+  await coresdk.result.setTableHeader([{ label: 'ok', key: 'ok', format: 'boolean' }])
+  await coresdk.result.pushData({ ok: true, extra: 'not exported by CoreClaw' })
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+  try {
+    await assert.rejects(
+      () => runCommand(dir, {
+        node: process.execPath,
+        requireOutputSchemaMatch: true,
+        minResults: '1',
+        tmpHook: false,
+      }),
+      (error) => error instanceof CliError && /output_schema mismatch/.test(error.message),
+    );
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
+
+  const runs = fs.readdirSync(path.join(dir, '.coreclaw', 'runs'));
+  const runDir = path.join(dir, '.coreclaw', 'runs', runs[0]);
+  const summary = JSON.parse(fs.readFileSync(path.join(runDir, 'summary.json'), 'utf8'));
+  const issues = JSON.parse(fs.readFileSync(path.join(runDir, 'output_schema_issues.json'), 'utf8'));
+  assert.equal(summary.status, 'FAILED');
+  assert.equal(summary.output_schema_issue_count, 1);
+  assert.equal(issues[0].code, 'result_field_not_in_output_schema');
+});
+
 test('runCommand can require Captchas.automaticSolver through the local CDP shim', async () => {
   const dir = createNodeFixture(`
 const coresdk = require('./sdk')
@@ -211,9 +279,10 @@ main().catch((error) => {
   }
 });
 
-function makeStore(resultCount) {
+function makeStore(resultCount, options = {}) {
   return {
     runDir: 'E:\\worker\\fixture\\.coreclaw\\runs\\run-id',
+    outputSchema: options.outputSchema ?? [],
     finished: null,
     finish(result) {
       this.finished = result;
@@ -221,6 +290,8 @@ function makeStore(resultCount) {
     summary() {
       return {
         result_count: resultCount,
+        output_schema_issue_count: options.outputSchemaIssueCount ?? 0,
+        output_schema_issues_path: 'E:\\worker\\fixture\\.coreclaw\\runs\\run-id\\output_schema_issues.json',
       };
     },
   };

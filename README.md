@@ -22,6 +22,7 @@ Chinese documentation: [README_CN.md](./README_CN.md).
   - `CORECLAW_TMP_DIR`
   - `TMPDIR` / `TMP` / `TEMP`
 - Run lifecycle artifacts under `.coreclaw/runs/<run-id>/`
+- Output table projection and result/schema drift reporting for `output_schema.json`
 - Upload ZIP structure validation and packaging
 - Go upload packaging:
   - clean upload staging
@@ -93,6 +94,8 @@ CoreClaw installs dependencies from `requirements.txt`, `package.json`, or `go.m
 
 CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
 
+When `output_schema.json` exists, local runs project `export.ndjson` through the declared columns and record result/schema drift in `output_schema_issues.json`. Add `--require-output-schema-match` to `run` or `verify` when you want upload-preflight behavior to fail if pushed rows are missing declared fields, include undeclared fields, or are not JSON objects.
+
 ### Audit Many Workers
 
 ```bash
@@ -112,6 +115,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://exam
 node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js run ./examples/node-hello --require-output-schema-match
 node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
 node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
@@ -122,6 +126,8 @@ The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then execu
 Use `--timeout-ms` to cap the whole worker process and `--idle-timeout-ms` to stop a worker that has stopped producing output but still has open Node/Python/Go handles. Durations accept milliseconds, `s`, or `m`.
 
 Use `--min-results` for real worker smoke tests. Some existing workers can exit with code `0` after logging an upstream or browser error, so result count is the reliable success gate.
+
+Use `--require-output-schema-match` when validating workers for upload. It keeps legacy workers compatible by default, but makes schema drift a hard failure when explicitly requested.
 
 Each run gets an isolated temporary directory at `.coreclaw/runs/<run-id>/tmp`. For Node.js workers, the CLI also preloads a small local hook that maps absolute `/tmp/...` file operations into that run directory, which prevents stale host-machine `/tmp` state from changing repeat runs.
 
@@ -149,6 +155,7 @@ Artifacts are written to:
   logs.ndjson
   results.ndjson      # raw SDK push_data payloads
   export.ndjson       # CoreClaw-style output_schema-projected rows
+  output_schema_issues.json # present when pushed rows drift from output_schema.json
   table_headers.json
   tmp/                # per-run temporary state
   summary.json
@@ -165,11 +172,12 @@ node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
+node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
-`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
+`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally enforces result/output_schema matching, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
 
 For Go workers, the local run still executes the staged source with `go run .` so SDK behavior is tested on the developer machine. The package step then cross-compiles the upload artifact exactly for CoreClaw's Linux runtime with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`, and includes the generated executable `main` at the ZIP root. This catches Go workers that run locally but cannot produce the binary that CoreClaw expects after upload. Use `--go <binary>` when you need a pinned Go toolchain or `go` is not on `PATH`.
 
@@ -179,9 +187,10 @@ By default, run artifacts are still written under the original project `.corecla
 
 ```bash
 node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --min-results 1
+node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-output-schema-match
 ```
 
-`inspect-run` checks that `summary.json`, `results.ndjson`, and `export.ndjson` agree on row counts. Use it after running real workers so a clean process exit is not mistaken for a successful data-producing run.
+`inspect-run` checks that `summary.json`, `results.ndjson`, `export.ndjson`, and `output_schema_issues.json` agree with each other. Use it after running real workers so a clean process exit is not mistaken for a successful data-producing run.
 
 ### Simulate Split Tasks
 

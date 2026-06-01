@@ -20,6 +20,7 @@ export class RunStore {
     this.outputSchema = outputSchema;
     this.uploadManifest = uploadManifest;
     this.tableHeaders = [];
+    this.outputSchemaIssues = [];
     this.resultCount = 0;
     this.logCount = 0;
     this.startedAt = new Date();
@@ -74,6 +75,7 @@ export class RunStore {
       ...row,
       value: this.exportValue(value),
     });
+    this.recordOutputSchemaIssues(value, this.resultCount);
     this.writeJson('summary.json', this.summary());
     return { code: 0, message: 'ok' };
   }
@@ -90,6 +92,15 @@ export class RunStore {
       }
     }
     return projected;
+  }
+
+  recordOutputSchemaIssues(value, index) {
+    const issues = validateOutputSchemaRow(this.outputSchema, value, index);
+    if (issues.length === 0) {
+      return;
+    }
+    this.outputSchemaIssues.push(...issues);
+    this.writeJson('output_schema_issues.json', this.outputSchemaIssues);
   }
 
   recordLog(level, message, source = 'sdk') {
@@ -141,8 +152,68 @@ export class RunStore {
       result_count: this.resultCount,
       log_count: this.logCount,
       table_header_count: this.tableHeaders.length,
+      output_schema_issue_count: this.outputSchemaIssues.length,
+      output_schema_issues_path: this.outputSchemaIssues.length > 0
+        ? path.join(this.runDir, 'output_schema_issues.json')
+        : null,
     };
   }
+}
+
+export function validateOutputSchemaRow(outputSchema, value, index) {
+  const names = outputSchemaNames(outputSchema);
+  if (names.length === 0) {
+    return [];
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [{
+      severity: 'warn',
+      code: 'result_row_not_object',
+      result_index: index,
+      message: `Result row ${index} is not a JSON object, so it cannot match output_schema.json.`,
+    }];
+  }
+
+  const issues = [];
+  const schemaNameSet = new Set(names);
+  const rowKeys = Object.keys(value);
+  const rowKeySet = new Set(rowKeys);
+
+  for (const name of names) {
+    if (!rowKeySet.has(name)) {
+      issues.push({
+        severity: 'warn',
+        code: 'result_missing_output_schema_field',
+        result_index: index,
+        field: name,
+        message: `Result row ${index} is missing output_schema field "${name}".`,
+      });
+    }
+  }
+
+  for (const key of rowKeys) {
+    if (!schemaNameSet.has(key)) {
+      issues.push({
+        severity: 'warn',
+        code: 'result_field_not_in_output_schema',
+        result_index: index,
+        field: key,
+        message: `Result row ${index} field "${key}" is not declared in output_schema.json.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+function outputSchemaNames(outputSchema) {
+  if (!Array.isArray(outputSchema)) {
+    return [];
+  }
+  return outputSchema
+    .map((column) => column?.name)
+    .filter((name) => typeof name === 'string' && name.length > 0);
 }
 
 function statusCode(status) {
