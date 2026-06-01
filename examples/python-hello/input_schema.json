@@ -1,0 +1,19 @@
+{
+  "description": "python-hello CoreClaw worker",
+  "b": "startUrls",
+  "properties": [
+    {
+      "title": "Start URLs",
+      "name": "startUrls",
+      "type": "array",
+      "editor": "requestList",
+      "description": "URLs to process.",
+      "default": [
+        {
+          "url": "https://example.com"
+        }
+      ],
+      "required": true
+    }
+  ]
+}

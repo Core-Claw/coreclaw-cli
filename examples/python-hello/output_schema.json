@@ -1,0 +1,17 @@
+[
+  {
+    "name": "url",
+    "type": "string",
+    "description": "URL"
+  },
+  {
+    "name": "status",
+    "type": "string",
+    "description": "Status"
+  },
+  {
+    "name": "title",
+    "type": "string",
+    "description": "Title"
+  }
+]

@@ -1,0 +1,172 @@
+export function buildRuntimeEnv({
+  baseEnv = process.env,
+  overrides = {},
+  proxyAuth,
+  proxyDomain,
+  chromeWs,
+  cdpEndpoint,
+  browserWsEndpoint,
+  cloudProxy = false,
+  mockNetwork = false,
+  runtimeTmpDir = null,
+}) {
+  const env = {
+    ...baseEnv,
+    CORECLAW_LOCAL: '1',
+  };
+
+  const hasExplicitProxyAuth = proxyAuth !== undefined && proxyAuth !== '';
+  const hasExplicitProxyDomain = proxyDomain !== undefined && proxyDomain !== '';
+  const shouldEnableProxy = cloudProxy || hasExplicitProxyAuth || hasExplicitProxyDomain;
+  if (shouldEnableProxy) {
+    env.PROXY_AUTH = hasExplicitProxyAuth ? proxyAuth : baseEnv.PROXY_AUTH ?? 'coreclaw-local:coreclaw-local';
+    env.PROXY_DOMAIN = hasExplicitProxyDomain ? proxyDomain : baseEnv.PROXY_DOMAIN ?? '127.0.0.1:6000';
+  } else {
+    delete env.PROXY_AUTH;
+    delete env.PROXY_DOMAIN;
+  }
+
+  delete env.CDP_ENDPOINT;
+  delete env.BROWSER_WS_ENDPOINT;
+
+  env.ChromeWs = chromeWs ?? baseEnv.ChromeWs ?? '127.0.0.1:9222';
+  if (cdpEndpoint !== undefined && cdpEndpoint !== '') {
+    env.CDP_ENDPOINT = cdpEndpoint;
+  }
+  if (browserWsEndpoint !== undefined && browserWsEndpoint !== '') {
+    env.BROWSER_WS_ENDPOINT = browserWsEndpoint;
+  }
+
+  if (mockNetwork) {
+    env.CORECLAW_MOCK_NETWORK = '1';
+  }
+
+  if (runtimeTmpDir) {
+    env.CORECLAW_TMP_DIR = runtimeTmpDir;
+    env.TMPDIR = runtimeTmpDir;
+    env.TMP = runtimeTmpDir;
+    env.TEMP = runtimeTmpDir;
+  }
+
+  Object.assign(env, overrides);
+
+  return env;
+}
+
+export function publicEnvSnapshot(env) {
+  return {
+    PROXY_AUTH: env.PROXY_AUTH ? maskSecret(env.PROXY_AUTH) : null,
+    PROXY_DOMAIN: env.PROXY_DOMAIN ?? null,
+    ChromeWs: env.ChromeWs ?? null,
+    CDP_ENDPOINT: env.CDP_ENDPOINT ? maskEndpoint(env.CDP_ENDPOINT) : null,
+    BROWSER_WS_ENDPOINT: env.BROWSER_WS_ENDPOINT ? maskEndpoint(env.BROWSER_WS_ENDPOINT) : null,
+    CORECLAW_LOCAL: env.CORECLAW_LOCAL ?? null,
+    CORECLAW_MOCK_NETWORK: env.CORECLAW_MOCK_NETWORK ?? null,
+    CORECLAW_TMP_DIR: env.CORECLAW_TMP_DIR ?? null,
+  };
+}
+
+export async function resolveBrowserEndpoints({
+  baseEnv = process.env,
+  chromeWs,
+  discoverLocalChrome = true,
+  localChromeHost = '127.0.0.1:9222',
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const explicitChromeWs = chromeWs ?? baseEnv.ChromeWs;
+  if (explicitChromeWs) {
+    return {
+      chromeWs: explicitChromeWs,
+      cdpEndpoint: baseEnv.CDP_ENDPOINT ?? fullEndpointFromChromeWs(explicitChromeWs),
+      browserWsEndpoint: baseEnv.BROWSER_WS_ENDPOINT ?? fullEndpointFromChromeWs(explicitChromeWs),
+      discoveredLocalChrome: false,
+    };
+  }
+
+  const existingFullEndpoint = baseEnv.CDP_ENDPOINT ?? baseEnv.BROWSER_WS_ENDPOINT;
+  if (existingFullEndpoint) {
+    return {
+      chromeWs: chromeWsAddressFromEndpoint(existingFullEndpoint),
+      cdpEndpoint: baseEnv.CDP_ENDPOINT ?? existingFullEndpoint,
+      browserWsEndpoint: baseEnv.BROWSER_WS_ENDPOINT ?? existingFullEndpoint,
+      discoveredLocalChrome: false,
+    };
+  }
+
+  if (discoverLocalChrome && fetchImpl) {
+    const discoveredEndpoint = await discoverLocalChromeEndpoint(localChromeHost, fetchImpl);
+    if (discoveredEndpoint) {
+      return {
+        chromeWs: chromeWsAddressFromEndpoint(discoveredEndpoint),
+        cdpEndpoint: discoveredEndpoint,
+        browserWsEndpoint: discoveredEndpoint,
+        discoveredLocalChrome: true,
+      };
+    }
+  }
+
+  return {
+    chromeWs: localChromeHost,
+    cdpEndpoint: undefined,
+    browserWsEndpoint: undefined,
+    discoveredLocalChrome: false,
+  };
+}
+
+export function withNodeTmpHook(env, hookPath) {
+  const hookOption = `--require=${hookPath}`;
+  const currentOptions = env.NODE_OPTIONS ?? '';
+  const nodeOptions = currentOptions.includes(hookOption)
+    ? currentOptions
+    : [currentOptions, hookOption].filter(Boolean).join(' ');
+  return {
+    ...env,
+    NODE_OPTIONS: nodeOptions,
+    CORECLAW_NODE_TMP_HOOK: '1',
+  };
+}
+
+function maskSecret(value) {
+  if (!value) {
+    return value;
+  }
+  const [username] = String(value).split(':');
+  return `${username}:***`;
+}
+
+function maskEndpoint(value) {
+  return String(value).replace(/\/\/([^:@/]+):([^@/]+)@/, '//$1:***@');
+}
+
+function fullEndpointFromChromeWs(value) {
+  const text = String(value).trim();
+  if (text.startsWith('ws://') || text.startsWith('wss://')) {
+    return text;
+  }
+  return undefined;
+}
+
+function chromeWsAddressFromEndpoint(value) {
+  return String(value).trim().replace(/^wss?:\/\//i, '');
+}
+
+async function discoverLocalChromeEndpoint(host, fetchImpl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 500);
+  try {
+    const response = await fetchImpl(`http://${host}/json/version`, { signal: controller.signal });
+    if (!response.ok) {
+      return null;
+    }
+    const metadata = await response.json();
+    const endpoint = metadata?.webSocketDebuggerUrl;
+    if (typeof endpoint === 'string' && endpoint.startsWith('ws')) {
+      return endpoint;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}

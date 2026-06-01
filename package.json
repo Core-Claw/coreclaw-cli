@@ -1,0 +1,43 @@
+{
+  "name": "@coreclaw/cli",
+  "version": "0.1.0",
+  "description": "Local CoreClaw worker development CLI and runtime emulator.",
+  "type": "module",
+  "homepage": "https://github.com/Core-Claw/coreclaw-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Core-Claw/coreclaw-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Core-Claw/coreclaw-cli/issues"
+  },
+  "bin": {
+    "coreclaw": "./bin/coreclaw.js"
+  },
+  "scripts": {
+    "start": "node ./bin/coreclaw.js",
+    "test": "node --test",
+    "verify": "npm test && node ./bin/coreclaw.js validate ./examples/node-hello && node ./bin/coreclaw.js run ./examples/node-hello --min-results 1 && node ./bin/coreclaw.js pack ./examples/node-hello --output ./tmp/node-hello.zip"
+  },
+  "files": [
+    "bin",
+    "src",
+    "proto",
+    "templates",
+    "validation",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "coreclaw",
+    "cli",
+    "worker",
+    "scraper"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "google-protobuf": "^4.0.2"
+  },
+  "devDependencies": {}
+}

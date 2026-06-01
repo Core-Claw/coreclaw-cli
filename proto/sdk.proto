@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package coresdk;
+
+import "google/protobuf/empty.proto";
+
+message InputJSONStringResponse {
+  int32 code = 1;
+  string jsonString = 2;
+}
+
+message TableHeader {
+  repeated TableHeaderItem headers = 1;
+}
+
+message TableHeaderItem {
+  string label = 1;
+  string key = 2;
+  string format = 3;
+}
+
+message Data {
+  string jsonString = 1;
+}
+
+message LogBody {
+  string log = 1;
+}
+
+message Response {
+  int32 code = 1;
+  string message = 2;
+}
+
+service Parameter {
+  rpc GetInputJSONString(google.protobuf.Empty) returns (InputJSONStringResponse);
+}
+
+service Result {
+  rpc SetTableHeader(TableHeader) returns (Response);
+  rpc PushData(Data) returns (Response);
+}
+
+service Log {
+  rpc Debug(LogBody) returns (Response);
+  rpc Info(LogBody) returns (Response);
+  rpc Warn(LogBody) returns (Response);
+  rpc Error(LogBody) returns (Response);
+}

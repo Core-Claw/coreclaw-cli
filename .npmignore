@@ -1,0 +1,11 @@
+node_modules/
+tmp/
+dist/
+coverage/
+.coreclaw/
+.git/
+.github/
+
+test/
+docs/plans/
+examples/*/.coreclaw/

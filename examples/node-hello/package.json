@@ -1,0 +1,13 @@
+{
+  "name": "node-hello",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "google-protobuf": "^4.0.2"
+  }
+}
