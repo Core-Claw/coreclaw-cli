@@ -88,7 +88,7 @@ node ./bin/coreclaw.js validate ./examples/node-hello
   - Python: `requirements.txt` 中的 `grpcio`、`protobuf`
   - Node.js: `package.json` 中的 `@grpc/grpc-js`、`google-protobuf`
   - Go: `go.mod` 中的 `google.golang.org/grpc`、`google.golang.org/protobuf`
-- `input_schema.json` 根字段、唯一 property name、受支持的类型和 editor。
+- `input_schema.json` 根字段、唯一 property name、受支持的类型/editor，以及官方文档中的 editor/type 搭配。
 - `input_schema.b` 必须指向一个 array property。
 - 存在 `output_schema.json` 时校验列名和受支持类型。
 

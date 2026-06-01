@@ -15,6 +15,14 @@ const SUPPORTED_EDITORS = new Set([
   'requestListSource',
   'stringList',
 ]);
+const EDITOR_EXPECTED_TYPES = new Map([
+  ['number', ['integer']],
+  ['switch', ['boolean']],
+  ['checkbox', ['array']],
+  ['requestList', ['array']],
+  ['requestListSource', ['array']],
+  ['stringList', ['array']],
+]);
 
 export function validateInputSchema(schema, filePath = 'input_schema.json') {
   const issues = [];
@@ -67,6 +75,17 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
     if (property.editor && !SUPPORTED_EDITORS.has(property.editor)) {
       issues.push(warn(`${prefix}.editor "${property.editor}" is not documented by CoreClaw. Verify platform rendering before upload.`));
+    }
+
+    if (property.editor && EDITOR_EXPECTED_TYPES.has(property.editor)) {
+      const expectedTypes = EDITOR_EXPECTED_TYPES.get(property.editor);
+      const normalizedType = normalizeType(property.type);
+      if (!expectedTypes.includes(normalizedType)) {
+        issues.push(warn(
+          `${prefix}.editor "${property.editor}" is documented for type ${formatTypeList(expectedTypes)}, but property type is "${normalizedType}".`,
+          'input_editor_type_mismatch',
+        ));
+      }
     }
 
     if (property.required === true && property.default === undefined) {
@@ -123,6 +142,17 @@ function error(message) {
   return { severity: 'error', message };
 }
 
-function warn(message) {
-  return { severity: 'warn', message };
+function warn(message, code) {
+  return code ? { severity: 'warn', code, message } : { severity: 'warn', message };
+}
+
+function normalizeType(type) {
+  return LEGACY_COMPAT_TYPES.get(type) ?? type;
+}
+
+function formatTypeList(types) {
+  if (types.length === 1) {
+    return `"${types[0]}"`;
+  }
+  return types.map((type) => `"${type}"`).join(' or ');
 }

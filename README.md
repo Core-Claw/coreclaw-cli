@@ -89,7 +89,7 @@ Validation checks:
   - Python: `grpcio`, `protobuf` in `requirements.txt`
   - Node.js: `@grpc/grpc-js`, `google-protobuf` in `package.json`
   - Go: `google.golang.org/grpc`, `google.golang.org/protobuf` in `go.mod`
-- `input_schema.json` root fields, unique property names, supported types/editors
+- `input_schema.json` root fields, unique property names, supported types/editors, and documented editor/type pairings
 - `input_schema.b` points to an array property
 - `output_schema.json` column names and supported types when present
 

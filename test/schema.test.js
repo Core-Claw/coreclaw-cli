@@ -206,3 +206,26 @@ test('accepts legacy number type as compatibility warning', () => {
   assert.equal(inputIssues.some((issue) => issue.severity === 'warn' && issue.message.includes('legacy compatibility alias')), true);
   assert.equal(outputIssues.some((issue) => issue.severity === 'warn' && issue.message.includes('legacy compatibility alias')), true);
 });
+
+test('warns when input editor does not match the documented type', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'limit', type: 'string', editor: 'number' },
+      { name: 'enabled', type: 'string', editor: 'switch' },
+      { name: 'sections', type: 'string', editor: 'checkbox' },
+      { name: 'urls', type: 'string', editor: 'requestList' },
+      { name: 'terms', type: 'string', editor: 'stringList' },
+    ],
+  });
+
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  assert.deepEqual(issues.filter((issue) => issue.code === 'input_editor_type_mismatch').map((issue) => issue.message), [
+    'input_schema.properties[1].editor "number" is documented for type "integer", but property type is "string".',
+    'input_schema.properties[2].editor "switch" is documented for type "boolean", but property type is "string".',
+    'input_schema.properties[3].editor "checkbox" is documented for type "array", but property type is "string".',
+    'input_schema.properties[4].editor "requestList" is documented for type "array", but property type is "string".',
+    'input_schema.properties[5].editor "stringList" is documented for type "array", but property type is "string".',
+  ]);
+});
