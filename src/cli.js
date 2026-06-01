@@ -6,6 +6,7 @@ import { doctorCommand } from './commands/doctor.js';
 import { auditCommand } from './commands/audit.js';
 import { inspectRunCommand } from './commands/inspect-run.js';
 import { verifyCommand } from './commands/verify.js';
+import { compareCommand } from './commands/compare.js';
 import { CliError } from './utils/errors.js';
 
 export async function runCli(argv) {
@@ -45,6 +46,9 @@ export async function runCli(argv) {
       return;
     case 'inspect-run':
       await inspectRunCommand(parsed.positionals[0], parsed.options);
+      return;
+    case 'compare':
+      await compareCommand(parsed.positionals[0], parsed.positionals[1], parsed.options);
       return;
     case 'doctor':
       await doctorCommand();
@@ -164,6 +168,7 @@ Usage:
   coreclaw pack [project] --output worker.zip
   coreclaw audit [root] --output audit.json --markdown audit.md [--all]
   coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1]
+  coreclaw compare cloud.json .coreclaw/runs/<run-id> [--min-shared 1] [--output report.json]
   coreclaw doctor
 
 Core commands:
@@ -174,6 +179,7 @@ Core commands:
   pack       Create a CoreClaw upload ZIP with entry file at archive root
   audit      Validate worker-* projects under a root and write a report
   inspect-run Validate a local run artifact directory
+  compare    Compare CoreClaw cloud JSON export with a local run or NDJSON output
   doctor     Check local tools
 `);
 }

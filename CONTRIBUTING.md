@@ -30,6 +30,14 @@ Then inspect the captured run:
 node ./bin/coreclaw.js inspect-run E:/worker/worker-yfinance/.coreclaw/runs/<run-id> --min-results 1
 ```
 
+When a cloud run export is available, compare it against the local run artifact:
+
+```bash
+node ./bin/coreclaw.js compare E:/worker/cloud-output.json E:/worker/worker-name/.coreclaw/runs/<run-id> \
+  --output ./tmp/cloud-local-compare.json \
+  --min-shared 1
+```
+
 ## Runtime Compatibility Rules
 
 - Do not make `output_schema.json` mandatory. CoreClaw currently accepts older workers without it, so the CLI treats it as a warning.
@@ -37,6 +45,7 @@ node ./bin/coreclaw.js inspect-run E:/worker/worker-yfinance/.coreclaw/runs/<run
 - Preserve per-run temporary state isolation. Node workers must not read stale host `/tmp` state during local verification.
 - Browser workers should use CoreClaw's documented `ChromeWs` style. Local Chrome CDP discovery must keep working on Windows and Linux CI.
 - A successful process exit is not enough for smoke tests. Use `--min-results` or `inspect-run --min-results`.
+- Cloud parity claims need evidence. Use `coreclaw compare` when a platform output JSON is available.
 
 ## Real Worker Smoke Matrix
 

@@ -198,13 +198,14 @@ The ZIP has the worker entry file at archive root and excludes `.coreclaw`, `nod
 For a cloud run exported as JSON, compare it with a local run's captured results:
 
 ```bash
-node ./validation/compare-coreclaw-output.js \
+node ./bin/coreclaw.js compare \
   E:/worker/coreclaw_UsernameFinder_v1.0.2_20260601.json \
-  E:/worker/worker-username-finder/.coreclaw/runs/<run-id>/export.ndjson \
-  ./tmp/username-finder-comparison.json
+  E:/worker/worker-username-finder/.coreclaw/runs/<run-id> \
+  --output ./tmp/username-finder-comparison.json \
+  --min-shared 1
 ```
 
-This compares row counts, shared keys, cloud-only rows, local-only rows, and value differences. For network-heavy workers, expect output differences unless the local machine uses equivalent CoreClaw proxy/browser infrastructure.
+This compares row counts, shared keys, cloud-only rows, local-only rows, and value differences. The local path can be a run directory, `export.ndjson`, or `results.ndjson`. Use `--key-fields username,site,urlUser` when the default key is not specific enough, and CI gates such as `--min-shared`, `--max-diff`, `--max-only-local`, and `--max-only-cloud` when cloud parity should be strict. For network-heavy workers, expect output differences unless the local machine uses equivalent CoreClaw proxy/browser infrastructure.
 
 ## Development
 
