@@ -83,6 +83,24 @@ test('validateProject rejects Node SDK runtime dependencies declared only as dev
   assert.equal(result.issues.filter((issue) => issue.code === 'missing_runtime_dependency').length, 2);
 });
 
+test('validateProject warns about Node package fields that diverge from CoreClaw docs', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    main: 'src/index.js',
+    type: 'module',
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+    },
+  }));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.some((issue) => issue.code === 'node_package_main_not_main_js'), true);
+  assert.equal(result.issues.some((issue) => issue.code === 'node_package_type_not_commonjs'), true);
+});
+
 test('validateProject rejects Python workers missing SDK runtime dependencies', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-python-'));
   for (const file of ['main.py', 'sdk.py', 'sdk_pb2.py', 'sdk_pb2_grpc.py']) {

@@ -83,6 +83,7 @@ node ./bin/coreclaw.js validate ./examples/node-hello
 - 根目录只能有一个入口文件：`main.py`、`main.js` 或 `main.go`。
 - 必需的依赖文件、SDK 文件和 `input_schema.json`。
 - 缺少 `README.md` 时给出上传就绪 worker 文档 warning。
+- 按官方 `main.js` + CommonJS 契约检查 Node `package.json` 的 `main` / `type` 字段。
 - SDK 运行时依赖必须声明在平台依赖文件中：
   - Python: `requirements.txt` 中的 `grpcio`、`protobuf`
   - Node.js: `package.json` 中的 `@grpc/grpc-js`、`google-protobuf`

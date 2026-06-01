@@ -84,6 +84,7 @@ Validation checks:
 - Exactly one entry file: `main.py`, `main.js`, or `main.go`
 - Required dependency, SDK, and input schema files
 - `README.md` presence as an upload-ready worker documentation warning
+- Node `package.json` `main` / `type` values against the documented `main.js` + CommonJS contract
 - SDK runtime dependencies declared in the platform dependency file:
   - Python: `grpcio`, `protobuf` in `requirements.txt`
   - Node.js: `@grpc/grpc-js`, `google-protobuf` in `package.json`

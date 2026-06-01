@@ -77,6 +77,7 @@ export function validateProject(projectDir, options = {}) {
     issues.push(...validateInputSchema(readJson(inputPath), inputPath));
   }
 
+  issues.push(...validatePackageCompatibility(project));
   issues.push(...validateRuntimeDependencies(project));
 
   if (fs.existsSync(outputPath)) {
@@ -98,6 +99,35 @@ export function validateProject(projectDir, options = {}) {
     issues,
     ok: !issues.some((issue) => issue.severity === 'error'),
   };
+}
+
+function validatePackageCompatibility(project) {
+  if (project.language !== 'node') {
+    return [];
+  }
+
+  const packagePath = path.join(project.projectDir, 'package.json');
+  if (!fs.existsSync(packagePath)) {
+    return [];
+  }
+
+  const manifest = readJson(packagePath);
+  const issues = [];
+  if (manifest.main !== undefined && manifest.main !== 'main.js') {
+    issues.push({
+      severity: 'warn',
+      code: 'node_package_main_not_main_js',
+      message: `package.json main is "${manifest.main}", but CoreClaw Node workers document "main.js" as the entry file.`,
+    });
+  }
+  if (manifest.type !== undefined && manifest.type !== 'commonjs') {
+    issues.push({
+      severity: 'warn',
+      code: 'node_package_type_not_commonjs',
+      message: `package.json type is "${manifest.type}", but CoreClaw's Node SDK uses CommonJS require() and documents "type": "commonjs".`,
+    });
+  }
+  return issues;
 }
 
 function validateRuntimeDependencies(project) {
