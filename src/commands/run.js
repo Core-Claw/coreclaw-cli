@@ -208,10 +208,22 @@ export function enforcePostRunGates(store, localProxy, options) {
   try {
     assertSocksProxyUsed(localProxy, options);
     enforceMinimumResults(store, options);
+    enforceTableHeaderGate(store, options);
     enforceOutputSchemaMatch(store, options);
   } catch (error) {
     store.finish({ exitCode: 1, error });
     throw error;
+  }
+}
+
+export function enforceTableHeaderGate(store, options) {
+  if (!options.requireTableHeader) {
+    return;
+  }
+
+  const summary = store.summary();
+  if (summary.table_header_count < 1) {
+    throw new CliError(`Worker did not call set_table_header. CoreClaw SDK docs describe runtime table headers as required before upload. Artifacts are preserved in ${store.runDir}.`);
   }
 }
 
@@ -351,7 +363,7 @@ async function validateRunOutputs(projectDir, store, options) {
 
   const tableHeaders = JSON.parse(fs.readFileSync(headerPath, 'utf8'));
   const result = validateProject(projectDir, { tableHeaders });
-  for (const issue of result.issues.filter((item) => item.code === 'runtime_header_not_in_output_schema')) {
+  for (const issue of result.issues.filter((item) => item.code?.startsWith('runtime_header_'))) {
     console.warn(`[WARN] ${issue.message}`);
   }
 }

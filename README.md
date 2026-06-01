@@ -24,6 +24,7 @@ Chinese documentation: [README_CN.md](./README_CN.md).
   - `TMPDIR` / `TMP` / `TEMP`
 - Run lifecycle artifacts under `.coreclaw/runs/<run-id>/`
 - Output table projection and result/schema drift reporting for `output_schema.json`
+- Optional strict runtime table-header gate for workers that must call `set_table_header`
 - Upload ZIP structure validation and packaging
 - Go upload packaging:
   - clean upload staging
@@ -101,6 +102,8 @@ CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the
 
 When `output_schema.json` exists, local runs project `export.ndjson` through the declared columns and record result/schema drift in `output_schema_issues.json`. They also warn when runtime `set_table_header` keys or formats drift from `output_schema.json`. Add `--require-output-schema-match` to `run` or `verify` when you want upload-preflight behavior to fail if pushed rows are missing declared fields, include undeclared fields, have the wrong declared field type, or are not JSON objects.
 
+CoreClaw's SDK docs describe `set_table_header` as the runtime table-definition step before returning results. The CLI warns when a worker never calls it, but keeps old `output_schema.json`-only workers compatible by default. Add `--require-table-header` to `run` or `verify` when you want that SDK contract to be a hard upload preflight gate.
+
 ### Audit Many Workers
 
 ```bash
@@ -120,6 +123,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://exam
 node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js run ./examples/node-hello --require-table-header
 node ./bin/coreclaw.js run ./examples/node-hello --require-output-schema-match
 node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
@@ -133,6 +137,8 @@ Use `--timeout-ms` to cap the whole worker process and `--idle-timeout-ms` to st
 If the input schema marks a field as required, local runs require a non-empty value for that field. Declared fields must also match their schema type, for example `integer` must be an integer, `boolean` must be a boolean, and `array` must be a JSON array. Selector inputs must use values declared in `options`, `requestList` items must contain a non-empty `url`, and `stringList` items must contain a non-empty `string`. Use `--input input.json` or `--json '{"field":"value"}'` when the schema does not provide a default.
 
 Use `--min-results` for real worker smoke tests. Some existing workers can exit with code `0` after logging an upstream or browser error, so result count is the reliable success gate.
+
+Use `--require-table-header` when upload preflight should require the worker to call the SDK runtime table-header API. This is stricter than the default compatibility mode and catches workers that only rely on a static `output_schema.json`.
 
 Use `--require-output-schema-match` when validating workers for upload. It keeps legacy workers compatible by default, but makes schema drift a hard failure when explicitly requested.
 
@@ -181,13 +187,14 @@ node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
+node ./bin/coreclaw.js verify ./worker --require-table-header --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
-`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally enforces result/output_schema matching, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
+`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally requires a runtime table-header call, optionally enforces result/output_schema matching, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
 
 For Go workers, the local run still executes the staged source with `go run .` so SDK behavior is tested on the developer machine. The package step then cross-compiles the upload artifact exactly for CoreClaw's Linux runtime with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`, and includes the generated executable `main` at the ZIP root. This catches Go workers that run locally but cannot produce the binary that CoreClaw expects after upload. Use `--go <binary>` when you need a pinned Go toolchain or `go` is not on `PATH`.
 

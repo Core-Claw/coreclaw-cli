@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceBrowserCdpShimGate, enforceCaptchaSolverGate, enforceMinimumResults, enforceOutputSchemaMatch, enforcePostRunGates, enforceRequiredBrowser, runCommand, shouldUseBrowserCdpShim } from '../src/commands/run.js';
+import { enforceBrowserCdpShimGate, enforceCaptchaSolverGate, enforceMinimumResults, enforceOutputSchemaMatch, enforcePostRunGates, enforceRequiredBrowser, enforceTableHeaderGate, runCommand, shouldUseBrowserCdpShim } from '../src/commands/run.js';
 import { CliError } from '../src/utils/errors.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -56,6 +56,21 @@ test('enforceOutputSchemaMatch requires a declared output schema', () => {
     () => enforceOutputSchemaMatch(store, { requireOutputSchemaMatch: true }),
     (error) => error instanceof CliError && /requires output_schema\.json/.test(error.message),
   );
+});
+
+test('enforceTableHeaderGate rejects runs that never set runtime table headers when requested', () => {
+  const store = makeStore(1, { tableHeaderCount: 0 });
+
+  assert.throws(
+    () => enforceTableHeaderGate(store, { requireTableHeader: true }),
+    (error) => error instanceof CliError && /did not call set_table_header/.test(error.message),
+  );
+});
+
+test('enforceTableHeaderGate allows runs with runtime table headers', () => {
+  const store = makeStore(1, { tableHeaderCount: 1 });
+
+  assert.doesNotThrow(() => enforceTableHeaderGate(store, { requireTableHeader: true }));
 });
 
 test('enforceCaptchaSolverGate marks the run failed when required but unused', () => {
@@ -247,6 +262,46 @@ main().catch((error) => {
   const runs = fs.readdirSync(path.join(dir, '.coreclaw', 'runs'));
   const summary = JSON.parse(fs.readFileSync(path.join(dir, '.coreclaw', 'runs', runs[0], 'summary.json'), 'utf8'));
   assert.equal(summary.status, 'FAILED');
+});
+
+test('runCommand can require set_table_header before upload', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+
+async function main() {
+  await coresdk.result.pushData({ ok: true })
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+  try {
+    await assert.rejects(
+      () => runCommand(dir, {
+        node: process.execPath,
+        requireTableHeader: true,
+        minResults: '1',
+        tmpHook: false,
+      }),
+      (error) => error instanceof CliError && /did not call set_table_header/.test(error.message),
+    );
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
+
+  const runs = fs.readdirSync(path.join(dir, '.coreclaw', 'runs'));
+  const summary = JSON.parse(fs.readFileSync(path.join(dir, '.coreclaw', 'runs', runs[0], 'summary.json'), 'utf8'));
+  assert.equal(summary.status, 'FAILED');
+  assert.equal(summary.table_header_count, 0);
 });
 
 test('runCommand can fail on output_schema drift when requested', async () => {
@@ -459,6 +514,7 @@ function makeStore(resultCount, options = {}) {
     summary() {
       return {
         result_count: resultCount,
+        table_header_count: options.tableHeaderCount ?? 0,
         output_schema_issue_count: options.outputSchemaIssueCount ?? 0,
         output_schema_issues_path: 'E:\\worker\\fixture\\.coreclaw\\runs\\run-id\\output_schema_issues.json',
       };

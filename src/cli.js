@@ -146,6 +146,7 @@ function isBooleanOption(name) {
     'requireBrowserCdpShim',
     'captchaSolver',
     'requireCaptchaSolver',
+    'requireTableHeader',
     'requireOutputSchemaMatch',
     'discoverChrome',
     'pack',
@@ -170,14 +171,14 @@ Usage:
   coreclaw init [target] --language <python|node|go>
   coreclaw validate [project]
   coreclaw run [project] [--input input.json | --json '{"url":"..."}'] [--split 0] [--min-results 1]
-  coreclaw run [project] [--require-output-schema-match]
+  coreclaw run [project] [--require-table-header] [--require-output-schema-match]
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
   coreclaw run [project] [--local-proxy] [--require-proxy-usage]
   coreclaw run [project] [--chrome-ws host[:port][/path] [--chrome-http host:port] | --no-discover-chrome] [--require-browser]
   coreclaw run [project] [--browser-cdp-shim] [--require-browser-cdp-shim]
   coreclaw run [project] [--captcha-solver] [--require-captcha-solver]
   coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
-  coreclaw verify [project] [--require-output-schema-match]
+  coreclaw verify [project] [--require-table-header] [--require-output-schema-match]
   coreclaw verify [project] [--no-staging] [--no-install] [--go go]
   coreclaw verify [project] [--local-proxy] [--require-proxy-usage]
   coreclaw verify [project] [--require-browser]

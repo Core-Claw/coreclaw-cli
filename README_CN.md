@@ -22,6 +22,7 @@ CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平
   - `TMPDIR` / `TMP` / `TEMP`
 - `.coreclaw/runs/<run-id>/` 下的运行生命周期产物。
 - `output_schema.json` 输出表投影，以及结果/schema 漂移记录。
+- 可选严格校验 worker 是否调用了 runtime `set_table_header`。
 - 上传 ZIP 结构验证和打包。
 - `verify` 默认从上传包视角的临时 staging 目录运行，并在该目录安装依赖。
 - Go 上传打包：
@@ -100,6 +101,8 @@ CoreClaw 上传后会从 `requirements.txt`、`package.json` 或 `go.mod` 安装
 
 当存在 `output_schema.json` 时，本地运行会按声明列生成 `export.ndjson`，并把 pushed result 与 schema 的漂移记录到 `output_schema_issues.json`。runtime `set_table_header` 的 key 或 format 与 `output_schema.json` 不一致时也会给出 warning。需要上传前严格门槛时，在 `run` 或 `verify` 中加入 `--require-output-schema-match`；如果结果行缺少声明字段、包含未声明字段、声明字段类型错误，或不是 JSON object，命令会失败。
 
+CoreClaw SDK 文档把 `set_table_header` 描述为返回结果前的 runtime 表结构定义步骤。CLI 默认只在 worker 没有调用它时给出 warning，以兼容只依赖 `output_schema.json` 的历史 worker。需要把这个 SDK 契约变成上传前 hard gate 时，在 `run` 或 `verify` 中加入 `--require-table-header`。
+
 ### 批量审计 Worker
 
 ```bash
@@ -119,6 +122,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://exam
 node ./bin/coreclaw.js run ./examples/node-hello --input input.json
 node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js run ./examples/node-hello --require-table-header
 node ./bin/coreclaw.js run ./examples/node-hello --require-output-schema-match
 node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
@@ -132,6 +136,8 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
 如果 input schema 把某个字段标记为 required，本地 run 也要求该字段有非空值。声明字段还必须匹配 schema 类型，例如 `integer` 必须是整数，`boolean` 必须是布尔值，`array` 必须是 JSON 数组。选择器输入必须使用 `options` 里声明的值，`requestList` 项必须包含非空 `url`，`stringList` 项必须包含非空 `string`。schema 没有提供 default 时，使用 `--input input.json` 或 `--json '{"field":"value"}'` 传入。
 
 真实 worker 冒烟测试应使用 `--min-results`。有些 worker 会在上游或浏览器失败后仍以 exit code `0` 退出，因此结果行数才是更可靠的成功门槛。
+
+当上传前预检需要强制 worker 调用 SDK runtime table-header API 时，使用 `--require-table-header`。它比默认兼容模式更严格，可以捕获只依赖静态 `output_schema.json`、但没有设置 runtime 表头的 worker。
 
 上传前验证建议加 `--require-output-schema-match`。默认行为继续兼容老 worker；显式启用后，输出字段和 `output_schema.json` 不一致会成为 hard failure。
 
@@ -180,13 +186,14 @@ node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
+node ./bin/coreclaw.js verify ./worker --require-table-header --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
-`verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选强制校验结果与 `output_schema.json` 一致，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
+`verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选强制要求 runtime table-header 调用，可选强制校验结果与 `output_schema.json` 一致，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
 
 这种默认行为能捕获只因为源目录里存在 `.coreclaw`、`node_modules`、`dist` 或其他不会上传的文件而本地跑通的假阳性。
 
