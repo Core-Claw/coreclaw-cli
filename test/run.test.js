@@ -138,6 +138,30 @@ main().catch((error) => {
   assert.equal(fs.existsSync(path.join(dir, '.coreclaw')), false);
 });
 
+test('runCommand fails before creating run artifacts when required input is missing', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+async function main() {
+  await coresdk.result.pushData({ ok: true })
+}
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  await assert.rejects(
+    () => runCommand(dir, {
+      node: process.execPath,
+      json: '{}',
+      tmpHook: false,
+    }),
+    (error) => error instanceof CliError && /Input does not satisfy input_schema\.json/.test(error.message),
+  );
+
+  assert.equal(fs.existsSync(path.join(dir, '.coreclaw')), false);
+});
+
 test('runCommand fails upload parity when proxy usage is required but worker does not use it', async () => {
   const dir = createNodeFixture(`
 const coresdk = require('./sdk')
@@ -308,6 +332,7 @@ function createNodeFixture(mainJs) {
         type: 'array',
         editor: 'stringList',
         default: [{ string: 'x' }],
+        required: true,
       },
     ],
   }));

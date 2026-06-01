@@ -25,6 +25,8 @@ export function buildInput({ projectDir, inputPath, inlineJson, useDefaults = tr
     ? readJson(path.join(projectDir, 'input_schema.json'))
     : null;
 
+  validateInputAgainstSchema(input, inputSchema);
+
   if (splitIndex !== null) {
     input = expandSplitInput(input, inputSchema, splitIndex);
   }
@@ -40,6 +42,35 @@ export function defaultsFromInputSchema(schema) {
     }
   }
   return result;
+}
+
+export function validateInputAgainstSchema(input, schema) {
+  const issues = inputSchemaInputIssues(input, schema);
+  if (issues.length > 0) {
+    throw new CliError(`Input does not satisfy input_schema.json: ${issues.join('; ')}. Pass --input or --json with the required values.`);
+  }
+  return input;
+}
+
+export function inputSchemaInputIssues(input, schema) {
+  if (!schema || !Array.isArray(schema.properties)) {
+    return [];
+  }
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return ['run input must be a JSON object'];
+  }
+
+  const issues = [];
+  for (const property of schema.properties) {
+    if (!property || property.required !== true || typeof property.name !== 'string') {
+      continue;
+    }
+    if (!Object.prototype.hasOwnProperty.call(input, property.name) || isEmptyInputValue(input[property.name])) {
+      issues.push(`required field "${property.name}" is missing or empty`);
+    }
+  }
+  return issues;
 }
 
 export function expandSplitInput(input, schema, splitIndex) {
@@ -71,6 +102,22 @@ export function expandSplitInput(input, schema, splitIndex) {
 
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function isEmptyInputValue(value) {
+  if (value === undefined || value === null) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.length === 0;
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value).length === 0;
+  }
+  return false;
 }
 
 function singularize(key) {

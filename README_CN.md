@@ -12,6 +12,7 @@ CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平
   - `Result/PushData`
   - `Log/Debug`、`Log/Info`、`Log/Warn`、`Log/Error`
 - 从 `input_schema.json` 默认值、`--input` 或 `--json` 注入运行输入。
+- worker 启动前校验实际输入是否满足 `input_schema.json` 的 required 字段。
 - 平台环境变量：
   - `ChromeWs`
   - `CDP_ENDPOINT` / `BROWSER_WS_ENDPOINT`
@@ -91,6 +92,8 @@ node ./bin/coreclaw.js validate ./examples/node-hello
 
 CoreClaw 上传后会从 `requirements.txt`、`package.json` 或 `go.mod` 安装依赖。因此 CLI 会拒绝那些本地机器因为已安装 SDK 包而能运行、但云端安装文件没有声明这些包的 worker。
 
+运行时，CLI 还会校验由默认值、`--input` 或 `--json` 拼出的实际输入。如果某个字段标记了 `"required": true`，但本次输入缺失或为空，命令会在创建 run 产物和启动 worker 前失败，贴近 CoreClaw 表单层的启动行为。
+
 官方文档把 `output_schema.json` 描述为上传就绪项目文件，但当前平台仍兼容没有 `output_schema.json` 的老 worker。因此 CLI 把缺失 `output_schema.json` 作为 warning，而不是阻塞错误。没有 output schema 时，本地 `export.ndjson` 会保留完整原始结果行。
 
 当存在 `output_schema.json` 时，本地运行会按声明列生成 `export.ndjson`，并把 pushed result 与 schema 的漂移记录到 `output_schema_issues.json`。需要上传前严格门槛时，在 `run` 或 `verify` 中加入 `--require-output-schema-match`；如果结果行缺少声明字段、包含未声明字段，或不是 JSON object，命令会失败。
@@ -123,6 +126,8 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
 `run` 会启动本地 CoreClaw SDK gRPC server，监听 `127.0.0.1:20086`，然后执行 worker。
 
 `--timeout-ms` 用于限制整个 worker 进程运行时间；`--idle-timeout-ms` 用于停止已经不再输出但仍有 Node/Python/Go handle 未退出的 worker。时长支持毫秒、`s` 和 `m`。
+
+如果 input schema 把某个字段标记为 required，本地 run 也要求该字段有非空值。schema 没有提供 default 时，使用 `--input input.json` 或 `--json '{"field":"value"}'` 传入。
 
 真实 worker 冒烟测试应使用 `--min-results`。有些 worker 会在上游或浏览器失败后仍以 exit code `0` 退出，因此结果行数才是更可靠的成功门槛。
 

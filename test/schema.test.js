@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultsFromInputSchema, expandSplitInput } from '../src/runtime/input.js';
+import { defaultsFromInputSchema, expandSplitInput, inputSchemaInputIssues, validateInputAgainstSchema } from '../src/runtime/input.js';
 import { validateInputSchema, validateOutputSchema } from '../src/validation/schema.js';
+import { CliError } from '../src/utils/errors.js';
 
 test('validates documented input schema b field', () => {
   const issues = validateInputSchema({
@@ -48,6 +49,30 @@ test('expands split requestList item into single task shape', () => {
     url: 'https://b.example',
     limit: 2,
   });
+});
+
+test('validates actual run input against required schema fields', () => {
+  const schema = {
+    properties: [
+      { name: 'startUrls', type: 'array', required: true },
+      { name: 'limit', type: 'integer', required: true },
+      { name: 'includeClosed', type: 'boolean', required: true },
+    ],
+  };
+
+  assert.deepEqual(inputSchemaInputIssues({
+    startUrls: [{ url: 'https://example.com' }],
+    limit: 0,
+    includeClosed: false,
+  }, schema), []);
+  assert.deepEqual(inputSchemaInputIssues({ startUrls: [], includeClosed: false }, schema), [
+    'required field "startUrls" is missing or empty',
+    'required field "limit" is missing or empty',
+  ]);
+  assert.throws(
+    () => validateInputAgainstSchema({ startUrls: [] }, schema),
+    (error) => error instanceof CliError && /Input does not satisfy input_schema\.json/.test(error.message),
+  );
 });
 
 test('validates output schema', () => {

@@ -14,6 +14,7 @@ Chinese documentation: [README_CN.md](./README_CN.md).
   - `Result/PushData`
   - `Log/Debug`, `Log/Info`, `Log/Warn`, `Log/Error`
 - Runtime input injection from `input_schema.json` defaults, `--input`, or `--json`
+- Run input validation for required `input_schema.json` fields before the worker starts
 - Platform environment variables:
   - `ChromeWs`
   - `CDP_ENDPOINT` / `BROWSER_WS_ENDPOINT`
@@ -92,6 +93,8 @@ Validation checks:
 
 CoreClaw installs dependencies from `requirements.txt`, `package.json`, or `go.mod` after upload. The CLI therefore rejects workers that rely on locally installed SDK packages but do not declare those packages for the cloud installer.
 
+At run time, the CLI also validates the actual input assembled from defaults, `--input`, or `--json`. If a field marked `"required": true` is missing or empty, the command fails before creating run artifacts or starting the worker, matching CoreClaw's form-level launch behavior.
+
 CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
 
 When `output_schema.json` exists, local runs project `export.ndjson` through the declared columns and record result/schema drift in `output_schema_issues.json`. Add `--require-output-schema-match` to `run` or `verify` when you want upload-preflight behavior to fail if pushed rows are missing declared fields, include undeclared fields, or are not JSON objects.
@@ -124,6 +127,8 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
 The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then executes the worker.
 
 Use `--timeout-ms` to cap the whole worker process and `--idle-timeout-ms` to stop a worker that has stopped producing output but still has open Node/Python/Go handles. Durations accept milliseconds, `s`, or `m`.
+
+If the input schema marks a field as required, local runs require a non-empty value for that field. Use `--input input.json` or `--json '{"field":"value"}'` when the schema does not provide a default.
 
 Use `--min-results` for real worker smoke tests. Some existing workers can exit with code `0` after logging an upstream or browser error, so result count is the reliable success gate.
 
