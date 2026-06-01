@@ -30,6 +30,8 @@ Chinese documentation: [README_CN.md](./README_CN.md).
 
 It does not emulate CoreClaw's real remote fingerprint browser pool. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP/WebDriver endpoint with `--chrome-ws` / `--chrome-http`, then use `--require-browser` to fail fast if the endpoint is not reachable. For HTTP workers, use `--local-proxy --require-proxy-usage` to expose a local SOCKS5 proxy through `PROXY_AUTH` / `PROXY_DOMAIN` and fail the run if the worker bypasses it.
 
+It also does not solve real CAPTCHAs locally. Use `--captcha-solver` to expose a local CDP shim for CoreClaw's custom `Captchas.automaticSolver` command, and `--require-captcha-solver` to fail a smoke run if the worker never calls that command. This verifies the integration contract before upload; real CAPTCHA bypass still happens only in CoreClaw's hosted fingerprint browser.
+
 ## Install
 
 From this repository:
@@ -112,6 +114,7 @@ node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout
 node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
 node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
 node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
+node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
 The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then executes the worker.
@@ -132,6 +135,8 @@ If Chrome remote debugging is reachable at `http://127.0.0.1:9222/json/version`,
 Use `--no-discover-chrome` to disable this discovery. Without a detected browser, `ChromeWs` and `ChromeHttp` fall back to `127.0.0.1:9222` so the environment still looks like CoreClaw's documented host-style browser variables. `ChromeHttp` is used by Selenium Remote WebDriver workers, while `ChromeWs` is used by Playwright, Puppeteer, and DrissionPage CDP workers.
 
 Use `--require-browser` for browser worker smoke tests. It turns browser availability into a preflight gate: local Chrome discovery passes immediately, host-style CDP endpoints are checked through `/json/version`, and Selenium-style endpoints are checked through `/status`. If no endpoint is reachable, the run fails before creating run artifacts instead of letting a browser worker fail later with a less specific connection error.
+
+Use `--captcha-solver` when testing workers that call CoreClaw's documented custom CDP method `Captchas.automaticSolver`. The CLI starts a local CDP WebSocket shim, injects its endpoint through `ChromeWs`, `CDP_ENDPOINT`, and `BROWSER_WS_ENDPOINT`, and returns `{ "status": true }` for `Captchas.automaticSolver`. Other CDP messages are forwarded to the discovered or explicit upstream CDP endpoint when one exists. Add `--require-captcha-solver` to fail the run if no solver call was observed.
 
 Artifacts are written to:
 
@@ -161,6 +166,7 @@ node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
 node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
+node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
 ```
 
 `verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
@@ -223,6 +229,14 @@ node ./bin/coreclaw.js verify ./worker --chrome-http "127.0.0.1:9515" --require-
 ```
 
 The first form matches Playwright, Puppeteer, and DrissionPage CDP workers. The second form matches Selenium Remote WebDriver workers.
+
+For CAPTCHA-aware browser workers:
+
+```bash
+node ./bin/coreclaw.js verify ./worker --captcha-solver --require-captcha-solver --min-results 1
+```
+
+This local shim proves that your code sends `Captchas.automaticSolver` with the expected CDP shape. It intentionally does not bypass real website challenges; run the same worker on CoreClaw to validate the hosted solver against real targets.
 
 To emulate CoreClaw cloud proxy variables without a real proxy, opt in explicitly:
 

@@ -9,6 +9,7 @@ import { buildInput } from '../runtime/input.js';
 import { commandForProject, installCommandForProject, runProcess } from '../runtime/executor.js';
 import { startRuntimeGrpcServer } from '../runtime/grpc-server.js';
 import { RunStore } from '../runtime/run-store.js';
+import { startCaptchaCdpShim } from '../runtime/captcha-cdp-shim.js';
 import { assertSocksProxyUsed, startSocksProxy } from '../runtime/socks-proxy.js';
 
 export async function runCommand(projectPath = '.', options = {}) {
@@ -51,6 +52,18 @@ export async function runCommand(projectPath = '.', options = {}) {
     uploadManifest: options.uploadManifest ?? null,
   });
   store.init();
+
+  let captchaShim = null;
+  if (options.captchaSolver || options.requireCaptchaSolver) {
+    captchaShim = await startCaptchaCdpShim({
+      upstreamUrl: resolveUpstreamCdpUrl(browserEndpoints),
+      store,
+    });
+    browserEndpoints.chromeWs = captchaShim.chromeWs;
+    browserEndpoints.chromeHttp = captchaShim.domain;
+    browserEndpoints.cdpEndpoint = captchaShim.cdpEndpoint;
+    browserEndpoints.browserWsEndpoint = captchaShim.cdpEndpoint;
+  }
 
   const env = buildRuntimeEnv({
     proxyAuth: options.proxyAuth,
@@ -137,6 +150,7 @@ export async function runCommand(projectPath = '.', options = {}) {
     }
 
     enforcePostRunGates(store, localProxy, options);
+    enforceCaptchaSolverGate(store, captchaShim, options);
 
     console.log(`Run ${store.status}: ${store.runId}`);
     console.log(`Results: ${path.join(store.runDir, 'results.ndjson')}`);
@@ -153,6 +167,9 @@ export async function runCommand(projectPath = '.', options = {}) {
     }
     if (localProxy) {
       await localProxy.stop();
+    }
+    if (captchaShim) {
+      await captchaShim.stop();
     }
   }
 }
@@ -179,6 +196,24 @@ export function enforcePostRunGates(store, localProxy, options) {
   } catch (error) {
     store.finish({ exitCode: 1, error });
     throw error;
+  }
+}
+
+export function enforceCaptchaSolverGate(store, captchaShim, options) {
+  if (!options.requireCaptchaSolver) {
+    return;
+  }
+
+  if (!captchaShim) {
+    const message = '--require-captcha-solver requires the local CAPTCHA CDP shim to be enabled.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
+  }
+
+  if (captchaShim.stats.automaticSolverCalls < 1) {
+    const message = 'Worker did not call Captchas.automaticSolver through the local CAPTCHA CDP shim.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
   }
 }
 
@@ -228,6 +263,23 @@ function formatBrowserProbe(probe) {
   const status = probe.status ? ` status=${probe.status}` : '';
   const error = probe.error ? ` error=${probe.error}` : '';
   return `${probe.kind} ${probe.url}${status}${error}`;
+}
+
+function resolveUpstreamCdpUrl(browserEndpoints) {
+  const endpoint = browserEndpoints.cdpEndpoint
+    ?? browserEndpoints.browserWsEndpoint
+    ?? browserEndpoints.chromeWs;
+  if (!endpoint) {
+    return undefined;
+  }
+  const text = String(endpoint).trim();
+  if (text.startsWith('ws://') || text.startsWith('wss://')) {
+    return text;
+  }
+  if (text.includes('/devtools/browser/') || text.includes('/ws?')) {
+    return `ws://${text}`;
+  }
+  return undefined;
 }
 
 async function validateRunOutputs(projectDir, store, options) {

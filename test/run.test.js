@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceMinimumResults, enforcePostRunGates, enforceRequiredBrowser, runCommand } from '../src/commands/run.js';
+import { enforceCaptchaSolverGate, enforceMinimumResults, enforcePostRunGates, enforceRequiredBrowser, runCommand } from '../src/commands/run.js';
 import { CliError } from '../src/utils/errors.js';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -32,6 +32,32 @@ test('enforcePostRunGates marks the run failed when proxy usage is required but 
     (error) => error instanceof CliError && /did not use the local CoreClaw SOCKS5 proxy/.test(error.message),
   );
   assert.equal(store.finished.exitCode, 1);
+});
+
+test('enforceCaptchaSolverGate marks the run failed when required but unused', () => {
+  const store = makeStore(1);
+  const captchaShim = {
+    stats: {
+      automaticSolverCalls: 0,
+    },
+  };
+
+  assert.throws(
+    () => enforceCaptchaSolverGate(store, captchaShim, { requireCaptchaSolver: true }),
+    (error) => error instanceof CliError && /did not call Captchas\.automaticSolver/.test(error.message),
+  );
+  assert.equal(store.finished.exitCode, 1);
+});
+
+test('enforceCaptchaSolverGate allows runs that called the local CAPTCHA solver', () => {
+  const store = makeStore(1);
+  const captchaShim = {
+    stats: {
+      automaticSolverCalls: 1,
+    },
+  };
+
+  assert.doesNotThrow(() => enforceCaptchaSolverGate(store, captchaShim, { requireCaptchaSolver: true }));
 });
 
 test('enforceRequiredBrowser rejects fallback browser endpoints when requested', async () => {
@@ -126,6 +152,63 @@ main().catch((error) => {
   const runs = fs.readdirSync(path.join(dir, '.coreclaw', 'runs'));
   const summary = JSON.parse(fs.readFileSync(path.join(dir, '.coreclaw', 'runs', runs[0], 'summary.json'), 'utf8'));
   assert.equal(summary.status, 'FAILED');
+});
+
+test('runCommand can require Captchas.automaticSolver through the local CDP shim', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+const { WebSocket } = require('ws')
+
+function sendCaptchaCommand(url) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url)
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({
+        id: 1,
+        method: 'Captchas.automaticSolver',
+        params: { timeout: 30, solverType: 'cloudflare' },
+      }))
+    })
+    socket.addEventListener('message', (event) => {
+      resolve(JSON.parse(event.data))
+      socket.close()
+    })
+    socket.addEventListener('error', reject)
+  })
+}
+
+async function main() {
+  const result = await sendCaptchaCommand(process.env.CDP_ENDPOINT)
+  await coresdk.result.setTableHeader([{ label: 'ok', key: 'ok', format: 'boolean' }])
+  await coresdk.result.pushData({ ok: Boolean(result.result.status) })
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+  try {
+    const summary = await runCommand(dir, {
+      node: process.execPath,
+      captchaSolver: true,
+      requireCaptchaSolver: true,
+      minResults: '1',
+      tmpHook: false,
+    });
+
+    assert.equal(summary.status, 'SUCCEEDED');
+    assert.equal(summary.result_count, 1);
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
 });
 
 function makeStore(resultCount) {
