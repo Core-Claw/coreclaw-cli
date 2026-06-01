@@ -22,6 +22,10 @@ CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平
 - `.coreclaw/runs/<run-id>/` 下的运行生命周期产物。
 - 上传 ZIP 结构验证和打包。
 - `verify` 默认从上传包视角的临时 staging 目录运行，并在该目录安装依赖。
+- Go 上传打包：
+  - 干净的上传 staging。
+  - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`。
+  - ZIP 根目录包含可执行文件 `main`。
 
 它不会模拟 CoreClaw 真实的远程指纹浏览器池。浏览器 worker 可以启动本地 Chrome remote debugging `127.0.0.1:9222`，或用 `--chrome-ws` 传入真实远程 CDP 端点。HTTP worker 可以使用 `--local-proxy --require-proxy-usage` 通过 `PROXY_AUTH` / `PROXY_DOMAIN` 暴露本地 SOCKS5 代理，并在 worker 绕过代理时让 run 失败。
 
@@ -151,11 +155,14 @@ node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idl
 node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud-output.json --min-shared 1 --max-diff 0
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
+node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
 ```
 
 `verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
 
 这种默认行为能捕获只因为源目录里存在 `.coreclaw`、`node_modules`、`dist` 或其他不会上传的文件而本地跑通的假阳性。
+
+对于 Go worker，本地运行阶段仍用 staged source 执行 `go run .`，用于验证 SDK 和业务逻辑在开发机上能正常跑通。随后的打包阶段会按 CoreClaw Linux 运行时要求交叉编译上传产物：`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`，并把生成的可执行文件 `main` 放进 ZIP 根目录。这样可以捕获“本地能跑，但无法产出平台需要的 Linux 可执行文件”的问题。需要固定 Go 工具链或 `go` 不在 `PATH` 时，使用 `--go <binary>`。
 
 默认情况下，运行产物仍写入原项目 `.coreclaw/runs/<run-id>/`；上传包默认写入 `.coreclaw/verify/<verify-id>/`；云端对比报告默认写入 `.coreclaw/runs/<run-id>/cloud-comparison.json`。staged preflight 还会在 run 目录写入 `upload_manifest.json`，用于审计到底哪些文件进入了上传包视角的执行目录。`--no-staging` 或 `--no-install` 只建议用于直接调试源目录行为。
 
@@ -220,9 +227,12 @@ cloud proxy mode 会暴露本地占位变量：
 
 ```bash
 node ./bin/coreclaw.js pack ./examples/node-hello --output ./dist/node-hello.zip
+node ./bin/coreclaw.js pack ./my-go-worker --output ./dist/my-go-worker.zip --go go
 ```
 
 ZIP 会把 worker 入口文件放在 archive root，并排除 `.coreclaw`、`node_modules`、virtualenv、构建产物、缓存和 git metadata。
+
+对于 Go worker，`pack` 会在临时 staging 目录构建 Linux amd64 上传可执行文件，并把带可执行权限的 `main` 加入 ZIP。源目录不会被修改。
 
 ## 云端输出对比
 

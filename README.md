@@ -23,6 +23,10 @@ Chinese documentation: [README_CN.md](./README_CN.md).
   - `TMPDIR` / `TMP` / `TEMP`
 - Run lifecycle artifacts under `.coreclaw/runs/<run-id>/`
 - Upload ZIP structure validation and packaging
+- Go upload packaging:
+  - clean upload staging
+  - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`
+  - executable `main` at the ZIP root
 
 It does not emulate CoreClaw's real remote fingerprint browser pool. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP endpoint with `--chrome-ws`. For HTTP workers, use `--local-proxy --require-proxy-usage` to expose a local SOCKS5 proxy through `PROXY_AUTH` / `PROXY_DOMAIN` and fail the run if the worker bypasses it.
 
@@ -152,9 +156,12 @@ node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idl
 node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud-output.json --min-shared 1 --max-diff 0
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
+node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
 ```
 
 `verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, `dist`, or other files that will not be uploaded.
+
+For Go workers, the local run still executes the staged source with `go run .` so SDK behavior is tested on the developer machine. The package step then cross-compiles the upload artifact exactly for CoreClaw's Linux runtime with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./main.go`, and includes the generated executable `main` at the ZIP root. This catches Go workers that run locally but cannot produce the binary that CoreClaw expects after upload. Use `--go <binary>` when you need a pinned Go toolchain or `go` is not on `PATH`.
 
 By default, run artifacts are still written under the original project `.coreclaw/runs/<run-id>/`, packages are written under `.coreclaw/verify/<verify-id>/`, and cloud comparison reports are written to `.coreclaw/runs/<run-id>/cloud-comparison.json`. Staged preflight runs also write `upload_manifest.json` into the run directory so you can audit exactly which files were copied into the upload-like execution directory. Use `--compare-output <file>` to write the comparison report somewhere else. Use `--no-staging` or `--no-install` only when debugging the source directory directly.
 
@@ -219,9 +226,12 @@ Cloud proxy mode exposes local placeholders:
 
 ```bash
 node ./bin/coreclaw.js pack ./examples/node-hello --output ./dist/node-hello.zip
+node ./bin/coreclaw.js pack ./my-go-worker --output ./dist/my-go-worker.zip --go go
 ```
 
 The ZIP has the worker entry file at archive root and excludes `.coreclaw`, `node_modules`, virtualenvs, build outputs, caches, and git metadata.
+
+For Go workers, `pack` builds the Linux amd64 upload executable in a temporary staging directory and adds `main` to the ZIP with executable permissions. The source directory is not modified.
 
 ## Cloud Comparison Workflow
 

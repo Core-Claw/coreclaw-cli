@@ -57,6 +57,7 @@ export async function verifyCommand(projectPath = '.', options = {}) {
     packagePath = await packCommand(projectDir, {
       output: resolveVerifyOutput(projectDir, options),
       validate: true,
+      go: options.go,
     });
   } else {
     console.log('\nSkipping upload package (--no-pack).');

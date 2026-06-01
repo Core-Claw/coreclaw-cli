@@ -1,7 +1,7 @@
 {
   "name": "@coreclaw/cli",
   "version": "0.1.0",
-  "description": "Local CoreClaw worker runtime, verifier, and upload preflight CLI.",
+  "description": "CoreClaw-compatible local worker runtime, verifier, and upload packaging CLI.",
   "type": "module",
   "homepage": "https://github.com/Core-Claw/coreclaw-cli#readme",
   "repository": {

@@ -168,10 +168,10 @@ Usage:
   coreclaw run [project] [--local-proxy] [--require-proxy-usage]
   coreclaw run [project] [--chrome-ws host[:port][/path] [--chrome-http host:port] | --no-discover-chrome]
   coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
-  coreclaw verify [project] [--no-staging] [--no-install]
+  coreclaw verify [project] [--no-staging] [--no-install] [--go go]
   coreclaw verify [project] [--local-proxy] [--require-proxy-usage]
   coreclaw verify [project] --cloud-output cloud.json [--min-shared 1] [--compare-output report.json]
-  coreclaw pack [project] --output worker.zip
+  coreclaw pack [project] --output worker.zip [--go go]
   coreclaw audit [root] --output audit.json --markdown audit.md [--all]
   coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1]
   coreclaw compare cloud.json .coreclaw/runs/<run-id> [--min-shared 1] [--output report.json]

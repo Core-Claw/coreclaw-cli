@@ -24,10 +24,14 @@ export function createWorkerZip({ projectDir, outFile }) {
   }
 
   const manifest = collectFiles(projectDir);
-  const zip = buildZipArchive(manifest.map((relative) => ({
-    name: relative,
-    data: fs.readFileSync(path.join(projectDir, relative)),
-  })));
+  const zip = buildZipArchive(manifest.map((relative) => {
+    const filePath = path.join(projectDir, relative);
+    return {
+      name: relative,
+      data: fs.readFileSync(filePath),
+      mode: uploadFileMode(relative, fs.statSync(filePath).mode),
+    };
+  }));
   fs.writeFileSync(outFile, zip);
   return outFile;
 }
@@ -68,7 +72,7 @@ export function buildZipArchive(entries) {
 
     const centralHeader = Buffer.alloc(46);
     centralHeader.writeUInt32LE(0x02014b50, 0);
-    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(0x0314, 4);
     centralHeader.writeUInt16LE(20, 6);
     centralHeader.writeUInt16LE(0x0800, 8);
     centralHeader.writeUInt16LE(8, 10);
@@ -82,7 +86,7 @@ export function buildZipArchive(entries) {
     centralHeader.writeUInt16LE(0, 32);
     centralHeader.writeUInt16LE(0, 34);
     centralHeader.writeUInt16LE(0, 36);
-    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(fileAttributes(entry), 38);
     centralHeader.writeUInt32LE(offset, 42);
 
     const localRecord = Buffer.concat([localHeader, name, compressed]);
@@ -103,6 +107,18 @@ export function buildZipArchive(entries) {
   end.writeUInt16LE(0, 20);
 
   return Buffer.concat([...localParts, centralDirectory, end]);
+}
+
+function fileAttributes(entry) {
+  const mode = Number.isInteger(entry.mode) ? entry.mode : 0o100644;
+  return ((mode & 0xffff) << 16) >>> 0;
+}
+
+function uploadFileMode(relative, mode) {
+  if (toPosixPath(relative) === 'main') {
+    return (mode & ~0o777) | 0o755;
+  }
+  return mode;
 }
 
 export function collectFiles(rootDir, currentDir = rootDir) {
