@@ -68,6 +68,19 @@ test('parseArgs treats input-json as an alias for inline json', () => {
   );
 });
 
+test('parseArgs keeps input json separate from json-output mode', () => {
+  assert.deepEqual(
+    parseArgs(['run', '.', '--json', '{"url":"https://example.com"}', '--json-output']),
+    {
+      positionals: ['run', '.'],
+      options: {
+        json: '{"url":"https://example.com"}',
+        jsonOutput: true,
+      },
+    },
+  );
+});
+
 test('parseArgs accepts no-input-example for init', () => {
   assert.deepEqual(
     parseArgs(['init', './worker', '--language', 'node', '--no-input-example']),

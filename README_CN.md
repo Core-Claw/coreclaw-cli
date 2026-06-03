@@ -429,6 +429,7 @@ node ./bin/coreclaw.js init ./my-worker --language node --no-input-example
 ```bash
 node ./bin/coreclaw.js validate ./worker
 node ./bin/coreclaw.js validate ./worker --strict
+node ./bin/coreclaw.js validate ./worker --json-output
 ```
 
 校验内容包括：
@@ -458,6 +459,7 @@ node ./bin/coreclaw.js run ./worker --json "{\"url\":\"https://example.com\"}"
 node ./bin/coreclaw.js run ./worker --split 0
 node ./bin/coreclaw.js run ./worker --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./worker --strict --min-results 1
+node ./bin/coreclaw.js run ./worker --input input.json --json-output
 ```
 
 常用运行门槛：
@@ -503,6 +505,7 @@ node ./bin/coreclaw.js verify ./worker --strict --input input.json --min-results
 node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
+node ./bin/coreclaw.js verify ./worker --input input.json --json-output
 ```
 
 `verify` 会执行：
@@ -578,6 +581,7 @@ node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go
 node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --min-results 1
 node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-status-ok
 node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-output-schema-match
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --json-output
 ```
 
 当你已经有 `.coreclaw/runs/<run-id>`，但想重新应用结果行数、状态或 output schema 门槛时使用它。
@@ -901,7 +905,9 @@ CoreClaw CLI 适合 CI 和可重复脚本：
 - 每个命令只接受自己的选项。
 - Boolean 支持 `--flag`、`--no-flag`、`--flag=true|false`。
 - 校验、运行、打包、对比失败时返回非零退出码。
-- 支持 JSON 报告输出，便于自动化读取。
+- `validate`、`run`、`verify`、`inspect-run` 支持 `--json-output`，stdout 会输出机器可读 JSON。
+- `--json-output` 模式下，进度和 Worker 日志写到 stderr，stdout 保持为单个 JSON 文档。
+- `compare` 和 `audit` 也可以用 `--output` 写出 JSON 报告文件。
 
 ## 常见问题
 

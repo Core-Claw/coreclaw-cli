@@ -56,12 +56,12 @@ Completed:
 - Validates output schema field names and supported types.
 - Warns when HTTP request Workers do not read `PROXY_AUTH` and `PROXY_DOMAIN`.
 - Warns when browser Workers do not read CoreClaw browser endpoint variables.
+- `coreclaw validate --json-output` emits a machine-readable validation report for CI systems.
 
 Solvable gaps:
 
 - Add a docs contract test that snapshots supported input editors and output field types from the local knowledge docs.
 - Add more precise dependency scanners for dynamic imports and optional Worker plugin folders.
-- Add `coreclaw validate --json` for CI systems that should consume validation output directly.
 
 Currently out of local scope:
 
@@ -80,11 +80,11 @@ Completed:
 - Runtime can require minimum result count, status success, table headers, and output schema match.
 - Local temporary state is isolated per run.
 - Node.js absolute `/tmp` writes are mapped into the run temp directory.
+- `coreclaw run --json-output`, `coreclaw verify --json-output`, and `coreclaw inspect-run --json-output` emit machine-readable summaries while progress logs go to stderr.
 
 Solvable gaps:
 
 - Add clearer `inspect-run` remediation hints for missing results, missing table headers, and schema drift.
-- Add JSON output mode for `run`, `verify`, and `inspect-run`.
 - Add a stable machine-readable summary schema for CI integrations.
 
 Currently out of local scope:
@@ -163,7 +163,7 @@ Currently out of local scope:
 ### Solvable In This Repository
 
 - Add command-specific help for every command with richer flag descriptions.
-- Add CI-friendly JSON output modes.
+- Stabilize and version the CI-friendly JSON output schema.
 - Add more Worker templates and example payloads.
 - Add better remediation text for common validation and runtime failures.
 - Add versioned docs when CLI behavior becomes stable enough for releases.
@@ -188,10 +188,11 @@ Currently out of local scope:
 - Added generated command reference docs from CLI command metadata.
 - Added `coreclaw pack --print-files` to preview upload package contents.
 - Added default `input.example.json` generation during `coreclaw init` and excluded it from upload packaging.
+- Added `--json-output` for `validate`, `run`, `verify`, and `inspect-run`.
 
 ## Next Milestones
 
-1. Add JSON output modes for `validate`, `run`, `verify`, and `inspect-run`.
-2. Add package size warnings for unexpectedly large uploads.
-3. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
-4. Add more precise remediation hints for validation and runtime failures.
+1. Add package size warnings for unexpectedly large uploads.
+2. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
+3. Add more precise remediation hints for validation and runtime failures.
+4. Stabilize and document a versioned JSON summary schema for CI integrations.

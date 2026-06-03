@@ -454,6 +454,7 @@ Runs static upload-readiness checks.
 ```bash
 node ./bin/coreclaw.js validate ./worker
 node ./bin/coreclaw.js validate ./worker --strict
+node ./bin/coreclaw.js validate ./worker --json-output
 ```
 
 Validation covers:
@@ -483,6 +484,7 @@ node ./bin/coreclaw.js run ./worker --json "{\"url\":\"https://example.com\"}"
 node ./bin/coreclaw.js run ./worker --split 0
 node ./bin/coreclaw.js run ./worker --timeout-ms 10m --idle-timeout-ms 30s
 node ./bin/coreclaw.js run ./worker --strict --min-results 1
+node ./bin/coreclaw.js run ./worker --input input.json --json-output
 ```
 
 Important runtime gates:
@@ -528,6 +530,7 @@ node ./bin/coreclaw.js verify ./worker --strict --input input.json --min-results
 node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
 node ./bin/coreclaw.js verify ./worker --no-pack
 node ./bin/coreclaw.js verify ./worker --no-staging --no-install
+node ./bin/coreclaw.js verify ./worker --input input.json --json-output
 ```
 
 `verify` performs these steps:
@@ -599,6 +602,7 @@ Validates a captured local run directory.
 node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --min-results 1
 node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-status-ok
 node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-output-schema-match
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --json-output
 ```
 
 Use this when you already have run artifacts and want to reapply result-count, status, or output-schema gates without rerunning the Worker.
@@ -920,7 +924,9 @@ CoreClaw CLI is built for CI and repeatable local scripts:
 - Options are validated per command.
 - Boolean flags support `--flag`, `--no-flag`, and `--flag=true|false`.
 - Most commands return exit code `0` on pass and non-zero on validation, runtime, package, or comparison failure.
-- Reports are written as JSON where supported so automated jobs can consume them.
+- `validate`, `run`, `verify`, and `inspect-run` support `--json-output` for machine-readable stdout.
+- In `--json-output` mode, progress and Worker logs are written to stderr while stdout remains one JSON document.
+- Compare and audit reports can also be written to files with `--output`.
 
 ## Troubleshooting
 

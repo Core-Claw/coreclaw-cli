@@ -12,8 +12,20 @@ import { runCommand } from './run.js';
 import { packCommand } from './pack.js';
 import { compareCommand } from './compare.js';
 import { enforceStrictValidation } from './validate.js';
+import { printJson, shouldPrintJson, withJsonProgressOnStderr } from '../utils/output.js';
 
 export async function verifyCommand(projectPath = '.', options = {}) {
+  const result = await withJsonProgressOnStderr(options, () => verifyCommandInternal(projectPath, {
+    ...options,
+    jsonOutput: false,
+  }));
+  if (shouldPrintJson(options)) {
+    printJson(result);
+  }
+  return result;
+}
+
+async function verifyCommandInternal(projectPath = '.', options = {}) {
   const verifyOptions = resolveVerifyProfileOptions(options);
   const projectDir = resolveProjectPath(projectPath);
   const project = validateProject(projectDir);

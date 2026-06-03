@@ -208,6 +208,7 @@ function commandAllowedOptions(command) {
     'installIdleTimeoutMs',
     'installTimeoutMs',
     'json',
+    'jsonOutput',
     'lightpandaDomain',
     'lightpandaShim',
     'localProxy',
@@ -257,7 +258,7 @@ function commandAllowedOptions(command) {
     case 'init':
       return new Set(['force', 'inputExample', 'lang', 'language', 'name']);
     case 'validate':
-      return new Set(['soft', 'strict']);
+      return new Set(['jsonOutput', 'soft', 'strict']);
     case 'run':
       return runtime;
     case 'verify':
@@ -276,7 +277,7 @@ function commandAllowedOptions(command) {
     case 'audit':
       return new Set(['all', 'auditProfile', 'failOnWarn', 'ignoreIssueCodes', 'markdown', 'output', 'recursive', 'soft']);
     case 'inspect-run':
-      return new Set(['minResults', 'requireOutputSchemaMatch', 'requireResultStatusOk', 'requireStatusOk', 'resultFailValues', 'resultStatusFields']);
+      return new Set(['jsonOutput', 'minResults', 'requireOutputSchemaMatch', 'requireResultStatusOk', 'requireStatusOk', 'resultFailValues', 'resultStatusFields']);
     case 'inspect-package':
       return new Set(['language', 'strict']);
     case 'compare':
@@ -316,6 +317,7 @@ function isKnownOption(name) {
     'installIdleTimeoutMs',
     'installTimeoutMs',
     'json',
+    'jsonOutput',
     'keyFields',
     'lang',
     'language',
@@ -350,6 +352,7 @@ function isBooleanOption(name) {
     'compare',
     'force',
     'inputExample',
+    'jsonOutput',
     'soft',
     'strict',
     'install',

@@ -136,6 +136,7 @@ export class RunStore {
       status_code: statusCode(this.status),
       project_dir: this.projectDir,
       worker_dir: this.workerDir,
+      run_dir: this.runDir,
       started_at: this.startedAt.toISOString(),
       finished_at: finishedAt ? finishedAt.toISOString() : null,
       duration_ms: finishedAt ? finishedAt.getTime() - this.startedAt.getTime() : null,

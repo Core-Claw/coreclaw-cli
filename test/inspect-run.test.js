@@ -84,6 +84,19 @@ test('inspectRunCommand applies custom result status fields', async () => {
   );
 });
 
+test('inspectRunCommand json-output prints the run report as JSON', async () => {
+  const runDir = makeRunDir({ resultCount: 1, resultsRows: 1, exportRows: 1 });
+
+  const output = await captureConsole(() => inspectRunCommand(runDir, { jsonOutput: true }));
+  const report = JSON.parse(output.stdout);
+
+  assert.equal(output.stderr, '');
+  assert.equal(report.run_dir, runDir);
+  assert.equal(report.status, 'SUCCEEDED');
+  assert.equal(report.result_count, 1);
+  assert.equal(report.results_rows, 1);
+});
+
 function makeRunDir({ resultCount, resultsRows, exportRows, outputSchemaIssueCount = 0 }) {
   const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-inspect-run-'));
   fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify({
@@ -117,4 +130,23 @@ function writeRows(filePath, count) {
 
 function pick(value, keys) {
   return Object.fromEntries(keys.map((key) => [key, value[key]]));
+}
+
+async function captureConsole(fn) {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const stdout = [];
+  const stderr = [];
+  console.log = (...args) => stdout.push(args.join(' '));
+  console.error = (...args) => stderr.push(args.join(' '));
+  console.warn = (...args) => stderr.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+    console.warn = originalWarn;
+  }
+  return { stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }

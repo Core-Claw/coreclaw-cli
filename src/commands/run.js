@@ -14,8 +14,17 @@ import { startCaptchaCdpShim } from '../runtime/captcha-cdp-shim.js';
 import { enforceResultStatusGate } from '../runtime/result-gates.js';
 import { assertSocksProxyUsed, startSocksProxy } from '../runtime/socks-proxy.js';
 import { enforceStrictValidation } from './validate.js';
+import { printJson, shouldPrintJson, withJsonProgressOnStderr } from '../utils/output.js';
 
 export async function runCommand(projectPath = '.', options = {}) {
+  const summary = await withJsonProgressOnStderr(options, () => runCommandInternal(projectPath, options));
+  if (shouldPrintJson(options)) {
+    printJson(summary);
+  }
+  return summary;
+}
+
+async function runCommandInternal(projectPath = '.', options = {}) {
   const runOptions = resolveRunOptions(options);
   const projectDir = resolveProjectPath(projectPath);
   const validationProjectDir = runOptions.validationProjectDir

@@ -26,6 +26,20 @@ test('validateCommand soft mode allows strict warnings for report generation', a
   assert.equal(result.issues.some((issue) => issue.code === 'missing_output_schema_legacy'), true);
 });
 
+test('validateCommand json-output prints a machine-readable validation report', async () => {
+  const dir = makeNodeProject({ outputSchema: false });
+
+  const output = await captureConsole(() => validateCommand(dir, { jsonOutput: true, soft: true }));
+  const report = JSON.parse(output.stdout);
+
+  assert.equal(output.stderr, '');
+  assert.equal(report.ok, true);
+  assert.equal(report.project_dir, dir);
+  assert.equal(report.language, 'node');
+  assert.equal(report.warning_count, 1);
+  assert.equal(report.issues.some((issue) => issue.code === 'missing_output_schema_legacy'), true);
+});
+
 function makeNodeProject(options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-validate-command-node-'));
   fs.writeFileSync(path.join(dir, 'main.js'), '');
@@ -53,4 +67,23 @@ function makeNodeProject(options = {}) {
     fs.writeFileSync(path.join(dir, file), '');
   }
   return dir;
+}
+
+async function captureConsole(fn) {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const stdout = [];
+  const stderr = [];
+  console.log = (...args) => stdout.push(args.join(' '));
+  console.error = (...args) => stderr.push(args.join(' '));
+  console.warn = (...args) => stderr.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+    console.warn = originalWarn;
+  }
+  return { stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }

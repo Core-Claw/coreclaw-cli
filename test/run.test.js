@@ -642,6 +642,48 @@ main().catch((error) => {
   }
 });
 
+test('runCommand json-output prints summary on stdout and progress on stderr', async () => {
+  const dir = createNodeFixture(`
+const coresdk = require('./sdk')
+
+async function main() {
+  await coresdk.result.setTableHeader([{ label: 'ok', key: 'ok', format: 'boolean' }])
+  await coresdk.log.info('json output fixture')
+  await coresdk.result.pushData({ ok: true })
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
+`);
+
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+  try {
+    const output = await captureConsole(() => runCommand(dir, {
+      node: process.execPath,
+      install: false,
+      minResults: '1',
+      jsonOutput: true,
+      tmpHook: false,
+    }));
+    const summary = JSON.parse(output.stdout);
+
+    assert.equal(summary.status, 'SUCCEEDED');
+    assert.equal(summary.result_count, 1);
+    assert.match(summary.run_dir, /\.coreclaw/);
+    assert.match(output.stderr, /CoreClaw local runtime listening/);
+    assert.match(output.stderr, /Run SUCCEEDED/);
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
+});
+
 test('generated Node worker passes upload preflight and package inspection', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-generated-worker-'));
   const projectDir = path.join(root, 'generated-node-worker');
@@ -703,6 +745,44 @@ test('generated Node worker passes upload preflight and package inspection', asy
     assert.equal(packageReport.root_entries.includes('package.json'), true);
     assert.equal(packageReport.root_entries.includes('output_schema.json'), true);
     assert.equal(packageReport.root_entries.includes('input.example.json'), false);
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
+});
+
+test('verifyCommand json-output prints one preflight report on stdout', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-json-output-'));
+  const projectDir = path.join(root, 'worker');
+
+  await initCommand(projectDir, {
+    language: 'node',
+    name: 'JSON Output Worker',
+  });
+
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+  try {
+    const output = await captureConsole(() => verifyCommand(projectDir, {
+      node: process.execPath,
+      install: false,
+      pack: false,
+      minResults: '1',
+      jsonOutput: true,
+      tmpHook: false,
+    }));
+    const report = JSON.parse(output.stdout);
+
+    assert.equal(report.ok, true);
+    assert.equal(report.language, 'node');
+    assert.equal(report.result_count, 1);
+    assert.equal(report.package_path, null);
+    assert.match(report.run_dir, /\.coreclaw/);
+    assert.match(output.stderr, /CoreClaw upload preflight/);
+    assert.match(output.stderr, /CoreClaw preflight passed/);
   } finally {
     if (previousNodePath === undefined) {
       delete process.env.NODE_PATH;
@@ -1065,4 +1145,23 @@ function readNdjson(filePath) {
     .split(/\r?\n/)
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+async function captureConsole(fn) {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const stdout = [];
+  const stderr = [];
+  console.log = (...args) => stdout.push(args.join(' '));
+  console.error = (...args) => stderr.push(args.join(' '));
+  console.warn = (...args) => stderr.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+    console.warn = originalWarn;
+  }
+  return { stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }

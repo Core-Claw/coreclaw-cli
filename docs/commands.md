@@ -56,7 +56,7 @@ Check Worker root files, dependencies, SDK files, and schemas
 Usage:
 
 ```bash
-coreclaw validate [project] [--strict]
+coreclaw validate [project] [--strict] [--json-output]
 ```
 
 Examples:
@@ -64,6 +64,7 @@ Examples:
 ```bash
 coreclaw validate ./worker
 coreclaw validate ./worker --strict
+coreclaw validate ./worker --json-output
 ```
 
 ### `run`
@@ -76,7 +77,7 @@ Usage:
 coreclaw run [project] [--input input.json | --json '{"url":"..."}' | --input-json '{"url":"..."}'] [--split 0] [--min-results 1]
 coreclaw run [project] [--strict] [--require-table-header] [--require-output-schema-match] [--require-status-ok]
 coreclaw run [project] [--local-proxy --require-proxy-usage] [--require-browser]
-coreclaw run [project] [--browser-cdp-shim | --lightpanda-shim | --captcha-solver]
+coreclaw run [project] [--browser-cdp-shim | --lightpanda-shim | --captcha-solver] [--json-output]
 ```
 
 Examples:
@@ -85,6 +86,7 @@ Examples:
 coreclaw run ./worker --input input.json --min-results 1
 coreclaw run ./worker --strict --require-output-schema-match
 coreclaw run ./worker --local-proxy --require-proxy-usage --min-results 1
+coreclaw run ./worker --input input.json --json-output
 ```
 
 ## Upload preflight
@@ -99,7 +101,7 @@ Usage:
 coreclaw verify [project] [--input input.json] [--strict] [--min-results 1] [--no-pack]
 coreclaw verify [project] [--no-staging] [--no-install] [--go go]
 coreclaw verify [project] --cloud-output cloud.json|cloud.csv [--compare-profile profile.json] [--compare-output report.json]
-coreclaw verify [project] [--local-proxy --require-proxy-usage] [--browser-cdp-shim --require-browser-cdp-shim]
+coreclaw verify [project] [--local-proxy --require-proxy-usage] [--browser-cdp-shim --require-browser-cdp-shim] [--json-output]
 ```
 
 Examples:
@@ -108,6 +110,7 @@ Examples:
 coreclaw verify ./worker --strict --input input.json --min-results 1
 coreclaw verify ./worker --cloud-output ./cloud.csv --min-shared 1 --max-diff 0
 coreclaw verify ./go-worker --go go --strict --min-results 1
+coreclaw verify ./worker --input input.json --json-output
 ```
 
 ### `pack`
@@ -138,7 +141,7 @@ Validate a local .coreclaw/runs/<run-id> artifact directory
 Usage:
 
 ```bash
-coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1] [--require-output-schema-match] [--require-status-ok]
+coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1] [--require-output-schema-match] [--require-status-ok] [--json-output]
 ```
 
 Examples:
@@ -146,6 +149,7 @@ Examples:
 ```bash
 coreclaw inspect-run ./worker/.coreclaw/runs/<run-id> --min-results 1
 coreclaw inspect-run ./worker/.coreclaw/runs/<run-id> --require-status-ok
+coreclaw inspect-run ./worker/.coreclaw/runs/<run-id> --json-output
 ```
 
 ### `inspect-package`

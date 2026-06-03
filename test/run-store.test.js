@@ -83,6 +83,7 @@ test('RunStore writes upload manifests for staged preflight runs', () => {
   assert.deepEqual(JSON.parse(fs.readFileSync(manifestPath, 'utf8')), manifest);
   assert.equal(store.summary().project_dir, projectDir);
   assert.equal(store.summary().worker_dir, workerDir);
+  assert.equal(store.summary().run_dir, path.join(projectDir, '.coreclaw', 'runs', 'run-id'));
   assert.equal(store.summary().upload_manifest_path, manifestPath);
 });
 

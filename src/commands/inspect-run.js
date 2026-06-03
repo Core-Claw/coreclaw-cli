@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resultStatusIssues, shouldRequireStatusGate } from '../runtime/result-gates.js';
 import { CliError } from '../utils/errors.js';
+import { printJson, shouldPrintJson } from '../utils/output.js';
 
 export async function inspectRunCommand(runPath, options = {}) {
   if (!runPath) {
@@ -10,7 +11,11 @@ export async function inspectRunCommand(runPath, options = {}) {
 
   const runDir = path.resolve(process.cwd(), runPath);
   const report = inspectRun(runDir, options);
-  printRunReport(report);
+  if (shouldPrintJson(options)) {
+    printJson(report);
+  } else {
+    printRunReport(report);
+  }
 
   const minResults = parseNonNegativeInteger(options.minResults ?? 0, '--min-results');
   if (report.status !== 'SUCCEEDED') {
