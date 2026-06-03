@@ -60,6 +60,18 @@ test('packCommand creates a ZIP that passes package inspection', async () => {
   assert.equal(report.root_entries.includes('sdk_grpc_pb.js'), true);
 });
 
+test('packCommand warns when created ZIP exceeds advisory package size threshold', async () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'large-runtime-asset.bin'), 'x'.repeat(256));
+  const outFile = path.join(dir, 'dist', 'worker.zip');
+
+  const output = await captureConsole(() => packCommand(dir, { output: outFile, maxPackageSize: '200B' }));
+
+  assert.equal(fs.existsSync(outFile), true);
+  assert.match(output.stderr, /Upload ZIP size is .* exceeds the local advisory threshold/);
+  assert.match(output.stderr, /package|source|SDK|schemas|runtime assets/i);
+});
+
 test('previewUploadFiles returns the same manifest used by ZIP creation', () => {
   const dir = makeNodeProject();
   fs.mkdirSync(path.join(dir, 'dist'));

@@ -48,7 +48,7 @@ function printUploadFilePreview(files) {
 
 function inspectCreatedPackage(outFile, language, options = {}) {
   const report = inspectPackage(outFile);
-  const validation = validatePackageReport(report, { language });
+  const validation = validatePackageReport(report, { language, maxPackageSize: options.maxPackageSize });
   const packageReport = { ...report, ...validation };
   try {
     enforcePackageGates(packageReport, options);

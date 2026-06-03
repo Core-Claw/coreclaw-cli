@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CliError } from '../utils/errors.js';
+import { formatBytes, parseSizeBytes } from '../utils/bytes.js';
+
+export const DEFAULT_MAX_PACKAGE_SIZE_BYTES = 50 * 1000 * 1000;
 
 const PACKAGE_SPECS = {
   python: {
@@ -45,6 +48,8 @@ export function inspectPackage(packagePath) {
   const entries = readCentralDirectory(data);
   return {
     package_path: packagePath,
+    package_size: data.length,
+    package_size_human: formatBytes(data.length),
     entry_count: entries.length,
     root_entries: entries
       .filter((entry) => !entry.name.includes('/') && !entry.name.endsWith('/'))
@@ -55,6 +60,9 @@ export function inspectPackage(packagePath) {
       .filter(Boolean)))
       .sort(),
     entries,
+    total_compressed_size: entries.reduce((total, entry) => total + entry.compressed_size, 0),
+    total_uncompressed_size: entries.reduce((total, entry) => total + entry.uncompressed_size, 0),
+    total_uncompressed_size_human: formatBytes(entries.reduce((total, entry) => total + entry.uncompressed_size, 0)),
   };
 }
 
@@ -72,6 +80,7 @@ export function validatePackageReport(report, options = {}) {
   const spec = PACKAGE_SPECS[language];
   const issues = [];
   const rootEntries = new Set(report.root_entries);
+  const maxPackageSize = parseMaxPackageSize(options.maxPackageSize);
 
   for (const requiredEntry of spec.requiredRoot) {
     if (rootEntries.has(requiredEntry)) {
@@ -102,6 +111,19 @@ export function validatePackageReport(report, options = {}) {
     }
   }
 
+  if (maxPackageSize !== null && report.package_size > maxPackageSize) {
+    issues.push({
+      severity: 'warn',
+      code: 'package_size_exceeds_threshold',
+      message: `Upload ZIP size is ${formatBytes(report.package_size)}, which exceeds the local advisory threshold ${formatBytes(maxPackageSize)}. CoreClaw installs dependencies from requirements.txt/package.json, so keep upload packages focused on source, SDK files, schemas, and required runtime assets.`,
+      evidence: {
+        package_size: report.package_size,
+        max_package_size: maxPackageSize,
+      },
+      remediation: 'Remove generated artifacts, caches, bundled dependencies, old ZIP files, and unused runtime assets. For Go Workers, consider UPX compression when the compiled main binary is large.',
+    });
+  }
+
   return {
     language,
     language_label: spec.label,
@@ -115,6 +137,7 @@ function printPackageReport(report) {
   if (report.language_label) {
     console.log(`Language: ${report.language_label}`);
   }
+  console.log(`Size: ${report.package_size_human}`);
   console.log(`Entries: ${report.entry_count}`);
   console.log(`Root entries: ${report.root_entries.join(', ') || '(none)'}`);
   if (report.root_directories.length > 0) {
@@ -128,6 +151,13 @@ function printPackageReport(report) {
     const marker = issue.severity === 'error' ? 'ERROR' : 'WARN';
     console.log(`[${marker}] ${issue.message}`);
   }
+}
+
+function parseMaxPackageSize(value) {
+  if (value === false || value === '0' || value === 0) {
+    return null;
+  }
+  return parseSizeBytes(value ?? DEFAULT_MAX_PACKAGE_SIZE_BYTES, '--max-package-size');
 }
 
 export function enforcePackageGates(report, options = {}) {

@@ -314,6 +314,7 @@ export function buildVerifyPackOptions(projectDir, options = {}) {
     output: resolveVerifyOutput(projectDir, options),
     validate: true,
     go: options.go,
+    maxPackageSize: options.maxPackageSize,
     strict: options.strict,
   };
 }

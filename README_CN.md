@@ -179,7 +179,10 @@ CoreClaw CLI 打包时会排除：
 ```bash
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```
+
+包检查会显示 ZIP 大小。CLI 默认使用 `50MB` 作为本地建议阈值，用来发现误打包的依赖、旧 ZIP、缓存或生成产物。这个阈值不是 CoreClaw 平台文档里的硬性上限；可以用 `--max-package-size` 调整，也可以用 `--max-package-size 0` 关闭这个建议 warning。
 
 ## input_schema.json
 
@@ -538,6 +541,7 @@ node ./bin/coreclaw.js verify ./worker \
   --strict \
   --input input.json \
   --min-results 1 \
+  --max-package-size 50MB \
   --require-table-header \
   --require-output-schema-match
 ```
@@ -548,11 +552,12 @@ node ./bin/coreclaw.js verify ./worker \
 
 ```bash
 node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip
+node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip --max-package-size 25MB --strict
 node ./bin/coreclaw.js pack ./worker --print-files
 node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --strict
 ```
 
-`pack` 会校验项目、复制可上传文件、必要时构建 Go 上传二进制、写出 ZIP，并执行包检查。`--print-files` 可以在不写出 ZIP 的情况下预览实际会进入上传包的文件。`--strict` 会把兼容性 warning 也作为失败处理。
+`pack` 会校验项目、复制可上传文件、必要时构建 Go 上传二进制、写出 ZIP，并执行包检查。`--print-files` 可以在不写出 ZIP 的情况下预览实际会进入上传包的文件。`--max-package-size` 会对异常大的上传包给出本地建议 warning；`--strict` 会把兼容性 warning 和包体积 warning 也作为失败处理。
 
 ### `inspect-package`
 
@@ -562,12 +567,14 @@ node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language python
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --strict
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```
 
 它会检查：
 
 - 根目录入口文件。
 - 必需 SDK 和依赖文件。
+- 上传包大小是否超过可配置的本地建议阈值。
 - ZIP 是否多包了一层目录。
 - 推荐元数据文件。
 - Go 根目录是否有可执行 `main`。

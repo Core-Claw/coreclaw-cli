@@ -192,7 +192,10 @@ Use this gate for a ZIP created by any tool:
 ```bash
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```
+
+Package inspection also reports ZIP size. By default the CLI uses a local advisory threshold of `50MB` to catch accidental bundled dependencies, old archives, caches, or generated assets. This threshold is not a documented CoreClaw platform hard limit. Adjust it with `--max-package-size`, or set `--max-package-size 0` to disable the advisory warning.
 
 ## Input Schema
 
@@ -569,11 +572,12 @@ Creates an upload ZIP.
 
 ```bash
 node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip
+node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip --max-package-size 25MB --strict
 node ./bin/coreclaw.js pack ./worker --print-files
 node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --strict
 ```
 
-`pack` validates the project, stages uploadable files, builds Go upload binaries when needed, writes a ZIP with root entry files, and runs package inspection. Use `--print-files` to preview the exact files that would be packaged without writing a ZIP. Use `--strict` when missing recommended metadata or compatibility warnings should fail.
+`pack` validates the project, stages uploadable files, builds Go upload binaries when needed, writes a ZIP with root entry files, and runs package inspection. Use `--print-files` to preview the exact files that would be packaged without writing a ZIP. Use `--max-package-size` to warn on unusually large upload packages, and use `--strict` when missing recommended metadata, package size warnings, or compatibility warnings should fail.
 
 ### `inspect-package`
 
@@ -583,12 +587,14 @@ Validates an existing upload ZIP.
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language python
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --strict
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```
 
 It checks:
 
 - Required root entry file.
 - Required SDK and dependency files where applicable.
+- Package size against a configurable local advisory threshold.
 - Nested directory mistakes.
 - Recommended metadata files.
 - Go root executable named `main`.
@@ -866,6 +872,7 @@ node ./bin/coreclaw.js verify ./worker \
   --strict \
   --input input.json \
   --min-results 1 \
+  --max-package-size 50MB \
   --require-table-header \
   --require-output-schema-match
 ```

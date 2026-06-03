@@ -127,11 +127,12 @@ Completed:
 - `inspect-package` catches nested directory wrappers and missing root entries.
 - Local-only artifacts such as `.coreclaw`, `node_modules`, virtualenvs, caches, and build outputs are excluded.
 - `coreclaw pack --print-files` previews upload package contents before creating a ZIP.
+- `inspect-package`, `pack`, and `verify` warn when upload ZIPs exceed a configurable local advisory size threshold.
 
 Solvable gaps:
 
-- Add package size warnings for unexpectedly large uploads.
 - Add upload manifest diffing between source and package contents.
+- Add top-largest-entry reporting for oversized packages.
 
 Currently out of local scope:
 
@@ -189,10 +190,11 @@ Currently out of local scope:
 - Added `coreclaw pack --print-files` to preview upload package contents.
 - Added default `input.example.json` generation during `coreclaw init` and excluded it from upload packaging.
 - Added `--json-output` for `validate`, `run`, `verify`, and `inspect-run`.
+- Added configurable package size warnings with `--max-package-size`.
 
 ## Next Milestones
 
-1. Add package size warnings for unexpectedly large uploads.
+1. Add upload manifest diffing and top-largest-entry reporting for package inspection.
 2. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
 3. Add more precise remediation hints for validation and runtime failures.
 4. Stabilize and document a versioned JSON summary schema for CI integrations.

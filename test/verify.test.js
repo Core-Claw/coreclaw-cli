@@ -259,7 +259,26 @@ test('buildVerifyPackOptions passes strict mode to final package inspection', ()
       output: path.join(dir, 'dist', 'worker.zip'),
       validate: true,
       go: 'custom-go',
+      maxPackageSize: undefined,
       strict: true,
+    },
+  );
+});
+
+test('buildVerifyPackOptions passes package size threshold to final package inspection', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-pack-size-options-'));
+
+  assert.deepEqual(
+    buildVerifyPackOptions(dir, {
+      output: path.join(dir, 'dist', 'worker.zip'),
+      maxPackageSize: '25MB',
+    }),
+    {
+      output: path.join(dir, 'dist', 'worker.zip'),
+      validate: true,
+      go: undefined,
+      maxPackageSize: '25MB',
+      strict: undefined,
     },
   );
 });

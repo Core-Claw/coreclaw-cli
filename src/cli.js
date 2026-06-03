@@ -268,18 +268,19 @@ function commandAllowedOptions(command) {
         'cloudOutput',
         'compare',
         'compareOutput',
+        'maxPackageSize',
         'output',
         'pack',
         'staging',
       ]);
     case 'pack':
-      return new Set(['go', 'output', 'printFiles', 'strict', 'validate']);
+      return new Set(['go', 'maxPackageSize', 'output', 'printFiles', 'strict', 'validate']);
     case 'audit':
       return new Set(['all', 'auditProfile', 'failOnWarn', 'ignoreIssueCodes', 'markdown', 'output', 'recursive', 'soft']);
     case 'inspect-run':
       return new Set(['jsonOutput', 'minResults', 'requireOutputSchemaMatch', 'requireResultStatusOk', 'requireStatusOk', 'resultFailValues', 'resultStatusFields']);
     case 'inspect-package':
-      return new Set(['language', 'strict']);
+      return new Set(['language', 'maxPackageSize', 'strict']);
     case 'compare':
       return new Set([...compare, 'output']);
     case 'doctor':
@@ -327,6 +328,7 @@ function isKnownOption(name) {
     'maxDiff',
     'maxOnlyCloud',
     'maxOnlyLocal',
+    'maxPackageSize',
     'minResults',
     'minShared',
     'name',

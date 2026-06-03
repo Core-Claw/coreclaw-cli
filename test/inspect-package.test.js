@@ -73,6 +73,47 @@ test('validatePackageReport reports recommended root file warnings without faili
   assert.equal(validation.issues.some((issue) => issue.message.includes('output_schema.json')), true);
 });
 
+test('validatePackageReport warns when upload ZIP exceeds advisory package size threshold', () => {
+  const report = inspectPackage(writeZip([
+    { name: 'main.js', data: 'console.log("ok")', mode: 0o100644 },
+    { name: 'package.json', data: '{"dependencies":{}}', mode: 0o100644 },
+    { name: 'README.md', data: '# Test\n', mode: 0o100644 },
+    { name: 'input_schema.json', data: '{}', mode: 0o100644 },
+    { name: 'output_schema.json', data: '[]', mode: 0o100644 },
+    { name: 'sdk.js', data: '', mode: 0o100644 },
+    { name: 'sdk_pb.js', data: '', mode: 0o100644 },
+    { name: 'sdk_grpc_pb.js', data: '', mode: 0o100644 },
+    { name: 'large-runtime-asset.bin', data: 'x'.repeat(256), mode: 0o100644 },
+  ]));
+
+  const validation = validatePackageReport(report, { language: 'node', maxPackageSize: '200B' });
+
+  assert.equal(validation.ok, true);
+  assert.equal(validation.issues.some((issue) => issue.code === 'package_size_exceeds_threshold'), true);
+  assert.equal(validation.issues.find((issue) => issue.code === 'package_size_exceeds_threshold').severity, 'warn');
+});
+
+test('inspectPackageCommand strict mode rejects package size warnings', async () => {
+  const zipPath = writeZip([
+    { name: 'main.js', data: 'console.log("ok")', mode: 0o100644 },
+    { name: 'package.json', data: '{"dependencies":{}}', mode: 0o100644 },
+    { name: 'README.md', data: '# Test\n', mode: 0o100644 },
+    { name: 'input_schema.json', data: '{}', mode: 0o100644 },
+    { name: 'output_schema.json', data: '[]', mode: 0o100644 },
+    { name: 'sdk.js', data: '', mode: 0o100644 },
+    { name: 'sdk_pb.js', data: '', mode: 0o100644 },
+    { name: 'sdk_grpc_pb.js', data: '', mode: 0o100644 },
+    { name: 'large-runtime-asset.bin', data: 'x'.repeat(256), mode: 0o100644 },
+  ]);
+
+  await assert.rejects(
+    () => inspectPackageCommand(zipPath, { language: 'node', maxPackageSize: '200B', strict: true }),
+    (error) => error instanceof CliError
+      && /Package validation found 1 warning\(s\) and --strict is enabled/.test(error.message)
+      && /package_size_exceeds_threshold/.test(error.message),
+  );
+});
+
 test('inspectPackageCommand strict mode rejects package warnings', async () => {
   const zipPath = writeZip([
     { name: 'main.js', data: 'console.log("ok")', mode: 0o100644 },

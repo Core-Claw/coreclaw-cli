@@ -62,6 +62,7 @@ export const COMMANDS = {
     usage: [
       'coreclaw verify [project] [--input input.json] [--strict] [--min-results 1] [--no-pack]',
       'coreclaw verify [project] [--no-staging] [--no-install] [--go go]',
+      'coreclaw verify [project] [--max-package-size 50MB]',
       'coreclaw verify [project] --cloud-output cloud.json|cloud.csv [--compare-profile profile.json] [--compare-output report.json]',
       'coreclaw verify [project] [--local-proxy --require-proxy-usage] [--browser-cdp-shim --require-browser-cdp-shim] [--json-output]',
     ],
@@ -75,11 +76,12 @@ export const COMMANDS = {
   pack: {
     summary: 'Create a CoreClaw upload ZIP with the entry file at archive root',
     usage: [
-      'coreclaw pack [project] --output worker.zip [--strict] [--go go] [--no-validate]',
+      'coreclaw pack [project] --output worker.zip [--strict] [--go go] [--max-package-size 50MB] [--no-validate]',
       'coreclaw pack [project] --print-files [--strict] [--go go]',
     ],
     examples: [
       'coreclaw pack ./worker --output ./dist/worker.zip',
+      'coreclaw pack ./worker --output ./dist/worker.zip --max-package-size 25MB --strict',
       'coreclaw pack ./worker --print-files',
       'coreclaw pack ./go-worker --output ./dist/go-worker.zip --go go --strict',
     ],
@@ -106,12 +108,13 @@ export const COMMANDS = {
     ],
   },
   'inspect-package': {
-    summary: 'Validate upload ZIP root entries, nested packaging mistakes, and Go executable mode',
+    summary: 'Validate upload ZIP root entries, package size, nested packaging mistakes, and Go executable mode',
     usage: [
-      'coreclaw inspect-package worker.zip [--language python|node|go] [--strict]',
+      'coreclaw inspect-package worker.zip [--language python|node|go] [--max-package-size 50MB] [--strict]',
     ],
     examples: [
       'coreclaw inspect-package ./dist/worker.zip --language node',
+      'coreclaw inspect-package ./dist/worker.zip --language node --max-package-size 25MB',
       'coreclaw inspect-package ./dist/go-worker.zip --language go --strict',
     ],
   },
