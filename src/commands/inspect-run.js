@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { resultStatusIssues, shouldRequireStatusGate } from '../runtime/result-gates.js';
 import { CliError } from '../utils/errors.js';
 
 export async function inspectRunCommand(runPath, options = {}) {
@@ -8,7 +9,7 @@ export async function inspectRunCommand(runPath, options = {}) {
   }
 
   const runDir = path.resolve(process.cwd(), runPath);
-  const report = inspectRun(runDir);
+  const report = inspectRun(runDir, options);
   printRunReport(report);
 
   const minResults = parseNonNegativeInteger(options.minResults ?? 0, '--min-results');
@@ -30,11 +31,14 @@ export async function inspectRunCommand(runPath, options = {}) {
   if (options.requireOutputSchemaMatch && report.output_schema_issue_count > 0) {
     throw new CliError(`Run ${report.run_id} has ${report.output_schema_issue_count} output_schema mismatch issue(s). See ${report.paths.output_schema_issues}.`);
   }
+  if (shouldRequireStatusGate(options) && report.result_status_issue_count > 0) {
+    throw new CliError(`Run ${report.run_id} has ${report.result_status_issue_count} failing result status row(s). See ${report.paths.results}.`);
+  }
 
   return report;
 }
 
-export function inspectRun(runDir) {
+export function inspectRun(runDir, options = {}) {
   const summaryPath = path.join(runDir, 'summary.json');
   if (!fs.existsSync(summaryPath)) {
     throw new CliError(`Missing run summary: ${summaryPath}`);
@@ -46,6 +50,7 @@ export function inspectRun(runDir) {
   const headersPath = path.join(runDir, 'table_headers.json');
   const logsPath = path.join(runDir, 'logs.ndjson');
   const outputSchemaIssuesPath = path.join(runDir, 'output_schema_issues.json');
+  const statusIssues = resultStatusIssues(runDir, options);
 
   return {
     run_dir: runDir,
@@ -60,6 +65,8 @@ export function inspectRun(runDir) {
     log_rows: fs.existsSync(logsPath) ? countNdjsonRows(logsPath) : null,
     table_headers_rows: fs.existsSync(headersPath) ? readJson(headersPath).length : 0,
     output_schema_issues_rows: fs.existsSync(outputSchemaIssuesPath) ? readJson(outputSchemaIssuesPath).length : null,
+    result_status_issue_count: statusIssues.length,
+    result_status_issues: statusIssues,
     paths: {
       summary: summaryPath,
       results: resultsPath,
@@ -77,6 +84,7 @@ function printRunReport(report) {
   console.log(`Logs: summary=${report.log_count} logs.ndjson=${report.log_rows ?? 'missing'}`);
   console.log(`Table headers: summary=${report.table_header_count} file=${report.table_headers_rows}`);
   console.log(`Output schema issues: summary=${report.output_schema_issue_count} file=${report.output_schema_issues_rows ?? 'missing'}`);
+  console.log(`Result status issues: ${report.result_status_issue_count}`);
 }
 
 function parseNonNegativeInteger(value, name) {

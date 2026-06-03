@@ -28,6 +28,7 @@ export async function startCaptchaCdpShim({
   const stats = {
     connections: 0,
     paths: [],
+    authorizationHeaders: [],
     automaticSolverCalls: 0,
     calls: [],
     invalidCalls: [],
@@ -59,6 +60,7 @@ export async function startCaptchaCdpShim({
   wss.on('connection', (client, request) => {
     stats.connections += 1;
     stats.paths.push(request.url ?? '/');
+    stats.authorizationHeaders.push(request.headers.authorization ?? null);
     connections.add(client);
     let upstream = null;
     if (upstreamUrl) {

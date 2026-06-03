@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { installCommandForProject, runProcess } from '../src/runtime/executor.js';
+import { commandForProject, installCommandForProject, runProcess } from '../src/runtime/executor.js';
 
 test('runProcess kills a process after idle timeout', async () => {
   const logs = [];
@@ -36,11 +36,65 @@ test('installCommandForProject uses Windows npm launcher when needed', () => {
 
   if (process.platform === 'win32') {
     assert.match(command, /cmd\.exe$/i);
-    assert.deepEqual(args, ['/d', '/s', '/c', 'npm', 'ci']);
+    assert.deepEqual(args, ['/d', '/s', '/c', 'npm', 'ci', '--omit=dev']);
   } else {
     assert.equal(command, 'npm');
-    assert.deepEqual(args, ['ci']);
+    assert.deepEqual(args, ['ci', '--omit=dev']);
   }
+});
+
+test('installCommandForProject omits Node devDependencies without a package lock', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-node-install-'));
+  const [command, args] = installCommandForProject({
+    language: 'node',
+    projectDir: dir,
+  });
+
+  if (process.platform === 'win32') {
+    assert.match(command, /cmd\.exe$/i);
+    assert.deepEqual(args, ['/d', '/s', '/c', 'npm', 'install', '--omit=dev']);
+  } else {
+    assert.equal(command, 'npm');
+    assert.deepEqual(args, ['install', '--omit=dev']);
+  }
+});
+
+test('Python command and install use the configured interpreter command', () => {
+  assert.deepEqual(
+    commandForProject({ language: 'python', projectDir: process.cwd() }, { python: 'py -3' }),
+    ['py', ['-3', 'main.py']],
+  );
+  assert.deepEqual(
+    installCommandForProject({ language: 'python', projectDir: process.cwd() }, { python: 'py -3' }),
+    ['py', ['-3', '-m', 'pip', 'install', '-r', 'requirements.txt']],
+  );
+});
+
+test('Go install uses the configured Go command', () => {
+  assert.deepEqual(
+    installCommandForProject({ language: 'go', projectDir: process.cwd() }, { go: 'go1.24' }),
+    ['go1.24', ['mod', 'download']],
+  );
+});
+
+test('commandForProject runs a staged Go upload binary when root main exists', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-go-executor-'));
+  const binary = path.join(dir, process.platform === 'win32' ? 'main.exe' : 'main');
+  fs.writeFileSync(binary, 'binary');
+
+  const [command, args] = commandForProject({ language: 'go', projectDir: dir }, { go: 'custom-go' });
+
+  assert.equal(command, binary);
+  assert.deepEqual(args, []);
+});
+
+test('commandForProject falls back to go run for source-directory Go development runs', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-go-source-executor-'));
+
+  const [command, args] = commandForProject({ language: 'go', projectDir: dir }, { go: 'custom-go' });
+
+  assert.equal(command, 'custom-go');
+  assert.deepEqual(args, ['run', '.']);
 });
 
 test('node tmp hook maps absolute /tmp paths into the run temp directory', async () => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readJson, validateProject } from '../src/validation/project.js';
+import { formatIssues, readJson, scanSourceForBrowserContract, scanSourceForProxyContract, validateProject } from '../src/validation/project.js';
 
 test('validateProject accepts legacy workers without output_schema.json as warnings', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-'));
@@ -101,6 +101,228 @@ test('validateProject warns about Node package fields that diverge from CoreClaw
   assert.equal(result.issues.some((issue) => issue.code === 'node_package_type_not_commonjs'), true);
 });
 
+test('validateProject warns when Node source imports undeclared runtime dependencies', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const axios = require('axios')",
+    "const grpc = require('@grpc/grpc-js/build/src/index')",
+    "import('puppeteer-core')",
+    "require('./helper')",
+    "require('node:fs')",
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'node_dependency_not_declared');
+
+  assert.equal(result.ok, true);
+  assert.equal(Boolean(issue), true);
+  assert.deepEqual(issue.evidence.missing_packages, ['axios', 'puppeteer-core']);
+  assert.deepEqual(issue.evidence.import_files, ['main.js']);
+  assert.deepEqual(issue.evidence.package_json_sections_checked, ['dependencies', 'optionalDependencies']);
+  assert.match(issue.message, /axios \(main\.js\)/);
+  assert.match(issue.message, /puppeteer-core \(main\.js\)/);
+  assert.match(issue.remediation, /dependencies or optionalDependencies/);
+});
+
+test('validateProject treats devDependencies-only Node imports as undeclared for platform runtime', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+    },
+    devDependencies: {
+      axios: '^1.7.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), "const axios = require('axios')\n");
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'node_dependency_not_declared' && issue.evidence.missing_packages.includes('axios')), true);
+});
+
+test('validateProject accepts declared Node optional dependencies and ignores builtins and local imports', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+    },
+    optionalDependencies: {
+      'puppeteer-core': '^24.0.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const fs = require('fs')",
+    "const timers = require('node:timers/promises')",
+    "const local = require('./helper')",
+    "const puppeteer = require('puppeteer-core')",
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'helper.js'), "module.exports = {}\n");
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'node_dependency_not_declared'), false);
+});
+
+test('validateProject warns when HTTP workers do not read CoreClaw proxy env', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+      axios: '^1.7.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const axios = require('axios')",
+    'async function main() {',
+    "  await axios.get('https://example.com')",
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'http_proxy_env_not_used');
+  const formatted = formatIssues(result.issues);
+
+  assert.equal(result.ok, true);
+  assert.equal(Boolean(issue && /PROXY_AUTH and PROXY_DOMAIN/.test(issue.message)), true);
+  assert.deepEqual(issue.docs, ['worker-definition/platform-features/proxy-support.md']);
+  assert.deepEqual(issue.evidence.missing_env, ['PROXY_AUTH', 'PROXY_DOMAIN']);
+  assert.deepEqual(issue.evidence.http_client_files, ['main.js']);
+  assert.match(issue.remediation, /socks5:\/\/PROXY_AUTH@PROXY_DOMAIN/);
+  assert.match(formatted, /Docs: worker-definition\/platform-features\/proxy-support\.md/);
+  assert.match(formatted, /Evidence: HTTP client files=main\.js; missing env=PROXY_AUTH, PROXY_DOMAIN/);
+  assert.match(formatted, /Fix: Read PROXY_AUTH and PROXY_DOMAIN/);
+});
+
+test('validateProject accepts HTTP workers that read split SOCKS5 proxy env in helper modules', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+      axios: '^1.7.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), "require('./client')\n");
+  fs.writeFileSync(path.join(dir, 'client.js'), [
+    "const axios = require('axios')",
+    'const proxyAuth = process.env.PROXY_AUTH',
+    'const proxyDomain = process.env.PROXY_DOMAIN',
+    'const proxyUrl = proxyAuth && proxyDomain ? `socks5://${proxyAuth}@${proxyDomain}` : null',
+    "axios.get('https://example.com', { proxy: false, proxyUrl })",
+    '',
+  ].join('\n'));
+
+  const scan = scanSourceForProxyContract(dir, 'node');
+  const result = validateProject(dir);
+
+  assert.equal(scan.usesHttpClient, true);
+  assert.equal(scan.readsProxyAuth, true);
+  assert.equal(scan.readsProxyDomain, true);
+  assert.equal(result.issues.some((issue) => issue.code === 'http_proxy_env_not_used'), false);
+});
+
+test('validateProject does not treat browser CDP workers as direct HTTP proxy workers', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+      'puppeteer-core': '^24.0.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const puppeteer = require('puppeteer-core')",
+    'const auth = process.env.PROXY_AUTH',
+    'const chromeWs = process.env.ChromeWs',
+    'async function main() {',
+    '  await puppeteer.connect({ browserWSEndpoint: `ws://${auth}@${chromeWs}` })',
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.some((issue) => issue.code === 'http_proxy_env_not_used'), false);
+  assert.equal(result.issues.some((issue) => issue.code === 'browser_endpoint_env_not_used'), false);
+});
+
+test('validateProject warns when browser automation does not read CoreClaw browser endpoint env', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+      'puppeteer-core': '^24.0.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const puppeteer = require('puppeteer-core')",
+    'async function main() {',
+    '  const browser = await puppeteer.launch({ headless: true })',
+    '  await browser.close()',
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'browser_endpoint_env_not_used');
+  const formatted = formatIssues(result.issues);
+
+  assert.equal(result.ok, true);
+  assert.equal(Boolean(issue), true);
+  assert.deepEqual(issue.evidence.browser_client_files, ['main.js']);
+  assert.deepEqual(issue.evidence.missing_env, ['PROXY_AUTH', 'ChromeWs/ChromeHttp/LightpandaDomain']);
+  assert.match(issue.remediation, /ChromeWs, ChromeHttp, or LightpandaDomain/);
+  assert.match(formatted, /Docs: worker-definition\/browser-automation\/overview\.md/);
+});
+
+test('validateProject accepts Lightpanda workers using bracket env access', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'playwright>=1.52.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import os',
+    'from playwright.async_api import async_playwright',
+    '',
+    'async def run():',
+    '    auth = os.environ["PROXY_AUTH"]',
+    '    endpoint = os.environ["LightpandaDomain"]',
+    '    async with async_playwright() as playwright:',
+    '        browser = await playwright.chromium.connect_over_cdp(endpoint, headers={"Authorization": auth})',
+    '        await browser.close()',
+    '',
+  ].join('\n'));
+
+  const scan = scanSourceForBrowserContract(dir, 'python');
+  const result = validateProject(dir);
+
+  assert.equal(scan.usesBrowserAutomation, true);
+  assert.equal(scan.readsProxyAuth, true);
+  assert.equal(scan.readsAnyBrowserEndpoint, true);
+  assert.equal(result.issues.some((issue) => issue.code === 'browser_endpoint_env_not_used'), false);
+});
+
 test('validateProject warns about runtime table header drift', () => {
   const dir = makeNodeProject();
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
@@ -148,21 +370,106 @@ test('validateProject rejects Python workers missing SDK runtime dependencies', 
   assert.equal(result.issues.some((issue) => issue.code === 'missing_runtime_dependency' && /grpcio/.test(issue.message)), true);
 });
 
+test('validateProject warns when Python source imports undeclared third-party dependencies', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'beautifulsoup4>=4.12.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import json, os',
+    'import requests',
+    'from bs4 import BeautifulSoup',
+    'from playwright.async_api import async_playwright',
+    'from helper import build_url',
+    'from sdk import CoreSDK',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'helper.py'), 'def build_url(): return "https://example.com"\n');
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'python_dependency_not_declared');
+
+  assert.equal(result.ok, true);
+  assert.equal(Boolean(issue), true);
+  assert.deepEqual(issue.evidence.missing_packages, ['playwright', 'requests']);
+  assert.deepEqual(issue.evidence.import_files, ['main.py']);
+  assert.deepEqual(issue.evidence.requirements_file, 'requirements.txt');
+  assert.match(issue.message, /requests \(main\.py\)/);
+  assert.match(issue.message, /playwright \(main\.py\)/);
+  assert.match(issue.remediation, /requirements\.txt/);
+});
+
+test('validateProject accepts declared Python mapped packages and ignores local modules and SDK files', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'beautifulsoup4>=4.12.0',
+    'playwright-stealth>=1.0.6',
+    'opencv-python>=4.10.0',
+    'PySocks>=1.7.1',
+    'python-jobspy>=1.1.80',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import csv',
+    'import cv2',
+    'import socks',
+    'from jobspy import scrape_jobs',
+    'from bs4 import BeautifulSoup',
+    'from playwright_stealth import stealth_async',
+    'from local_pkg import run',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(dir, 'local_pkg'));
+  fs.writeFileSync(path.join(dir, 'local_pkg', '__init__.py'), 'def run(): pass\n');
+  fs.writeFileSync(path.join(dir, 'sdk.py'), 'import grpc\nfrom google.protobuf import empty_pb2\n');
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'python_dependency_not_declared'), false);
+});
+
+test('validateProject ignores Python test sources when checking runtime dependencies', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(dir, 'tests'));
+  fs.writeFileSync(path.join(dir, 'tests', 'test_worker.py'), [
+    'import pytest',
+    'import pandas as pd',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'python_dependency_not_declared'), false);
+});
+
 test('validateProject rejects Go workers missing SDK runtime dependencies', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-go-'));
-  fs.mkdirSync(path.join(dir, 'GoSdk'));
-  fs.writeFileSync(path.join(dir, 'main.go'), '');
-  fs.writeFileSync(path.join(dir, 'go.sum'), '');
+  const dir = makeGoProject();
   fs.writeFileSync(path.join(dir, 'go.mod'), 'module example\n\ngo 1.23\n\nrequire google.golang.org/protobuf v1.36.6\n');
-  for (const file of ['sdk.go', 'sdk.pb.go', 'sdk_grpc.pb.go']) {
-    fs.writeFileSync(path.join(dir, 'GoSdk', file), '');
-  }
-  writeInputSchema(dir);
 
   const result = validateProject(dir);
 
   assert.equal(result.ok, false);
   assert.equal(result.issues.some((issue) => issue.code === 'missing_runtime_dependency' && /google.golang.org\/grpc/.test(issue.message)), true);
+});
+
+test('validateProject rejects Go workers with missing SDK dependency checksums', () => {
+  const dir = makeGoProject();
+  fs.writeFileSync(path.join(dir, 'go.sum'), 'google.golang.org/protobuf v1.36.6 h1:fixture=\n');
+
+  const result = validateProject(dir);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.issues.some((issue) => issue.code === 'go_missing_module_checksum' && /google.golang.org\/grpc/.test(issue.message)), true);
 });
 
 function makeNodeProject() {
@@ -171,6 +478,42 @@ function makeNodeProject() {
   fs.writeFileSync(path.join(dir, 'sdk.js'), '');
   fs.writeFileSync(path.join(dir, 'sdk_pb.js'), '');
   fs.writeFileSync(path.join(dir, 'sdk_grpc_pb.js'), '');
+  writeInputSchema(dir);
+  return dir;
+}
+
+function makePythonProject() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-python-'));
+  for (const file of ['main.py', 'sdk.py', 'sdk_pb2.py', 'sdk_pb2_grpc.py']) {
+    fs.writeFileSync(path.join(dir, file), '');
+  }
+  writeInputSchema(dir);
+  return dir;
+}
+
+function makeGoProject() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-go-'));
+  fs.mkdirSync(path.join(dir, 'GoSdk'));
+  fs.writeFileSync(path.join(dir, 'main.go'), '');
+  fs.writeFileSync(path.join(dir, 'go.mod'), [
+    'module example',
+    '',
+    'go 1.23',
+    '',
+    'require (',
+    '  google.golang.org/grpc v1.75.1',
+    '  google.golang.org/protobuf v1.36.6',
+    ')',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'go.sum'), [
+    'google.golang.org/grpc v1.75.1 h1:fixture=',
+    'google.golang.org/protobuf v1.36.6 h1:fixture=',
+    '',
+  ].join('\n'));
+  for (const file of ['sdk.go', 'sdk.pb.go', 'sdk_grpc.pb.go']) {
+    fs.writeFileSync(path.join(dir, 'GoSdk', file), '');
+  }
   writeInputSchema(dir);
   return dir;
 }

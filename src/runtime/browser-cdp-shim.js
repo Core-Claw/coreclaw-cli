@@ -12,6 +12,7 @@ export async function startBrowserCdpShim({
   const stats = {
     connections: 0,
     paths: [],
+    authorizationHeaders: [],
     upstreamConnectionFailures: 0,
   };
   const server = http.createServer((request, response) => {
@@ -41,6 +42,7 @@ export async function startBrowserCdpShim({
   wss.on('connection', (client, request) => {
     stats.connections += 1;
     stats.paths.push(request.url ?? '/');
+    stats.authorizationHeaders.push(request.headers.authorization ?? null);
     connections.add(client);
 
     let upstream = null;

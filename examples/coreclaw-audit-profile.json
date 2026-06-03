@@ -1,0 +1,10 @@
+{
+  "fail_on_warn": true,
+  "ignore_issue_codes": [
+    "missing_output_schema_legacy",
+    "input_legacy_type_alias",
+    "output_legacy_type_alias"
+  ],
+  "output": "../tmp/all-workers-audit.json",
+  "markdown": "../tmp/all-workers-audit.md"
+}

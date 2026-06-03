@@ -17,16 +17,37 @@
   "scripts": {
     "start": "node ./bin/coreclaw.js",
     "test": "node --test",
-    "verify": "npm test && node ./bin/coreclaw.js verify ./examples/node-hello --cloud-output ./examples/node-hello-cloud-output.json --compare-output ./tmp/node-hello-comparison.json --min-shared 1 --max-diff 0 --output ./tmp/node-hello.zip"
+    "verify": "npm test && node ./bin/coreclaw.js verify ./examples/node-hello --cloud-output ./examples/node-hello-cloud-output.json --compare-output ./tmp/node-hello-comparison.json --min-shared 1 --max-diff 0 --output ./tmp/node-hello.zip",
+    "verify:release": "npm run verify && git diff --check && npm pack --dry-run --json"
   },
   "files": [
     "bin",
     "src",
     "proto",
     "templates",
+    "examples/coreclaw-audit-profile.json",
+    "examples/node-hello-cloud-output.json",
+    "examples/node-hello/input_schema.json",
+    "examples/node-hello/main.js",
+    "examples/node-hello/output_schema.json",
+    "examples/node-hello/package-lock.json",
+    "examples/node-hello/package.json",
+    "examples/node-hello/README.md",
+    "examples/node-hello/sdk.js",
+    "examples/node-hello/sdk_grpc_pb.js",
+    "examples/node-hello/sdk_pb.js",
+    "examples/python-hello/input_schema.json",
+    "examples/python-hello/main.py",
+    "examples/python-hello/output_schema.json",
+    "examples/python-hello/README.md",
+    "examples/python-hello/requirements.txt",
+    "examples/python-hello/sdk.py",
+    "examples/python-hello/sdk_pb2.py",
+    "examples/python-hello/sdk_pb2_grpc.py",
     "validation",
     "README.md",
     "README_CN.md",
+    "CONTRIBUTING.md",
     "LICENSE"
   ],
   "keywords": [

@@ -9,38 +9,47 @@ export function commandForProject(project, options = {}) {
   }
 
   if (project.language === 'python') {
-    return [options.python ?? 'python', ['main.py']];
+    const [command, args] = splitCommandLine(options.python ?? 'python', '--python');
+    return [command, [...args, 'main.py']];
   }
 
   if (project.language === 'node') {
-    return [options.node ?? 'node', ['main.js']];
+    const [command, args] = splitCommandLine(options.node ?? 'node', '--node');
+    return [command, [...args, 'main.js']];
   }
 
   if (project.language === 'go') {
+    const rootExePath = platformExe(path.join(project.projectDir, 'main'));
+    if (fs.existsSync(rootExePath)) {
+      return [rootExePath, []];
+    }
     const exePath = platformExe(path.join(project.projectDir, '.coreclaw', 'bin', 'worker'));
     if (fs.existsSync(exePath)) {
       return [exePath, []];
     }
-    return [options.go ?? 'go', ['run', '.']];
+    const [command, args] = splitCommandLine(options.go ?? 'go', '--go');
+    return [command, [...args, 'run', '.']];
   }
 
   throw new CliError(`Unsupported language: ${project.language}`);
 }
 
-export function installCommandForProject(project) {
+export function installCommandForProject(project, options = {}) {
   if (project.language === 'python') {
-    return ['python', ['-m', 'pip', 'install', '-r', 'requirements.txt']];
+    const [command, args] = splitCommandLine(options.python ?? 'python', '--python');
+    return [command, [...args, '-m', 'pip', 'install', '-r', 'requirements.txt']];
   }
 
   if (project.language === 'node') {
     if (fs.existsSync(path.join(project.projectDir, 'package-lock.json'))) {
-      return platformShellCommand('npm', ['ci']);
+      return platformShellCommand('npm', ['ci', '--omit=dev']);
     }
-    return platformShellCommand('npm', ['install']);
+    return platformShellCommand('npm', ['install', '--omit=dev']);
   }
 
   if (project.language === 'go') {
-    return ['go', ['mod', 'download']];
+    const [command, args] = splitCommandLine(options.go ?? 'go', '--go');
+    return [command, [...args, 'mod', 'download']];
   }
 
   return null;
@@ -147,11 +156,23 @@ export async function runProcess({ command, args, cwd, env, store, label = comma
 }
 
 function splitCommand(command) {
-  const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, '')) ?? [];
+  const parts = splitCommandParts(command);
   if (parts.length === 0) {
     throw new CliError('--command cannot be empty.');
   }
   return [parts[0], parts.slice(1)];
+}
+
+export function splitCommandLine(command, optionName) {
+  const parts = splitCommandParts(command);
+  if (parts.length === 0) {
+    throw new CliError(`${optionName} cannot be empty.`);
+  }
+  return [parts[0], parts.slice(1)];
+}
+
+function splitCommandParts(command) {
+  return String(command ?? '').match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, '')) ?? [];
 }
 
 function splitLines(text) {

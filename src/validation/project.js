@@ -1,9 +1,223 @@
 import fs from 'node:fs';
+import { builtinModules } from 'node:module';
 import path from 'node:path';
 import { CliError } from '../utils/errors.js';
 import { validateInputSchema, validateOutputSchema } from './schema.js';
 
 const RUNTIME_HEADER_FORMATS = new Set(['text', 'integer', 'boolean', 'array', 'object']);
+const SOURCE_SCAN_EXTENSIONS = new Set(['.py', '.js', '.cjs', '.mjs', '.go']);
+const NODE_SOURCE_SCAN_EXTENSIONS = new Set(['.js', '.cjs', '.mjs']);
+const PYTHON_SOURCE_SCAN_EXTENSIONS = new Set(['.py']);
+const SOURCE_SCAN_IGNORED_DIRS = new Set([
+  '.coreclaw',
+  '.coreclaw-python-venv',
+  '.git',
+  '.hg',
+  '.svn',
+  '.venv',
+  '__pycache__',
+  '__tests__',
+  'build',
+  'coverage',
+  'dist',
+  'node_modules',
+  'tests',
+  'venv',
+]);
+const NODE_BUILTIN_MODULES = new Set([
+  ...builtinModules,
+  ...builtinModules.map((name) => `node:${name}`),
+]);
+const NODE_IMPORT_SPECIFIER_PATTERNS = [
+  /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  /(?:^|[\n;])\s*import\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]/g,
+  /(?:^|[\n;])\s*export\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]/g,
+];
+const PYTHON_STDLIB_MODULES = new Set([
+  '__future__',
+  'abc',
+  'argparse',
+  'array',
+  'asyncio',
+  'base64',
+  'binascii',
+  'bisect',
+  'builtins',
+  'calendar',
+  'cmath',
+  'collections',
+  'concurrent',
+  'contextlib',
+  'copy',
+  'csv',
+  'ctypes',
+  'dataclasses',
+  'datetime',
+  'decimal',
+  'difflib',
+  'email',
+  'enum',
+  'errno',
+  'functools',
+  'getpass',
+  'glob',
+  'gzip',
+  'hashlib',
+  'heapq',
+  'hmac',
+  'html',
+  'http',
+  'importlib',
+  'inspect',
+  'io',
+  'ipaddress',
+  'itertools',
+  'json',
+  'logging',
+  'math',
+  'multiprocessing',
+  'operator',
+  'os',
+  'pathlib',
+  'pickle',
+  'platform',
+  'queue',
+  'random',
+  're',
+  'secrets',
+  'shlex',
+  'shutil',
+  'signal',
+  'socket',
+  'sqlite3',
+  'ssl',
+  'statistics',
+  'string',
+  'struct',
+  'subprocess',
+  'sys',
+  'tempfile',
+  'textwrap',
+  'threading',
+  'time',
+  'timeit',
+  'traceback',
+  'types',
+  'typing',
+  'unittest',
+  'urllib',
+  'uuid',
+  'warnings',
+  'weakref',
+  'xml',
+  'zipfile',
+]);
+const PYTHON_IMPORT_PACKAGE_MAP = new Map([
+  ['bs4', 'beautifulsoup4'],
+  ['cv2', 'opencv-python'],
+  ['dateutil', 'python-dateutil'],
+  ['dotenv', 'python-dotenv'],
+  ['google', 'protobuf'],
+  ['grpc', 'grpcio'],
+  ['jobspy', 'python-jobspy'],
+  ['pil', 'pillow'],
+  ['playwright_stealth', 'playwright-stealth'],
+  ['sklearn', 'scikit-learn'],
+  ['socks', 'pysocks'],
+  ['yaml', 'pyyaml'],
+]);
+const HTTP_CLIENT_PATTERNS = {
+  python: [
+    /\bimport\s+requests\b/,
+    /\bfrom\s+requests\b/,
+    /\brequests\.(get|post|put|patch|delete|head|request|Session)\b/,
+    /\bimport\s+httpx\b/,
+    /\bfrom\s+httpx\b/,
+    /\bhttpx\.(get|post|put|patch|delete|head|request|Client|AsyncClient)\b/,
+    /\bimport\s+aiohttp\b/,
+    /\baiohttp\.(ClientSession|request)\b/,
+    /\bimport\s+urllib\.request\b/,
+    /\burllib\.request\.(urlopen|Request)\b/,
+    /\bimport\s+cloudscraper\b/,
+    /\bcloudscraper\.(create_scraper|CloudScraper)\b/,
+  ],
+  node: [
+    /\brequire\(['"]axios['"]\)/,
+    /\bfrom\s+['"]axios['"]/,
+    /\baxios\.(get|post|put|patch|delete|head|request|create)\b/,
+    /\bfetch\s*\(/,
+    /\brequire\(['"]node-fetch['"]\)/,
+    /\bfrom\s+['"]node-fetch['"]/,
+    /\brequire\(['"]undici['"]\)/,
+    /\bfrom\s+['"]undici['"]/,
+    /\bimport\s*\(['"]undici['"]\)/,
+    /\brequire\(['"]got['"]\)/,
+    /\bfrom\s+['"]got['"]/,
+    /\bgot\.(get|post|put|patch|delete|head)\b/,
+  ],
+  go: [
+    /import\s*(?:\([^)]*["']net\/http["'][^)]*\)|["']net\/http["'])/s,
+    /\bhttp\.(Get|Post|Head|NewRequest|NewRequestWithContext|DefaultClient)\b/,
+    /\bhttp\.Client\b/,
+  ],
+};
+const BROWSER_AUTOMATION_PATTERNS = {
+  python: [
+    /\bfrom\s+playwright(?:\.(?:async_api|sync_api))?\s+import\b/,
+    /\bimport\s+playwright\b/,
+    /\basync_playwright\s*\(/,
+    /\bconnect_over_cdp\s*\(/,
+    /\bfrom\s+selenium\b/,
+    /\bimport\s+selenium\b/,
+    /\bwebdriver\.Remote\s*\(/,
+    /\bfrom\s+DrissionPage\b/,
+    /\bChromiumOptions\b/,
+    /\bChromium\s*\(/,
+  ],
+  node: [
+    /\brequire\(['"](?:playwright|playwright-core|puppeteer|puppeteer-core|selenium-webdriver)['"]\)/,
+    /\bfrom\s+['"](?:playwright|playwright-core|puppeteer|puppeteer-core|selenium-webdriver)['"]/,
+    /\bconnectOverCDP\s*\(/,
+    /\bconnect_over_cdp\s*\(/,
+    /\bpuppeteer\.connect\s*\(/,
+    /\bchromium\.connectOverCDP\s*\(/,
+    /\bwebdriver\.Builder\s*\(/,
+  ],
+  go: [
+    /github\.com\/chromedp\/chromedp/,
+    /\bchromedp\./,
+  ],
+};
+const PROXY_AUTH_PATTERNS = {
+  python: envReadPattern('python', 'PROXY_AUTH'),
+  node: envReadPattern('node', 'PROXY_AUTH'),
+  go: envReadPattern('go', 'PROXY_AUTH'),
+};
+const PROXY_DOMAIN_PATTERNS = {
+  python: envReadPattern('python', 'PROXY_DOMAIN'),
+  node: envReadPattern('node', 'PROXY_DOMAIN'),
+  go: envReadPattern('go', 'PROXY_DOMAIN'),
+};
+const PROXY_SUPPORT_DOC = 'worker-definition/platform-features/proxy-support.md';
+const BROWSER_AUTOMATION_DOCS = [
+  'worker-definition/browser-automation/overview.md',
+  'worker-definition/browser-automation/playwright.md',
+  'worker-definition/browser-automation/puppeteer.md',
+  'worker-definition/browser-automation/selenium.md',
+  'worker-definition/browser-automation/drissionpage.md',
+  'worker-definition/browser-automation/lightpanda.md',
+];
+const NODE_DEPENDENCY_DOCS = [
+  'worker-definition/project-structure.md',
+  'worker-definition/examples/nodejs-example.md',
+  'builds-and-runs.md',
+];
+const PYTHON_DEPENDENCY_DOCS = [
+  'worker-definition/project-structure.md',
+  'worker-definition/examples/python-example.md',
+  'builds-and-runs.md',
+];
 
 export const LANGUAGE_SPECS = {
   python: {
@@ -81,6 +295,11 @@ export function validateProject(projectDir, options = {}) {
 
   issues.push(...validatePackageCompatibility(project));
   issues.push(...validateRuntimeDependencies(project));
+  issues.push(...validateDeclaredNodeSourceDependencies(project));
+  issues.push(...validateDeclaredPythonSourceDependencies(project));
+  issues.push(...validateGoModuleChecksums(project));
+  issues.push(...validateProxyUsageContract(project));
+  issues.push(...validateBrowserEndpointContract(project));
 
   if (fs.existsSync(outputPath)) {
     issues.push(...validateOutputSchema(readJson(outputPath), outputPath));
@@ -100,6 +319,161 @@ export function validateProject(projectDir, options = {}) {
     ...project,
     issues,
     ok: !issues.some((issue) => issue.severity === 'error'),
+  };
+}
+
+export function validateBrowserEndpointContract(project) {
+  const scan = scanSourceForBrowserContract(project.projectDir, project.language);
+  if (!scan.usesBrowserAutomation) {
+    return [];
+  }
+
+  if (scan.readsProxyAuth && scan.readsAnyBrowserEndpoint) {
+    return [];
+  }
+
+  const missing = [
+    scan.readsProxyAuth ? null : 'PROXY_AUTH',
+    scan.readsAnyBrowserEndpoint ? null : 'ChromeWs/ChromeHttp/LightpandaDomain',
+  ].filter(Boolean);
+  return [{
+    severity: 'warn',
+    code: 'browser_endpoint_env_not_used',
+    message: `Project appears to use browser automation (${scan.evidence.join(', ')}) but does not read ${missing.join(' and ')}. CoreClaw browser workers should connect to the platform-hosted remote browser through ChromeWs, ChromeHttp, or LightpandaDomain with credentials from PROXY_AUTH instead of launching or assuming a local browser.`,
+    docs: BROWSER_AUTOMATION_DOCS,
+    evidence: {
+      browser_client_files: scan.evidence,
+      missing_env: missing,
+      observed_env: scan.observedEnv,
+      source_file_count: scan.source_file_count,
+    },
+    remediation: 'Read PROXY_AUTH plus ChromeWs, ChromeHttp, or LightpandaDomain at runtime and build the documented remote browser endpoint. Use LOCAL_DEV-only branches for launching a local browser during development.',
+  }];
+}
+
+export function scanSourceForBrowserContract(projectDir, language) {
+  const sourceFiles = collectSourceFiles(projectDir);
+  const browserPatterns = BROWSER_AUTOMATION_PATTERNS[language] ?? [];
+  const envPatterns = {
+    proxyAuth: PROXY_AUTH_PATTERNS[language],
+    chromeWs: envReadPattern(language, 'ChromeWs'),
+    chromeHttp: envReadPattern(language, 'ChromeHttp'),
+    lightpandaDomain: envReadPattern(language, 'LightpandaDomain'),
+    cdpEndpoint: envReadPattern(language, 'CDP_ENDPOINT'),
+    browserWsEndpoint: envReadPattern(language, 'BROWSER_WS_ENDPOINT'),
+  };
+  const evidence = [];
+  const reads = Object.fromEntries(Object.keys(envPatterns).map((key) => [key, false]));
+
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(projectDir, filePath).replaceAll(path.sep, '/');
+    for (const [key, pattern] of Object.entries(envPatterns)) {
+      if (!reads[key] && pattern?.test(text)) {
+        reads[key] = true;
+      }
+    }
+    if (evidence.length < 5 && browserPatterns.some((pattern) => pattern.test(text))) {
+      evidence.push(relativePath);
+    }
+  }
+
+  const observedEnv = [
+    reads.proxyAuth ? 'PROXY_AUTH' : null,
+    reads.chromeWs ? 'ChromeWs' : null,
+    reads.chromeHttp ? 'ChromeHttp' : null,
+    reads.lightpandaDomain ? 'LightpandaDomain' : null,
+    reads.cdpEndpoint ? 'CDP_ENDPOINT' : null,
+    reads.browserWsEndpoint ? 'BROWSER_WS_ENDPOINT' : null,
+  ].filter(Boolean);
+
+  return {
+    source_file_count: sourceFiles.length,
+    usesBrowserAutomation: evidence.length > 0,
+    readsProxyAuth: reads.proxyAuth,
+    readsAnyBrowserEndpoint: Boolean(
+      reads.chromeWs
+      || reads.chromeHttp
+      || reads.lightpandaDomain
+      || reads.cdpEndpoint
+      || reads.browserWsEndpoint,
+    ),
+    observedEnv,
+    evidence,
+  };
+}
+
+export function validateProxyUsageContract(project) {
+  const scan = scanSourceForProxyContract(project.projectDir, project.language);
+  if (!scan.usesHttpClient) {
+    return [];
+  }
+
+  if (scan.readsProxyAuth && scan.readsProxyDomain) {
+    return [];
+  }
+
+  const missing = [
+    scan.readsProxyAuth ? null : 'PROXY_AUTH',
+    scan.readsProxyDomain ? null : 'PROXY_DOMAIN',
+  ].filter(Boolean);
+  return [{
+    severity: 'warn',
+    code: 'http_proxy_env_not_used',
+    message: `Project appears to make direct HTTP requests (${scan.evidence.join(', ')}) but does not read ${missing.join(' and ')}. CoreClaw runs HTTP request workers in an isolated network sandbox; build a SOCKS5 proxy URL from PROXY_AUTH and PROXY_DOMAIN or use a hosted browser endpoint for browser automation.`,
+    docs: [PROXY_SUPPORT_DOC],
+    evidence: {
+      http_client_files: scan.evidence,
+      missing_env: missing,
+      source_file_count: scan.source_file_count,
+    },
+    remediation: 'Read PROXY_AUTH and PROXY_DOMAIN at runtime, build socks5://PROXY_AUTH@PROXY_DOMAIN, and configure that URL on the HTTP client. For browser automation, connect through ChromeWs or LightpandaDomain instead of making direct HTTP requests.',
+  }];
+}
+
+function envReadPattern(language, name) {
+  const escaped = escapeRegExp(name);
+  if (language === 'python') {
+    return new RegExp(`\\bos\\.(?:getenv\\(\\s*["']${escaped}["']|environ(?:\\.get\\(\\s*["']${escaped}["']|\\[\\s*["']${escaped}["']\\s*\\]))`);
+  }
+  if (language === 'node') {
+    return new RegExp(`\\bprocess\\.env(?:\\.${escaped}|\\[\\s*["']${escaped}["']\\s*\\])`);
+  }
+  if (language === 'go') {
+    return new RegExp(`\\bos\\.Getenv\\(\\s*["']${escaped}["']\\s*\\)`);
+  }
+  return null;
+}
+
+export function scanSourceForProxyContract(projectDir, language) {
+  const sourceFiles = collectSourceFiles(projectDir);
+  const httpPatterns = HTTP_CLIENT_PATTERNS[language] ?? [];
+  const authPattern = PROXY_AUTH_PATTERNS[language];
+  const domainPattern = PROXY_DOMAIN_PATTERNS[language];
+  const evidence = [];
+  let readsProxyAuth = false;
+  let readsProxyDomain = false;
+
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(projectDir, filePath).replaceAll(path.sep, '/');
+    if (!readsProxyAuth && authPattern?.test(text)) {
+      readsProxyAuth = true;
+    }
+    if (!readsProxyDomain && domainPattern?.test(text)) {
+      readsProxyDomain = true;
+    }
+    if (evidence.length < 5 && httpPatterns.some((pattern) => pattern.test(text))) {
+      evidence.push(relativePath);
+    }
+  }
+
+  return {
+    source_file_count: sourceFiles.length,
+    usesHttpClient: evidence.length > 0,
+    readsProxyAuth,
+    readsProxyDomain,
+    evidence,
   };
 }
 
@@ -148,6 +522,196 @@ function validateRuntimeDependencies(project) {
     }));
 }
 
+export function validateDeclaredNodeSourceDependencies(project) {
+  if (project.language !== 'node') {
+    return [];
+  }
+
+  const packagePath = path.join(project.projectDir, 'package.json');
+  if (!fs.existsSync(packagePath)) {
+    return [];
+  }
+
+  const declared = readDeclaredDependencies('node', packagePath);
+  const imports = scanNodeImportSpecifiers(project.projectDir);
+  const missingPackages = [];
+  const importFiles = new Map();
+
+  for (const item of imports) {
+    const packageName = nodePackageNameFromSpecifier(item.specifier);
+    if (!packageName || declared.has(packageName)) {
+      continue;
+    }
+    if (!importFiles.has(packageName)) {
+      missingPackages.push(packageName);
+      importFiles.set(packageName, new Set());
+    }
+    importFiles.get(packageName).add(item.file);
+  }
+
+  if (missingPackages.length === 0) {
+    return [];
+  }
+
+  const packageEvidence = missingPackages
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => `${name} (${[...importFiles.get(name)].sort().join(', ')})`);
+
+  return [{
+    severity: 'warn',
+    code: 'node_dependency_not_declared',
+    message: `Project imports Node package(s) not declared in package.json runtime dependencies: ${packageEvidence.join('; ')}. CoreClaw installs packages from package.json after upload, so local node_modules can hide cloud runtime failures.`,
+    docs: NODE_DEPENDENCY_DOCS,
+    evidence: {
+      missing_packages: missingPackages.sort((a, b) => a.localeCompare(b)),
+      import_files: [...new Set([...importFiles.values()].flatMap((files) => [...files]))].sort(),
+      package_json_sections_checked: ['dependencies', 'optionalDependencies'],
+    },
+    remediation: 'Add each imported third-party package to package.json dependencies or optionalDependencies, then rerun coreclaw validate/verify before uploading.',
+  }];
+}
+
+export function scanNodeImportSpecifiers(projectDir) {
+  const imports = [];
+  for (const filePath of collectSourceFiles(projectDir, projectDir, NODE_SOURCE_SCAN_EXTENSIONS)) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(projectDir, filePath).replaceAll(path.sep, '/');
+    for (const pattern of NODE_IMPORT_SPECIFIER_PATTERNS) {
+      pattern.lastIndex = 0;
+      for (const match of text.matchAll(pattern)) {
+        imports.push({
+          file: relativePath,
+          specifier: match[1],
+        });
+      }
+    }
+  }
+  return imports;
+}
+
+function nodePackageNameFromSpecifier(specifier) {
+  if (!specifier || specifier.startsWith('.') || specifier.startsWith('/') || /^[a-z]+:/i.test(specifier)) {
+    return '';
+  }
+  if (NODE_BUILTIN_MODULES.has(specifier)) {
+    return '';
+  }
+  if (specifier.startsWith('@')) {
+    const parts = specifier.split('/');
+    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : '';
+  }
+  return specifier.split('/')[0];
+}
+
+export function validateDeclaredPythonSourceDependencies(project) {
+  if (project.language !== 'python') {
+    return [];
+  }
+
+  const requirementsPath = path.join(project.projectDir, 'requirements.txt');
+  if (!fs.existsSync(requirementsPath)) {
+    return [];
+  }
+
+  const declared = readDeclaredDependencies('python', requirementsPath);
+  const imports = scanPythonImportModules(project.projectDir);
+  const missingPackages = [];
+  const importFiles = new Map();
+
+  for (const item of imports) {
+    const packageName = pythonPackageNameFromModule(project.projectDir, item.module);
+    if (!packageName || declared.has(packageName)) {
+      continue;
+    }
+    if (!importFiles.has(packageName)) {
+      missingPackages.push(packageName);
+      importFiles.set(packageName, new Set());
+    }
+    importFiles.get(packageName).add(item.file);
+  }
+
+  if (missingPackages.length === 0) {
+    return [];
+  }
+
+  const sortedMissing = missingPackages.sort((a, b) => a.localeCompare(b));
+  const packageEvidence = sortedMissing
+    .map((name) => `${name} (${[...importFiles.get(name)].sort().join(', ')})`);
+
+  return [{
+    severity: 'warn',
+    code: 'python_dependency_not_declared',
+    message: `Project imports Python package(s) not declared in requirements.txt: ${packageEvidence.join('; ')}. CoreClaw installs Python packages from requirements.txt after upload, so local site-packages can hide cloud runtime failures.`,
+    docs: PYTHON_DEPENDENCY_DOCS,
+    evidence: {
+      missing_packages: sortedMissing,
+      import_files: [...new Set([...importFiles.values()].flatMap((files) => [...files]))].sort(),
+      requirements_file: 'requirements.txt',
+    },
+    remediation: 'Add each imported third-party package to requirements.txt, preferably with a pinned or bounded version, then rerun coreclaw validate/verify before uploading.',
+  }];
+}
+
+export function scanPythonImportModules(projectDir) {
+  const imports = [];
+  for (const filePath of collectSourceFiles(projectDir, projectDir, PYTHON_SOURCE_SCAN_EXTENSIONS)) {
+    const fileName = path.basename(filePath);
+    if (fileName === 'sdk.py' || fileName === 'sdk_pb2.py' || fileName === 'sdk_pb2_grpc.py') {
+      continue;
+    }
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(projectDir, filePath).replaceAll(path.sep, '/');
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) {
+        continue;
+      }
+      const importMatch = line.match(/^import\s+(.+)$/);
+      if (importMatch) {
+        for (const modulePart of importMatch[1].split(',')) {
+          const moduleName = modulePart.trim().split(/\s+as\s+|\s+/)[0];
+          addPythonImport(imports, relativePath, moduleName);
+        }
+        continue;
+      }
+      const fromMatch = line.match(/^from\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+import\s+/);
+      if (fromMatch) {
+        addPythonImport(imports, relativePath, fromMatch[1]);
+      }
+    }
+  }
+  return imports;
+}
+
+function addPythonImport(imports, file, moduleName) {
+  if (!moduleName || moduleName.startsWith('.')) {
+    return;
+  }
+  const topLevelModule = moduleName.split('.')[0].toLowerCase();
+  if (topLevelModule) {
+    imports.push({ file, module: topLevelModule });
+  }
+}
+
+function pythonPackageNameFromModule(projectDir, moduleName) {
+  if (!moduleName || PYTHON_STDLIB_MODULES.has(moduleName)) {
+    return '';
+  }
+  if (isLocalPythonModule(projectDir, moduleName)) {
+    return '';
+  }
+  return normalizePythonPackageName(PYTHON_IMPORT_PACKAGE_MAP.get(moduleName) ?? moduleName);
+}
+
+function isLocalPythonModule(projectDir, moduleName) {
+  return fs.existsSync(path.join(projectDir, `${moduleName}.py`))
+    || fs.existsSync(path.join(projectDir, moduleName, '__init__.py'));
+}
+
+function normalizePythonPackageName(name) {
+  return name.toLowerCase().replace(/[-_.]+/g, '-');
+}
+
 function readDeclaredDependencies(language, filePath) {
   if (language === 'node') {
     const manifest = readJson(filePath);
@@ -162,15 +726,76 @@ function readDeclaredDependencies(language, filePath) {
     return new Set(text.split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith('#'))
-      .map((line) => line.split(/[<>=!~;\s[]/, 1)[0].toLowerCase()));
+      .map((line) => line.split(/[<>=!~;\s[]/, 1)[0])
+      .filter((name) => name && !name.startsWith('-'))
+      .map(normalizePythonPackageName));
   }
 
   if (language === 'go') {
-    const matches = text.matchAll(/(?:^|\s)([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)\s+v[0-9]/gm);
-    return new Set(Array.from(matches, (match) => match[1]));
+    return new Set(readGoRequiredModules(filePath).keys());
   }
 
   return new Set();
+}
+
+function validateGoModuleChecksums(project) {
+  if (project.language !== 'go') {
+    return [];
+  }
+
+  const goModPath = path.join(project.projectDir, 'go.mod');
+  const goSumPath = path.join(project.projectDir, 'go.sum');
+  if (!fs.existsSync(goModPath) || !fs.existsSync(goSumPath)) {
+    return [];
+  }
+
+  const modules = readGoRequiredModules(goModPath);
+  const goSum = fs.readFileSync(goSumPath, 'utf8');
+  const issues = [];
+  for (const moduleName of project.spec.runtimeDependencies) {
+    const version = modules.get(moduleName);
+    if (!version) {
+      continue;
+    }
+    const hasChecksum = new RegExp(`^${escapeRegExp(moduleName)}\\s+${escapeRegExp(version)}\\s+h1:`, 'm').test(goSum);
+    if (!hasChecksum) {
+      issues.push({
+        severity: 'error',
+        code: 'go_missing_module_checksum',
+        message: `go.sum is missing checksum for "${moduleName} ${version}". CoreClaw Go upload builds run with -mod=readonly, so dependency files cannot be rewritten during preflight. Run "go mod tidy" or "go mod download" and commit the updated go.sum before verify/pack.`,
+      });
+    }
+  }
+  return issues;
+}
+
+function readGoRequiredModules(filePath) {
+  const modules = new Map();
+  let inRequireBlock = false;
+  for (const rawLine of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+\/\/.*$/, '').trim();
+    if (!line || line.startsWith('//')) {
+      continue;
+    }
+    if (line === 'require (') {
+      inRequireBlock = true;
+      continue;
+    }
+    if (inRequireBlock && line === ')') {
+      inRequireBlock = false;
+      continue;
+    }
+    const requireLine = line.startsWith('require ') ? line.slice('require '.length).trim() : (inRequireBlock ? line : '');
+    const match = requireLine.match(/^([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)\s+(v[^\s]+)$/);
+    if (match) {
+      modules.set(match[1], match[2]);
+    }
+  }
+  return modules;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export function readJson(filePath) {
@@ -186,10 +811,75 @@ export function formatIssues(issues) {
     return 'No validation issues found.';
   }
 
-  return issues.map((issue) => {
-    const marker = issue.severity === 'error' ? 'ERROR' : 'WARN';
-    return `[${marker}] ${issue.message}`;
-  }).join('\n');
+  return issues.map(formatIssue).join('\n');
+}
+
+export function formatIssue(issue) {
+  const marker = issue.severity === 'error' ? 'ERROR' : 'WARN';
+  const lines = [`[${marker}] ${issue.message}`];
+  const details = formatIssueDetails(issue);
+  if (details.length > 0) {
+    lines.push(...details.map((detail) => `  - ${detail}`));
+  }
+  return lines.join('\n');
+}
+
+export function formatIssueDetails(issue) {
+  const details = [];
+  const docs = formatIssueDocs(issue);
+  if (docs) {
+    details.push(`Docs: ${docs}`);
+  }
+  const evidence = formatIssueEvidence(issue);
+  if (evidence) {
+    details.push(`Evidence: ${evidence}`);
+  }
+  if (issue.remediation) {
+    details.push(`Fix: ${issue.remediation}`);
+  }
+  if (Array.isArray(issue.commands) && issue.commands.length > 0) {
+    details.push(`Commands: ${issue.commands.join(' && ')}`);
+  }
+  return details;
+}
+
+function formatIssueDocs(issue) {
+  if (!Array.isArray(issue.docs) || issue.docs.length === 0) {
+    return '';
+  }
+  return issue.docs.join(', ');
+}
+
+function formatIssueEvidence(issue) {
+  if (!issue.evidence || typeof issue.evidence !== 'object' || Array.isArray(issue.evidence)) {
+    return '';
+  }
+  const parts = [];
+  if (Array.isArray(issue.evidence.http_client_files) && issue.evidence.http_client_files.length > 0) {
+    parts.push(`HTTP client files=${issue.evidence.http_client_files.join(', ')}`);
+  }
+  if (Array.isArray(issue.evidence.missing_env) && issue.evidence.missing_env.length > 0) {
+    parts.push(`missing env=${issue.evidence.missing_env.join(', ')}`);
+  }
+  for (const [key, value] of Object.entries(issue.evidence)) {
+    if (key === 'http_client_files' || key === 'missing_env') {
+      continue;
+    }
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    parts.push(`${key}=${Array.isArray(value) ? value.join(', ') : String(value)}`);
+  }
+  return parts.join('; ');
+}
+
+export function formatIssueMarkdown(issue, prefix = '-') {
+  const lines = [`${prefix} **${issue.severity.toUpperCase()}** \`${issue.code}\`: ${issue.message}`];
+  const details = formatIssueDetails(issue);
+  for (const detail of details) {
+    lines.push(`  ${prefix} ${detail}`);
+  }
+  return lines.join('\n');
 }
 
 function validateRuntimeHeaders(outputSchema, tableHeaders) {
@@ -249,6 +939,31 @@ function outputSchemaTypeToHeaderFormat(type) {
     return 'integer';
   }
   return RUNTIME_HEADER_FORMATS.has(type) ? type : null;
+}
+
+function collectSourceFiles(rootDir, currentDir = rootDir, extensions = SOURCE_SCAN_EXTENSIONS) {
+  const files = [];
+  for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) {
+      if (entry.isDirectory() && !SOURCE_SCAN_IGNORED_DIRS.has(entry.name)) {
+        files.push(...collectSourceFiles(rootDir, path.join(currentDir, entry.name), extensions));
+      }
+      continue;
+    }
+
+    const fullPath = path.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      if (!SOURCE_SCAN_IGNORED_DIRS.has(entry.name)) {
+        files.push(...collectSourceFiles(rootDir, fullPath, extensions));
+      }
+      continue;
+    }
+
+    if (entry.isFile() && extensions.has(path.extname(entry.name))) {
+      files.push(fullPath);
+    }
+  }
+  return files;
 }
 
 function stripJsonBom(text) {

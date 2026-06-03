@@ -6,13 +6,17 @@ import { toPosixPath } from '../utils/paths.js';
 const EXCLUDED_DIRS = new Set([
   '.git',
   '.coreclaw',
+  '.coreclaw-python-venv',
   'node_modules',
   '__pycache__',
+  '__tests__',
   '.pytest_cache',
   '.venv',
   'venv',
+  'coverage',
   'dist',
   'build',
+  'tests',
 ]);
 
 const EXCLUDED_EXTENSIONS = new Set(['.pyc', '.pyo', '.log']);

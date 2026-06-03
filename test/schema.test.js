@@ -256,8 +256,44 @@ test('accepts legacy number type as compatibility warning', () => {
 
   assert.equal(inputIssues.some((issue) => issue.severity === 'error'), false);
   assert.equal(outputIssues.some((issue) => issue.severity === 'error'), false);
-  assert.equal(inputIssues.some((issue) => issue.severity === 'warn' && issue.message.includes('legacy compatibility')), true);
-  assert.equal(outputIssues.some((issue) => issue.severity === 'warn' && issue.message.includes('legacy compatibility alias')), true);
+  assert.equal(inputIssues.some((issue) => issue.code === 'input_legacy_type_alias' && issue.message.includes('legacy compatibility')), true);
+  assert.equal(outputIssues.some((issue) => issue.code === 'output_legacy_type_alias' && issue.message.includes('legacy compatibility alias')), true);
+});
+
+test('schema validation issues always include stable codes', () => {
+  const inputIssues = validateInputSchema({
+    b: 'missing',
+    properties: [
+      'bad',
+      { name: 'bad name', type: 'float', editor: 'slider', required: true },
+      { name: 'limit', type: 'number' },
+    ],
+  });
+  const outputIssues = validateOutputSchema([
+    null,
+    { name: 'price', type: 'number' },
+    { name: 'price', type: 'float' },
+  ]);
+
+  for (const issue of [...inputIssues, ...outputIssues]) {
+    assert.equal(typeof issue.code, 'string');
+    assert.notEqual(issue.code.length, 0);
+  }
+  assert.deepEqual(inputIssues.map((issue) => issue.code), [
+    'input_property_invalid',
+    'input_property_name_invalid',
+    'input_property_unsupported_type',
+    'input_property_unsupported_editor',
+    'input_required_missing_default',
+    'input_legacy_type_alias',
+    'input_schema_b_missing_property',
+  ]);
+  assert.deepEqual(outputIssues.map((issue) => issue.code), [
+    'output_column_invalid',
+    'output_legacy_type_alias',
+    'output_column_duplicate_name',
+    'output_column_unsupported_type',
+  ]);
 });
 
 test('warns when input editor does not match the documented type', () => {

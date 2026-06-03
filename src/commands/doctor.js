@@ -1,23 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import { resolveBrowserEndpoints } from '../runtime/env.js';
-
-const CHECKS = [
-  ['node', ['--version']],
-  platformCheck('npm', ['--version']),
-  ['python', ['--version']],
-  ['go', ['version']],
-];
+import { splitCommandLine } from '../runtime/executor.js';
+import { CliError } from '../utils/errors.js';
 
 export async function doctorCommand(options = {}) {
   console.log('CoreClaw CLI doctor');
-  for (const [command, args] of CHECKS) {
-    const result = spawnSync(command, args, { encoding: 'utf8', shell: false, windowsHide: true });
-    if (result.error) {
-      console.log(`[MISS] ${displayCommand(command, args)}: ${result.error.message}`);
-      continue;
+  const failedChecks = [];
+  for (const check of buildChecks(options)) {
+    const result = printCheck(check);
+    if (!result.ok) {
+      failedChecks.push(check.label);
     }
-    const output = `${result.stdout}${result.stderr}`.trim();
-    console.log(`[ OK ] ${displayCommand(command, args)}: ${output}`);
   }
   console.log('[INFO] Local runtime gRPC endpoint: 127.0.0.1:20086');
   const browser = await checkLocalChrome(options);
@@ -30,6 +23,10 @@ export async function doctorCommand(options = {}) {
     console.log(`[INFO] ChromeHttp fallback: ${browser.chromeHttp}`);
   }
   console.log('[INFO] PROXY_AUTH and PROXY_DOMAIN are disabled by default; use --cloud-proxy or explicit proxy options to emulate cloud proxy variables');
+  console.log('[INFO] LightpandaDomain is disabled by default; use --lightpanda-domain or --lightpanda-shim for Lightpanda workers');
+  if (options.strict && failedChecks.length > 0) {
+    throw new CliError(`doctor --strict failed: missing or unusable tool(s): ${failedChecks.join(', ')}`);
+  }
 }
 
 export async function checkLocalChrome(options = {}) {
@@ -40,16 +37,44 @@ export async function checkLocalChrome(options = {}) {
   });
 }
 
-function platformCheck(command, args) {
-  if (process.platform === 'win32') {
-    return ['cmd.exe', ['/c', `${command}.cmd`, ...args]];
-  }
-  return [command, args];
+export function buildChecks(options = {}) {
+  const [pythonCommand, pythonArgs] = splitCommandLine(options.python ?? 'python', '--python');
+  const [goCommand, goArgs] = splitCommandLine(options.go ?? 'go', '--go');
+  const [nodeCommand, nodeArgs] = splitCommandLine(options.node ?? 'node', '--node');
+  return [
+    { label: 'node', command: nodeCommand, args: [...nodeArgs, '--version'] },
+    { label: 'npm', ...platformCheck('npm', ['--version']) },
+    { label: options.python ?? 'python', command: pythonCommand, args: [...pythonArgs, '--version'] },
+    { label: `${options.python ?? 'python'} pip`, command: pythonCommand, args: [...pythonArgs, '-m', 'pip', '--version'] },
+    { label: options.go ?? 'go', command: goCommand, args: [...goArgs, 'version'] },
+  ];
 }
 
-function displayCommand(command, args) {
-  if (command === 'cmd.exe' && args[0] === '/c') {
-    return args[1];
+function printCheck(check) {
+  const result = runToolCheck(check);
+  if (result.ok) {
+    console.log(`[ OK ] ${check.label}: ${result.output}`);
+    return result;
   }
-  return command;
+  console.log(`[MISS] ${check.label}: ${result.output}`);
+  return result;
+}
+
+export function runToolCheck({ command, args }) {
+  const result = spawnSync(command, args, { encoding: 'utf8', shell: false, windowsHide: true });
+  if (result.error) {
+    return { ok: false, output: result.error.message };
+  }
+  const output = `${result.stdout}${result.stderr}`.trim();
+  if (result.status !== 0) {
+    return { ok: false, output: output || `exit code ${result.status}` };
+  }
+  return { ok: true, output };
+}
+
+function platformCheck(command, args) {
+  if (process.platform === 'win32') {
+    return { command: 'cmd.exe', args: ['/c', `${command}.cmd`, ...args] };
+  }
+  return { command, args };
 }

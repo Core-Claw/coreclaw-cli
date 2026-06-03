@@ -29,15 +29,15 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
   const issues = [];
 
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
-    return [error(`${filePath} must be a JSON object.`)];
+    return [error(`${filePath} must be a JSON object.`, 'input_schema_root_invalid')];
   }
 
   if (!schema.b || typeof schema.b !== 'string') {
-    issues.push(error('input_schema.json must define root field "b" as the task splitting key.'));
+    issues.push(error('input_schema.json must define root field "b" as the task splitting key.', 'input_schema_missing_b'));
   }
 
   if (!Array.isArray(schema.properties)) {
-    issues.push(error('input_schema.json must define "properties" as an array.'));
+    issues.push(error('input_schema.json must define "properties" as an array.', 'input_schema_properties_invalid'));
     return issues;
   }
 
@@ -47,18 +47,18 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
   for (const [index, property] of schema.properties.entries()) {
     const prefix = `input_schema.properties[${index}]`;
     if (!property || typeof property !== 'object' || Array.isArray(property)) {
-      issues.push(error(`${prefix} must be an object.`));
+      issues.push(error(`${prefix} must be an object.`, 'input_property_invalid'));
       continue;
     }
 
     if (!property.name || typeof property.name !== 'string') {
-      issues.push(error(`${prefix}.name is required and must be a string.`));
+      issues.push(error(`${prefix}.name is required and must be a string.`, 'input_property_missing_name'));
     } else {
       if (/[^\w.-]/.test(property.name)) {
-        issues.push(error(`${prefix}.name "${property.name}" contains unsupported characters. Use ASCII letters, numbers, underscore, dash, or dot.`));
+        issues.push(error(`${prefix}.name "${property.name}" contains unsupported characters. Use ASCII letters, numbers, underscore, dash, or dot.`, 'input_property_name_invalid'));
       }
       if (names.has(property.name)) {
-        issues.push(error(`${prefix}.name "${property.name}" is duplicated.`));
+        issues.push(error(`${prefix}.name "${property.name}" is duplicated.`, 'input_property_duplicate_name'));
       }
       names.add(property.name);
       if (property.name === schema.b) {
@@ -68,14 +68,14 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
     if (!SUPPORTED_TYPES.has(property.type)) {
       if (LEGACY_COMPAT_TYPES.has(property.type)) {
-        issues.push(warn(`${prefix}.type "${property.type}" is accepted for legacy compatibility, but CoreClaw documents "${LEGACY_COMPAT_TYPES.get(property.type)}"; prefer "${LEGACY_COMPAT_TYPES.get(property.type)}" for whole-number fields.`));
+        issues.push(warn(`${prefix}.type "${property.type}" is accepted for legacy compatibility, but CoreClaw documents "${LEGACY_COMPAT_TYPES.get(property.type)}"; prefer "${LEGACY_COMPAT_TYPES.get(property.type)}" for whole-number fields.`, 'input_legacy_type_alias'));
       } else {
-        issues.push(error(`${prefix}.type "${property.type}" is not supported. Use ${[...SUPPORTED_TYPES].join(', ')}.`));
+        issues.push(error(`${prefix}.type "${property.type}" is not supported. Use ${[...SUPPORTED_TYPES].join(', ')}.`, 'input_property_unsupported_type'));
       }
     }
 
     if (property.editor && !SUPPORTED_EDITORS.has(property.editor)) {
-      issues.push(warn(`${prefix}.editor "${property.editor}" is not documented by CoreClaw. Verify platform rendering before upload.`));
+      issues.push(warn(`${prefix}.editor "${property.editor}" is not documented by CoreClaw. Verify platform rendering before upload.`, 'input_property_unsupported_editor'));
     }
 
     if (property.editor && EDITOR_EXPECTED_TYPES.has(property.editor)) {
@@ -90,7 +90,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     }
 
     if (property.required === true && property.default === undefined) {
-      issues.push(warn(`${prefix} is required but has no default. Local default runs will need --input or --json.`));
+      issues.push(warn(`${prefix} is required but has no default. Local default runs will need --input or --json.`, 'input_required_missing_default'));
     }
 
     issues.push(...validatePropertyOptions(property, prefix));
@@ -100,9 +100,9 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
   }
 
   if (schema.b && !splitProperty) {
-    issues.push(error(`input_schema.json b="${schema.b}" does not match any property name.`));
+    issues.push(error(`input_schema.json b="${schema.b}" does not match any property name.`, 'input_schema_b_missing_property'));
   } else if (splitProperty && splitProperty.type !== 'array') {
-    issues.push(error(`input_schema.json b="${schema.b}" must point to a property with type "array".`));
+    issues.push(error(`input_schema.json b="${schema.b}" must point to a property with type "array".`, 'input_schema_b_not_array'));
   }
 
   return issues;
@@ -110,7 +110,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
 export function validateOutputSchema(schema, filePath = 'output_schema.json') {
   if (!Array.isArray(schema)) {
-    return [error(`${filePath} must be a JSON array.`)];
+    return [error(`${filePath} must be a JSON array.`, 'output_schema_root_invalid')];
   }
 
   const issues = [];
@@ -119,24 +119,24 @@ export function validateOutputSchema(schema, filePath = 'output_schema.json') {
   for (const [index, column] of schema.entries()) {
     const prefix = `output_schema[${index}]`;
     if (!column || typeof column !== 'object' || Array.isArray(column)) {
-      issues.push(error(`${prefix} must be an object.`));
+      issues.push(error(`${prefix} must be an object.`, 'output_column_invalid'));
       continue;
     }
 
     if (!column.name || typeof column.name !== 'string') {
-      issues.push(error(`${prefix}.name is required and must be a string.`));
+      issues.push(error(`${prefix}.name is required and must be a string.`, 'output_column_missing_name'));
     } else {
       if (names.has(column.name)) {
-        issues.push(error(`${prefix}.name "${column.name}" is duplicated.`));
+        issues.push(error(`${prefix}.name "${column.name}" is duplicated.`, 'output_column_duplicate_name'));
       }
       names.add(column.name);
     }
 
     if (!SUPPORTED_TYPES.has(column.type)) {
       if (LEGACY_COMPAT_TYPES.has(column.type)) {
-        issues.push(warn(`${prefix}.type "${column.type}" is accepted as a legacy compatibility alias for "${LEGACY_COMPAT_TYPES.get(column.type)}"; prefer documented CoreClaw type "${LEGACY_COMPAT_TYPES.get(column.type)}".`));
+        issues.push(warn(`${prefix}.type "${column.type}" is accepted as a legacy compatibility alias for "${LEGACY_COMPAT_TYPES.get(column.type)}"; prefer documented CoreClaw type "${LEGACY_COMPAT_TYPES.get(column.type)}".`, 'output_legacy_type_alias'));
       } else {
-        issues.push(error(`${prefix}.type "${column.type}" is not supported. Use ${[...SUPPORTED_TYPES].join(', ')}.`));
+        issues.push(error(`${prefix}.type "${column.type}" is not supported. Use ${[...SUPPORTED_TYPES].join(', ')}.`, 'output_column_unsupported_type'));
       }
     }
   }
@@ -144,12 +144,12 @@ export function validateOutputSchema(schema, filePath = 'output_schema.json') {
   return issues;
 }
 
-function error(message) {
-  return { severity: 'error', message };
+function error(message, code = 'schema_error') {
+  return { severity: 'error', code, message };
 }
 
-function warn(message, code) {
-  return code ? { severity: 'warn', code, message } : { severity: 'warn', message };
+function warn(message, code = 'schema_warning') {
+  return { severity: 'warn', code, message };
 }
 
 function normalizeType(type) {

@@ -5,6 +5,7 @@ import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
 import { auditCommand } from './commands/audit.js';
 import { inspectRunCommand } from './commands/inspect-run.js';
+import { inspectPackageCommand } from './commands/inspect-package.js';
 import { verifyCommand } from './commands/verify.js';
 import { compareCommand } from './commands/compare.js';
 import { CliError } from './utils/errors.js';
@@ -24,6 +25,7 @@ export async function runCli(argv) {
   }
 
   const parsed = parseArgs(args.slice(1));
+  validateOptionsForCommand(command, parsed.options);
 
   switch (command) {
     case 'init':
@@ -47,18 +49,21 @@ export async function runCli(argv) {
     case 'inspect-run':
       await inspectRunCommand(parsed.positionals[0], parsed.options);
       return;
+    case 'inspect-package':
+      await inspectPackageCommand(parsed.positionals[0], parsed.options);
+      return;
     case 'compare':
       await compareCommand(parsed.positionals[0], parsed.positionals[1], parsed.options);
       return;
     case 'doctor':
-      await doctorCommand();
+      await doctorCommand(parsed.options);
       return;
     default:
       throw new CliError(`Unknown command "${command}". Run coreclaw --help.`);
   }
 }
 
-function parseArgs(args) {
+export function parseArgs(args) {
   const options = {};
   const positionals = [];
   const aliases = {
@@ -79,12 +84,20 @@ function parseArgs(args) {
     if (arg.startsWith('--')) {
       const [rawName, rawValue] = arg.slice(2).split(/=(.*)/s, 2);
       if (rawName.startsWith('no-')) {
-        options[toCamel(rawName.slice(3))] = false;
+        const name = toCamel(rawName.slice(3));
+        assertKnownOption(rawName, name);
+        if (!isBooleanOption(name)) {
+          throw new CliError(`Option "--${rawName}" can only be used with boolean options.`);
+        }
+        options[name] = false;
         continue;
       }
       const name = toCamel(rawName);
+      assertKnownOption(rawName, name);
       if (rawValue !== undefined) {
-        options[name] = rawValue;
+        options[name] = isBooleanOption(name)
+          ? parseBooleanOptionValue(rawValue, arg)
+          : rawValue;
       } else if (isBooleanOption(name)) {
         options[name] = true;
       } else {
@@ -123,31 +136,217 @@ function readOptionValue(args, index, displayName) {
   return value;
 }
 
+function parseBooleanOptionValue(value, displayName) {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  throw new CliError(`Boolean option "${displayName}" only accepts "true" or "false" when using --flag=value.`);
+}
+
 function toCamel(value) {
+  if (value === 'input-json') {
+    return 'json';
+  }
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
+}
+
+function assertKnownOption(rawName, name) {
+  if (!isKnownOption(name)) {
+    throw new CliError(`Unknown option "--${rawName}". Run coreclaw --help.`);
+  }
+}
+
+function validateOptionsForCommand(command, options) {
+  const allowed = commandAllowedOptions(command);
+  if (!allowed) {
+    return;
+  }
+  for (const name of Object.keys(options)) {
+    if (!allowed.has(name)) {
+      throw new CliError(`Option "--${toKebab(name)}" is not supported by "coreclaw ${command}". Run coreclaw --help.`);
+    }
+  }
+}
+
+function commandAllowedOptions(command) {
+  const runtime = new Set([
+    'browserCdpShim',
+    'browserTimeoutMs',
+    'captchaSolver',
+    'chromeHttp',
+    'chromeWs',
+    'cloudProxy',
+    'command',
+    'discoverChrome',
+    'go',
+    'idleTimeoutMs',
+    'input',
+    'install',
+    'installIdleTimeoutMs',
+    'installTimeoutMs',
+    'json',
+    'lightpandaDomain',
+    'lightpandaShim',
+    'localProxy',
+    'minResults',
+    'mockNetwork',
+    'node',
+    'proxyAuth',
+    'proxyDomain',
+    'python',
+    'requireBrowser',
+    'requireBrowserCdpShim',
+    'requireCaptchaSolver',
+    'requireLightpandaShim',
+    'requireOutputSchemaMatch',
+    'requireProxyUsage',
+    'requireResultStatusOk',
+    'requireStatusOk',
+    'requireTableHeader',
+    'resultFailValues',
+    'resultStatusFields',
+    'skipOutputValidation',
+    'skipValidate',
+    'split',
+    'strict',
+    'timeoutMs',
+  ]);
+  const compare = new Set([
+    'compareProfile',
+    'ignoreFields',
+    'ignoreKeys',
+    'ignoreKeysFile',
+    'keyFields',
+    'maxDiff',
+    'maxOnlyCloud',
+    'maxOnlyLocal',
+    'minShared',
+    'outputSchema',
+    'requireOutputSchemaMatch',
+    'requireResultStatusOk',
+    'requireStatusOk',
+    'requireUniqueKeys',
+    'resultFailValues',
+    'resultStatusFields',
+  ]);
+
+  switch (command) {
+    case 'init':
+      return new Set(['force', 'lang', 'language', 'name']);
+    case 'validate':
+      return new Set(['soft', 'strict']);
+    case 'run':
+      return runtime;
+    case 'verify':
+      return new Set([
+        ...runtime,
+        ...compare,
+        'cloudOutput',
+        'compare',
+        'compareOutput',
+        'output',
+        'pack',
+        'staging',
+      ]);
+    case 'pack':
+      return new Set(['go', 'output', 'strict', 'validate']);
+    case 'audit':
+      return new Set(['all', 'auditProfile', 'failOnWarn', 'ignoreIssueCodes', 'markdown', 'output', 'recursive', 'soft']);
+    case 'inspect-run':
+      return new Set(['minResults', 'requireOutputSchemaMatch', 'requireResultStatusOk', 'requireStatusOk', 'resultFailValues', 'resultStatusFields']);
+    case 'inspect-package':
+      return new Set(['language', 'strict']);
+    case 'compare':
+      return new Set([...compare, 'output']);
+    case 'doctor':
+      return new Set(['go', 'localChromeHost', 'node', 'python', 'strict']);
+    default:
+      return null;
+  }
+}
+
+function isKnownOption(name) {
+  return isBooleanOption(name) || new Set([
+    'auditProfile',
+    'browserTimeoutMs',
+    'chromeHttp',
+    'chromeWs',
+    'cloudOutput',
+    'command',
+    'compareOutput',
+    'compareProfile',
+    'go',
+    'idleTimeoutMs',
+    'ignoreFields',
+    'ignoreIssueCodes',
+    'ignoreKeys',
+    'ignoreKeysFile',
+    'input',
+    'installIdleTimeoutMs',
+    'installTimeoutMs',
+    'json',
+    'keyFields',
+    'lang',
+    'language',
+    'lightpandaDomain',
+    'localChromeHost',
+    'markdown',
+    'maxDiff',
+    'maxOnlyCloud',
+    'maxOnlyLocal',
+    'minResults',
+    'minShared',
+    'name',
+    'node',
+    'output',
+    'outputSchema',
+    'proxyAuth',
+    'proxyDomain',
+    'python',
+    'resultFailValues',
+    'resultStatusFields',
+    'split',
+    'timeoutMs',
+  ]).has(name);
+}
+
+function toKebab(value) {
+  return value.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
 
 function isBooleanOption(name) {
   return new Set([
+    'compare',
     'force',
     'soft',
+    'strict',
     'install',
     'skipValidate',
     'skipOutputValidation',
+    'staging',
     'mockNetwork',
     'validate',
     'recursive',
     'all',
+    'failOnWarn',
     'cloudProxy',
     'localProxy',
     'requireProxyUsage',
     'requireBrowser',
     'browserCdpShim',
     'requireBrowserCdpShim',
+    'lightpandaShim',
+    'requireLightpandaShim',
     'captchaSolver',
     'requireCaptchaSolver',
     'requireTableHeader',
     'requireOutputSchemaMatch',
+    'requireStatusOk',
+    'requireResultStatusOk',
+    'requireUniqueKeys',
     'discoverChrome',
     'pack',
   ]).has(name);
@@ -169,27 +368,34 @@ function printHelp() {
 
 Usage:
   coreclaw init [target] --language <python|node|go>
-  coreclaw validate [project]
-  coreclaw run [project] [--input input.json | --json '{"url":"..."}'] [--split 0] [--min-results 1]
+  coreclaw validate [project] [--strict]
+  coreclaw run [project] [--input input.json | --json '{"url":"..."}' | --input-json '{"url":"..."}'] [--strict] [--split 0] [--min-results 1]
   coreclaw run [project] [--require-table-header] [--require-output-schema-match]
+  coreclaw run [project] [--require-status-ok [--result-status-fields status] [--result-fail-values fail,error]]
   coreclaw run [project] [--cloud-proxy] [--proxy-auth user:pass] [--proxy-domain host:port]
   coreclaw run [project] [--local-proxy] [--require-proxy-usage]
   coreclaw run [project] [--chrome-ws host[:port][/path] [--chrome-http host:port] | --no-discover-chrome] [--require-browser]
+  coreclaw run [project] [--lightpanda-domain domain-or-endpoint]
   coreclaw run [project] [--browser-cdp-shim] [--require-browser-cdp-shim]
+  coreclaw run [project] [--lightpanda-shim] [--require-lightpanda-shim]
   coreclaw run [project] [--captcha-solver] [--require-captcha-solver]
-  coreclaw verify [project] [--input input.json | --json '{"url":"..."}'] [--min-results 1] [--no-pack]
+  coreclaw verify [project] [--input input.json | --json '{"url":"..."}' | --input-json '{"url":"..."}'] [--strict] [--min-results 1] [--no-pack]
   coreclaw verify [project] [--require-table-header] [--require-output-schema-match]
+  coreclaw verify [project] [--require-status-ok [--result-status-fields status] [--result-fail-values fail,error]]
   coreclaw verify [project] [--no-staging] [--no-install] [--go go]
   coreclaw verify [project] [--local-proxy] [--require-proxy-usage]
   coreclaw verify [project] [--require-browser]
+  coreclaw verify [project] [--lightpanda-domain domain-or-endpoint]
   coreclaw verify [project] [--browser-cdp-shim] [--require-browser-cdp-shim]
+  coreclaw verify [project] [--lightpanda-shim] [--require-lightpanda-shim]
   coreclaw verify [project] [--captcha-solver] [--require-captcha-solver]
-  coreclaw verify [project] --cloud-output cloud.json [--min-shared 1] [--compare-output report.json]
-  coreclaw pack [project] --output worker.zip [--go go]
-  coreclaw audit [root] --output audit.json --markdown audit.md [--all]
-  coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1] [--require-output-schema-match]
-  coreclaw compare cloud.json .coreclaw/runs/<run-id> [--min-shared 1] [--output report.json]
-  coreclaw doctor
+  coreclaw verify [project] --cloud-output cloud.json|cloud.csv [--compare-profile profile.json] [--min-shared 1] [--require-unique-keys] [--ignore-fields completed_at] [--ignore-keys key1,key2] [--ignore-keys-file file] [--require-output-schema-match] [--compare-output report.json]
+  coreclaw pack [project] --output worker.zip [--strict] [--go go]
+  coreclaw audit [root] --output audit.json --markdown audit.md [--audit-profile profile.json] [--all] [--fail-on-warn] [--ignore-issue-codes code1,code2]
+  coreclaw inspect-run .coreclaw/runs/<run-id> [--min-results 1] [--require-output-schema-match] [--require-status-ok]
+  coreclaw inspect-package worker.zip [--language python|node|go] [--strict]
+  coreclaw compare cloud.json|cloud.csv .coreclaw/runs/<run-id> [--compare-profile profile.json] [--min-shared 1] [--require-unique-keys] [--ignore-fields completed_at] [--ignore-keys key1,key2] [--ignore-keys-file file] [--require-status-ok] [--output-schema output_schema.json] [--output report.json]
+  coreclaw doctor [--python "py -3"] [--go go] [--strict]
 
 Core commands:
   init       Create an upload-ready worker with official SDK files
@@ -199,7 +405,8 @@ Core commands:
   pack       Create a CoreClaw upload ZIP with entry file at archive root
   audit      Validate worker-* projects under a root and write a report
   inspect-run Validate a local run artifact directory
-  compare    Compare CoreClaw cloud JSON export with a local run or NDJSON output
+  inspect-package Validate upload ZIP root entries, nested packaging mistakes, and Go executable mode
+  compare    Compare CoreClaw cloud JSON/CSV output with a local run or NDJSON output
   doctor     Check local tools
 `);
 }

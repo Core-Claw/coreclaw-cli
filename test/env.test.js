@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRuntimeEnv, checkBrowserAvailability, publicEnvSnapshot, resolveBrowserEndpoints } from '../src/runtime/env.js';
+import { buildRuntimeEnv, checkBrowserAvailability, lightpandaCdpEndpointFromDomain, publicEnvSnapshot, resolveBrowserEndpoints } from '../src/runtime/env.js';
 
 test('buildRuntimeEnv defaults to local direct network without proxy variables', () => {
   const env = buildRuntimeEnv({
@@ -18,6 +18,7 @@ test('buildRuntimeEnv defaults to local direct network without proxy variables',
   assert.equal(env.PROXY_DOMAIN, undefined);
   assert.equal(env.ChromeWs, 'cloud-browser:9222');
   assert.equal(env.ChromeHttp, 'cloud-http:9515');
+  assert.equal(env.LightpandaDomain, undefined);
   assert.equal(env.CDP_ENDPOINT, undefined);
   assert.equal(env.BROWSER_WS_ENDPOINT, undefined);
   assert.deepEqual(publicEnvSnapshot(env), {
@@ -25,12 +26,39 @@ test('buildRuntimeEnv defaults to local direct network without proxy variables',
     PROXY_DOMAIN: null,
     ChromeWs: 'cloud-browser:9222',
     ChromeHttp: 'cloud-http:9515',
+    LightpandaDomain: null,
     CDP_ENDPOINT: null,
     BROWSER_WS_ENDPOINT: null,
     CORECLAW_LOCAL: '1',
     CORECLAW_MOCK_NETWORK: null,
     CORECLAW_TMP_DIR: null,
   });
+});
+
+test('buildRuntimeEnv exposes LightpandaDomain with proxy auth placeholders', () => {
+  const env = buildRuntimeEnv({
+    baseEnv: {},
+    lightpandaDomain: '127.0.0.1:9333',
+  });
+
+  assert.equal(env.LightpandaDomain, '127.0.0.1:9333');
+  assert.equal(env.PROXY_AUTH, 'coreclaw-local:coreclaw-local');
+  assert.equal(publicEnvSnapshot(env).LightpandaDomain, '127.0.0.1:9333');
+});
+
+test('lightpandaCdpEndpointFromDomain follows documented normalization rules', () => {
+  assert.equal(
+    lightpandaCdpEndpointFromDomain('lightpanda-inner.coreclaw.com'),
+    'ws://lightpanda-inner.coreclaw.com/devtools/browser/new',
+  );
+  assert.equal(
+    lightpandaCdpEndpointFromDomain('ws://127.0.0.1:9222/devtools/browser/new/'),
+    'ws://127.0.0.1:9222/devtools/browser/new',
+  );
+  assert.equal(
+    lightpandaCdpEndpointFromDomain('https://lightpanda.example/cdp'),
+    'https://lightpanda.example/cdp',
+  );
 });
 
 test('buildRuntimeEnv can emulate CoreClaw cloud proxy placeholders', () => {
@@ -116,6 +144,17 @@ test('resolveBrowserEndpoints respects explicit ChromeWs and existing full endpo
   assert.equal(inherited.chromeWs, '127.0.0.1:9222/devtools/browser/existing');
   assert.equal(inherited.chromeHttp, '127.0.0.1:9222');
   assert.equal(inherited.browserWsEndpoint, 'ws://127.0.0.1:9222/devtools/browser/existing');
+});
+
+test('resolveBrowserEndpoints includes Lightpanda CDP normalization', async () => {
+  const endpoints = await resolveBrowserEndpoints({
+    baseEnv: {},
+    lightpandaDomain: 'lightpanda-inner.coreclaw.com/',
+    discoverLocalChrome: false,
+  });
+
+  assert.equal(endpoints.lightpandaDomain, 'lightpanda-inner.coreclaw.com/');
+  assert.equal(endpoints.lightpandaCdpEndpoint, 'ws://lightpanda-inner.coreclaw.com/devtools/browser/new');
 });
 
 test('resolveBrowserEndpoints falls back to local Chrome host when discovery is unavailable', async () => {

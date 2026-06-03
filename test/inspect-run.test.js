@@ -10,7 +10,7 @@ test('inspectRun reports artifact row counts', () => {
   const runDir = makeRunDir({ resultCount: 2, resultsRows: 2, exportRows: 2, outputSchemaIssueCount: 1 });
 
   assert.deepEqual(
-    pick(inspectRun(runDir), ['status', 'result_count', 'results_rows', 'export_rows', 'table_headers_rows', 'output_schema_issue_count', 'output_schema_issues_rows']),
+    pick(inspectRun(runDir), ['status', 'result_count', 'results_rows', 'export_rows', 'table_headers_rows', 'output_schema_issue_count', 'output_schema_issues_rows', 'result_status_issue_count']),
     {
       status: 'SUCCEEDED',
       result_count: 2,
@@ -19,6 +19,7 @@ test('inspectRun reports artifact row counts', () => {
       table_headers_rows: 1,
       output_schema_issue_count: 1,
       output_schema_issues_rows: 1,
+      result_status_issue_count: 0,
     },
   );
 });
@@ -50,6 +51,39 @@ test('inspectRunCommand can enforce output_schema match', async () => {
   );
 });
 
+test('inspectRunCommand can enforce result status rows', async () => {
+  const runDir = makeRunDir({
+    resultCount: 1,
+    resultsRows: [{ status: 'fail' }],
+    exportRows: [{ status: 'fail' }],
+  });
+
+  assert.equal(inspectRun(runDir).result_status_issue_count, 1);
+  await assert.rejects(
+    () => inspectRunCommand(runDir, { requireStatusOk: true }),
+    (error) => error instanceof CliError && /failing result status row/.test(error.message),
+  );
+});
+
+test('inspectRunCommand applies custom result status fields', async () => {
+  const runDir = makeRunDir({
+    resultCount: 1,
+    resultsRows: [{ check_status: 'manual' }],
+    exportRows: [{ check_status: 'manual' }],
+  });
+
+  assert.equal(inspectRun(runDir).result_status_issue_count, 0);
+  assert.equal(inspectRun(runDir, { resultStatusFields: 'check_status', resultFailValues: 'manual' }).result_status_issue_count, 1);
+  await assert.rejects(
+    () => inspectRunCommand(runDir, {
+      requireStatusOk: true,
+      resultStatusFields: 'check_status',
+      resultFailValues: 'manual',
+    }),
+    (error) => error instanceof CliError && /failing result status row/.test(error.message),
+  );
+});
+
 function makeRunDir({ resultCount, resultsRows, exportRows, outputSchemaIssueCount = 0 }) {
   const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-inspect-run-'));
   fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify({
@@ -74,7 +108,10 @@ function makeRunDir({ resultCount, resultsRows, exportRows, outputSchemaIssueCou
 }
 
 function writeRows(filePath, count) {
-  const rows = Array.from({ length: count }, (_item, index) => JSON.stringify({ index: index + 1, value: { name: `row-${index + 1}` } }));
+  const values = Array.isArray(count)
+    ? count
+    : Array.from({ length: count }, (_item, index) => ({ name: `row-${index + 1}` }));
+  const rows = values.map((value, index) => JSON.stringify({ index: index + 1, value }));
   fs.writeFileSync(filePath, rows.length ? `${rows.join('\n')}\n` : '');
 }
 

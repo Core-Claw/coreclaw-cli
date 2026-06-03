@@ -5,6 +5,7 @@ export function buildRuntimeEnv({
   proxyDomain,
   chromeWs,
   chromeHttp,
+  lightpandaDomain,
   cdpEndpoint,
   browserWsEndpoint,
   cloudProxy = false,
@@ -18,7 +19,9 @@ export function buildRuntimeEnv({
 
   const hasExplicitProxyAuth = proxyAuth !== undefined && proxyAuth !== '';
   const hasExplicitProxyDomain = proxyDomain !== undefined && proxyDomain !== '';
-  const shouldEnableProxy = cloudProxy || hasExplicitProxyAuth || hasExplicitProxyDomain;
+  const resolvedLightpandaDomain = lightpandaDomain ?? baseEnv.LightpandaDomain;
+  const hasLightpandaDomain = resolvedLightpandaDomain !== undefined && resolvedLightpandaDomain !== '';
+  const shouldEnableProxy = cloudProxy || hasExplicitProxyAuth || hasExplicitProxyDomain || hasLightpandaDomain;
   if (shouldEnableProxy) {
     env.PROXY_AUTH = hasExplicitProxyAuth ? proxyAuth : baseEnv.PROXY_AUTH ?? 'coreclaw-local:coreclaw-local';
     env.PROXY_DOMAIN = hasExplicitProxyDomain ? proxyDomain : baseEnv.PROXY_DOMAIN ?? '127.0.0.1:6000';
@@ -29,9 +32,13 @@ export function buildRuntimeEnv({
 
   delete env.CDP_ENDPOINT;
   delete env.BROWSER_WS_ENDPOINT;
+  delete env.LightpandaDomain;
 
   env.ChromeWs = chromeWs ?? baseEnv.ChromeWs ?? '127.0.0.1:9222';
   env.ChromeHttp = chromeHttp ?? baseEnv.ChromeHttp ?? chromeHttpFromChromeWs(env.ChromeWs);
+  if (hasLightpandaDomain) {
+    env.LightpandaDomain = resolvedLightpandaDomain;
+  }
   if (cdpEndpoint !== undefined && cdpEndpoint !== '') {
     env.CDP_ENDPOINT = cdpEndpoint;
   }
@@ -61,6 +68,7 @@ export function publicEnvSnapshot(env) {
     PROXY_DOMAIN: env.PROXY_DOMAIN ?? null,
     ChromeWs: env.ChromeWs ?? null,
     ChromeHttp: env.ChromeHttp ?? null,
+    LightpandaDomain: env.LightpandaDomain ? maskEndpoint(env.LightpandaDomain) : null,
     CDP_ENDPOINT: env.CDP_ENDPOINT ? maskEndpoint(env.CDP_ENDPOINT) : null,
     BROWSER_WS_ENDPOINT: env.BROWSER_WS_ENDPOINT ? maskEndpoint(env.BROWSER_WS_ENDPOINT) : null,
     CORECLAW_LOCAL: env.CORECLAW_LOCAL ?? null,
@@ -73,53 +81,55 @@ export async function resolveBrowserEndpoints({
   baseEnv = process.env,
   chromeWs,
   chromeHttp,
+  lightpandaDomain,
   discoverLocalChrome = true,
   localChromeHost = '127.0.0.1:9222',
   fetchImpl = globalThis.fetch,
 } = {}) {
   const explicitChromeWs = chromeWs ?? baseEnv.ChromeWs;
   const explicitChromeHttp = chromeHttp ?? baseEnv.ChromeHttp;
+  const explicitLightpandaDomain = lightpandaDomain ?? baseEnv.LightpandaDomain;
   if (explicitChromeWs) {
-    return {
+    return withLightpandaEndpoint({
       chromeWs: explicitChromeWs,
       chromeHttp: explicitChromeHttp ?? chromeHttpFromChromeWs(explicitChromeWs),
       cdpEndpoint: baseEnv.CDP_ENDPOINT ?? fullEndpointFromChromeWs(explicitChromeWs),
       browserWsEndpoint: baseEnv.BROWSER_WS_ENDPOINT ?? fullEndpointFromChromeWs(explicitChromeWs),
       discoveredLocalChrome: false,
-    };
+    }, explicitLightpandaDomain);
   }
 
   const existingFullEndpoint = baseEnv.CDP_ENDPOINT ?? baseEnv.BROWSER_WS_ENDPOINT;
   if (existingFullEndpoint) {
-    return {
+    return withLightpandaEndpoint({
       chromeWs: chromeWsAddressFromEndpoint(existingFullEndpoint),
       chromeHttp: explicitChromeHttp ?? chromeHttpFromChromeWs(chromeWsAddressFromEndpoint(existingFullEndpoint)),
       cdpEndpoint: baseEnv.CDP_ENDPOINT ?? existingFullEndpoint,
       browserWsEndpoint: baseEnv.BROWSER_WS_ENDPOINT ?? existingFullEndpoint,
       discoveredLocalChrome: false,
-    };
+    }, explicitLightpandaDomain);
   }
 
   if (discoverLocalChrome && fetchImpl) {
     const discoveredEndpoint = await discoverLocalChromeEndpoint(localChromeHost, fetchImpl);
     if (discoveredEndpoint) {
-      return {
+      return withLightpandaEndpoint({
         chromeWs: chromeWsAddressFromEndpoint(discoveredEndpoint),
         chromeHttp: explicitChromeHttp ?? localChromeHost,
         cdpEndpoint: discoveredEndpoint,
         browserWsEndpoint: discoveredEndpoint,
         discoveredLocalChrome: true,
-      };
+      }, explicitLightpandaDomain);
     }
   }
 
-  return {
+  return withLightpandaEndpoint({
     chromeWs: localChromeHost,
     chromeHttp: explicitChromeHttp ?? localChromeHost,
     cdpEndpoint: undefined,
     browserWsEndpoint: undefined,
     discoveredLocalChrome: false,
-  };
+  }, explicitLightpandaDomain);
 }
 
 export async function checkBrowserAvailability({
@@ -225,6 +235,29 @@ function maskSecret(value) {
 
 function maskEndpoint(value) {
   return String(value).replace(/\/\/([^:@/]+):([^@/]+)@/, '//$1:***@');
+}
+
+export function lightpandaCdpEndpointFromDomain(value) {
+  const text = String(value ?? '').trim().replace(/\/+$/, '');
+  if (!text) {
+    return undefined;
+  }
+  if (/^(ws|wss|http|https):\/\//i.test(text)) {
+    return text;
+  }
+  return `ws://${text}/devtools/browser/new`;
+}
+
+function withLightpandaEndpoint(endpoints, lightpandaDomain) {
+  const cdpEndpoint = lightpandaCdpEndpointFromDomain(lightpandaDomain);
+  if (!cdpEndpoint) {
+    return endpoints;
+  }
+  return {
+    ...endpoints,
+    lightpandaDomain,
+    lightpandaCdpEndpoint: cdpEndpoint,
+  };
 }
 
 function fullEndpointFromChromeWs(value) {

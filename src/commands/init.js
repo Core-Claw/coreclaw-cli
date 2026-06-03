@@ -94,10 +94,11 @@ function writeTemplateProject(language, projectDir, name) {
     writeIfMissing(path.join(projectDir, 'README.md'), readme(name, 'node'));
     writeIfMissing(path.join(projectDir, 'main.js'), nodeMain());
   } else if (language === 'go') {
-    writeIfMissing(path.join(projectDir, 'go.mod'), `module ${slugify(name)}\n\ngo 1.23\n\nrequire google.golang.org/grpc v1.71.1\nrequire google.golang.org/protobuf v1.36.6\n`);
-    writeIfMissing(path.join(projectDir, 'go.sum'), '');
+    const moduleName = slugify(name);
+    writeIfMissing(path.join(projectDir, 'go.mod'), goMod(moduleName));
+    writeIfMissing(path.join(projectDir, 'go.sum'), goSum());
     writeIfMissing(path.join(projectDir, 'README.md'), readme(name, 'go'));
-    writeIfMissing(path.join(projectDir, 'main.go'), goMain(slugify(name)));
+    writeIfMissing(path.join(projectDir, 'main.go'), goMain(moduleName));
   }
 }
 
@@ -126,6 +127,14 @@ function pythonMain() {
 
 function nodeMain() {
   return `const coresdk = require('./sdk')\n\nasync function main() {\n  const input = await coresdk.parameter.getInputJSONObject()\n  const url = input.url || (Array.isArray(input.startUrls) && input.startUrls[0] ? input.startUrls[0].url : '')\n\n  await coresdk.result.setTableHeader([\n    { label: 'URL', key: 'url', format: 'text' },\n    { label: 'Status', key: 'status', format: 'text' },\n    { label: 'Title', key: 'title', format: 'text' },\n  ])\n  await coresdk.log.info(\`Processing \${url}\`)\n  await coresdk.result.pushData({ url, status: 'success', title: 'Example Domain' })\n}\n\nmain().catch(async (error) => {\n  try { await coresdk.log.error(error.stack || error.message) } catch {}\n  process.exitCode = 1\n})\n`;
+}
+
+function goMod(moduleName) {
+  return `module ${moduleName}\n\ngo 1.23\n\nrequire google.golang.org/grpc v1.71.1\n\nrequire google.golang.org/protobuf v1.36.6\n\nrequire (\n\tgolang.org/x/net v0.34.0 // indirect\n\tgolang.org/x/sys v0.29.0 // indirect\n\tgolang.org/x/text v0.21.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect\n)\n`;
+}
+
+function goSum() {
+  return `github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=\ngithub.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=\ngithub.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=\ngithub.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=\ngithub.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=\ngithub.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=\ngithub.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=\ngithub.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=\ngithub.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\ngithub.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=\ngo.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=\ngo.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=\ngo.opentelemetry.io/otel v1.34.0 h1:zRLXxLCgL1WyKsPVrgbSdMN4c0FMkDAskSTQP+0hdUY=\ngo.opentelemetry.io/otel v1.34.0/go.mod h1:OWFPOQ+h4G8xpyjgqo4SxJYdDQ/qmRH+wivy7zzx9oI=\ngo.opentelemetry.io/otel/metric v1.34.0 h1:+eTR3U0MyfWjRDhmFMxe2SsW64QrZ84AOhvqS7Y+PoQ=\ngo.opentelemetry.io/otel/metric v1.34.0/go.mod h1:CEDrp0fy2D0MvkXE+dPV7cMi8tWZwX3dmaIhwPOaqHE=\ngo.opentelemetry.io/otel/sdk v1.34.0 h1:95zS4k/2GOy069d321O8jWgYsW3MzVV+KuSPKp7Wr1A=\ngo.opentelemetry.io/otel/sdk v1.34.0/go.mod h1:0e/pNiaMAqaykJGKbi+tSjWfNNHMTxoC9qANsCzbyxU=\ngo.opentelemetry.io/otel/sdk/metric v1.34.0 h1:5CeK9ujjbFVL5c1PhLuStg1wxA7vQv7ce1EK0Gyvahk=\ngo.opentelemetry.io/otel/sdk/metric v1.34.0/go.mod h1:jQ/r8Ze28zRKoNRdkjCZxfs6YvBTG1+YIqyFVFYec5w=\ngo.opentelemetry.io/otel/trace v1.34.0 h1:+ouXS2V8Rd4hp4580a8q23bg0azF2nI8cqLYnC8mh/k=\ngo.opentelemetry.io/otel/trace v1.34.0/go.mod h1:Svm7lSjQD7kG7KJ/MUHPVXSDGz2OX4h0M2jHBhmSfRE=\ngolang.org/x/net v0.34.0 h1:Mb7Mrk043xzHgnRM88suvJFwzVrRfHEHJEl5/71CKw0=\ngolang.org/x/net v0.34.0/go.mod h1:di0qlW3YNM5oh6GqDGQr92MyTozJPmybPK4Ev/Gm31k=\ngolang.org/x/sys v0.29.0 h1:TPYlXGxvx1MGTn2GiZDhnjPA9wZzZeGKHHmKhHYvgaU=\ngolang.org/x/sys v0.29.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=\ngolang.org/x/text v0.21.0 h1:zyQAAkrwaneQ066sspRyJaG9VNi/YJ1NfzcGB3hZ/qo=\ngolang.org/x/text v0.21.0/go.mod h1:4IBbMaMmOPCJ8SecivzSH54+73PCFmPWxNTLm+vZkEQ=\ngoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f h1:OxYkA3wjPsZyBylwymxSHa7ViiW1Sml4ToBrncvFehI=\ngoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f/go.mod h1:+2Yz8+CLJbIfL9z73EW45avw8Lmge3xVElCP9zEKi50=\ngoogle.golang.org/grpc v1.71.1 h1:ffsFWr7ygTUscGPI0KKK6TLrGz0476KUvvsbqWK0rPI=\ngoogle.golang.org/grpc v1.71.1/go.mod h1:H0GRtasmQOh9LkFoCPDu3ZrwUtD1YGE+b2vYBYd/8Ec=\ngoogle.golang.org/protobuf v1.36.6 h1:z1NpPI8ku2WgiWnf+t9wTPsn6eP1L7ksHUlkfLvd9xY=\ngoogle.golang.org/protobuf v1.36.6/go.mod h1:jduwjTPXsFjZGTmRluh+L6NjiWu7pchiJ2/5YcXBHnY=\n`;
 }
 
 function goMain(moduleName) {

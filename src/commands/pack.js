@@ -4,6 +4,8 @@ import { validateProject, formatIssues } from '../validation/project.js';
 import { CliError } from '../utils/errors.js';
 import { createWorkerZip } from '../pack/zip.js';
 import { prepareUploadProject } from '../pack/upload-project.js';
+import { enforcePackageGates, inspectPackage, validatePackageReport } from './inspect-package.js';
+import { enforceStrictValidation } from './validate.js';
 
 export async function packCommand(projectPath = '.', options = {}) {
   const projectDir = resolveProjectPath(projectPath);
@@ -12,6 +14,9 @@ export async function packCommand(projectPath = '.', options = {}) {
   if (!result.ok && options.validate !== false) {
     console.error(formatIssues(result.issues));
     throw new CliError('Package validation failed.');
+  }
+  if (options.validate !== false) {
+    enforceStrictValidation(result, options, 'Package validation');
   }
 
   const defaultName = `${path.basename(projectDir)}.zip`;
@@ -25,6 +30,29 @@ export async function packCommand(projectPath = '.', options = {}) {
   } finally {
     uploadProject.cleanup();
   }
+  inspectCreatedPackage(outFile, result.language, options);
   console.log(`Created CoreClaw upload ZIP: ${outFile}`);
   return outFile;
+}
+
+function inspectCreatedPackage(outFile, language, options = {}) {
+  const report = inspectPackage(outFile);
+  const validation = validatePackageReport(report, { language });
+  const packageReport = { ...report, ...validation };
+  try {
+    enforcePackageGates(packageReport, options);
+  } catch (error) {
+    const errors = validation.issues
+      .filter((issue) => issue.severity === 'error')
+      .map((issue) => `[ERROR] ${issue.message}`)
+      .join('\n');
+    if (errors) {
+      throw new CliError(`Created upload ZIP failed package inspection.\n${errors}`);
+    }
+    throw error;
+  }
+  const warnings = validation.issues.filter((issue) => issue.severity === 'warn');
+  for (const warning of warnings) {
+    console.warn(`[WARN] ${warning.message}`);
+  }
 }

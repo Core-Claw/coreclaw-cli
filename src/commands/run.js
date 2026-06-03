@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CliError } from '../utils/errors.js';
 import { resolveProjectPath } from '../utils/paths.js';
-import { readJson, validateProject } from '../validation/project.js';
+import { LANGUAGE_SPECS, readJson, validateProject } from '../validation/project.js';
 import { buildRuntimeEnv, checkBrowserAvailability, publicEnvSnapshot, resolveBrowserEndpoints, withNodeTmpHook } from '../runtime/env.js';
 import { buildInput } from '../runtime/input.js';
 import { commandForProject, installCommandForProject, runProcess } from '../runtime/executor.js';
@@ -11,52 +11,62 @@ import { startRuntimeGrpcServer } from '../runtime/grpc-server.js';
 import { RunStore } from '../runtime/run-store.js';
 import { startBrowserCdpShim } from '../runtime/browser-cdp-shim.js';
 import { startCaptchaCdpShim } from '../runtime/captcha-cdp-shim.js';
+import { enforceResultStatusGate } from '../runtime/result-gates.js';
 import { assertSocksProxyUsed, startSocksProxy } from '../runtime/socks-proxy.js';
+import { enforceStrictValidation } from './validate.js';
 
 export async function runCommand(projectPath = '.', options = {}) {
+  const runOptions = resolveRunOptions(options);
   const projectDir = resolveProjectPath(projectPath);
-  const project = validateProject(projectDir);
-  const artifactProjectDir = options.artifactProjectDir
-    ? path.resolve(process.cwd(), options.artifactProjectDir)
+  const validationProjectDir = runOptions.validationProjectDir
+    ? path.resolve(process.cwd(), runOptions.validationProjectDir)
+    : projectDir;
+  const project = resolveRunProject(projectDir, validationProjectDir, runOptions);
+  const artifactProjectDir = runOptions.artifactProjectDir
+    ? path.resolve(process.cwd(), runOptions.artifactProjectDir)
     : projectDir;
 
-  if (!project.ok && !options.skipValidate) {
+  if (!project.ok && !runOptions.skipValidate) {
     for (const issue of project.issues) {
       console.error(`[${issue.severity.toUpperCase()}] ${issue.message}`);
     }
     throw new CliError('Cannot run until static validation errors are fixed. Use --skip-validate to bypass.');
   }
+  if (!runOptions.skipValidate) {
+    enforceStrictValidation(project, runOptions, 'Run validation');
+  }
 
   const input = buildInput({
-    projectDir,
-    inputPath: options.input,
-    inlineJson: options.json,
-    splitIndex: options.split ?? null,
+    projectDir: validationProjectDir,
+    inputPath: runOptions.input,
+    inlineJson: runOptions.json,
+    splitIndex: runOptions.split ?? null,
   });
 
   const browserEndpoints = await resolveBrowserEndpoints({
-    chromeWs: options.chromeWs,
-    chromeHttp: options.chromeHttp,
-    discoverLocalChrome: options.discoverChrome !== false,
-    fetchImpl: options.browserFetchImpl ?? globalThis.fetch,
+    chromeWs: runOptions.chromeWs,
+    chromeHttp: runOptions.chromeHttp,
+    lightpandaDomain: runOptions.lightpandaDomain,
+    discoverLocalChrome: runOptions.discoverChrome !== false,
+    fetchImpl: runOptions.browserFetchImpl ?? globalThis.fetch,
   });
-  await enforceRequiredBrowser(browserEndpoints, options);
+  await enforceRequiredBrowser(browserEndpoints, runOptions);
 
-  const [command, args] = commandForProject(project, options);
+  const [command, args] = commandForProject(project, runOptions);
   const store = new RunStore({
     projectDir,
     artifactProjectDir,
     input,
     env: {},
     command: { command, args, cwd: projectDir },
-    outputSchema: readOptionalJson(path.join(projectDir, 'output_schema.json'), []),
-    uploadManifest: options.uploadManifest ?? null,
+    outputSchema: readOptionalJson(path.join(validationProjectDir, 'output_schema.json'), []),
+    uploadManifest: runOptions.uploadManifest ?? null,
   });
   store.init();
 
   let browserShim = null;
   let captchaShim = null;
-  if (options.captchaSolver || options.requireCaptchaSolver) {
+  if (runOptions.captchaSolver || runOptions.requireCaptchaSolver) {
     captchaShim = await startCaptchaCdpShim({
       upstreamUrl: resolveUpstreamCdpUrl(browserEndpoints),
       store,
@@ -65,29 +75,42 @@ export async function runCommand(projectPath = '.', options = {}) {
     browserEndpoints.chromeHttp = captchaShim.domain;
     browserEndpoints.cdpEndpoint = captchaShim.cdpEndpoint;
     browserEndpoints.browserWsEndpoint = captchaShim.browserWsEndpoint;
-  } else if (shouldUseBrowserCdpShim(options)) {
+    if (shouldExposeLightpandaShim(runOptions)) {
+      browserEndpoints.lightpandaDomain = captchaShim.domain;
+      browserEndpoints.lightpandaCdpEndpoint = `ws://${captchaShim.domain}/devtools/browser/new`;
+    }
+  } else if (shouldUseBrowserCdpShim(runOptions)) {
     browserShim = await startBrowserCdpShim({
       upstreamUrl: resolveUpstreamCdpUrl(browserEndpoints),
       store,
+      browserId: shouldExposeLightpandaShim(runOptions) ? 'coreclaw-lightpanda-shim' : undefined,
+      browserLabel: shouldExposeLightpandaShim(runOptions)
+        ? 'CoreClaw local Lightpanda CDP shim'
+        : undefined,
     });
     browserEndpoints.chromeWs = browserShim.chromeWs;
     browserEndpoints.chromeHttp = browserShim.chromeHttp;
     browserEndpoints.cdpEndpoint = browserShim.cdpEndpoint;
     browserEndpoints.browserWsEndpoint = browserShim.browserWsEndpoint;
+    if (shouldExposeLightpandaShim(runOptions)) {
+      browserEndpoints.lightpandaDomain = browserShim.domain;
+      browserEndpoints.lightpandaCdpEndpoint = `ws://${browserShim.domain}/devtools/browser/new`;
+    }
   }
 
   const env = buildRuntimeEnv({
-    proxyAuth: options.proxyAuth,
-    proxyDomain: options.proxyDomain,
+    proxyAuth: runOptions.proxyAuth,
+    proxyDomain: runOptions.proxyDomain,
     chromeWs: browserEndpoints.chromeWs,
     chromeHttp: browserEndpoints.chromeHttp,
+    lightpandaDomain: browserEndpoints.lightpandaDomain,
     cdpEndpoint: browserEndpoints.cdpEndpoint,
     browserWsEndpoint: browserEndpoints.browserWsEndpoint,
-    cloudProxy: options.cloudProxy || Boolean(browserShim || captchaShim),
-    mockNetwork: options.mockNetwork,
+    cloudProxy: runOptions.cloudProxy || Boolean(browserShim || captchaShim),
+    mockNetwork: runOptions.mockNetwork,
     runtimeTmpDir: store.tmpDir,
   });
-  const workerEnv = project.language === 'node' && options.tmpHook !== false
+  const workerEnv = project.language === 'node' && runOptions.tmpHook !== false
     ? withNodeTmpHook(env, nodeTmpHookPath(), { workerDir: projectDir })
     : env;
   store.env = publicEnvSnapshot(workerEnv);
@@ -99,7 +122,7 @@ export async function runCommand(projectPath = '.', options = {}) {
     server = await startRuntimeGrpcServer({ input, store });
     console.log(`CoreClaw local runtime listening on ${server.address}`);
     console.log(`Run artifacts: ${store.runDir}`);
-    if (options.localProxy || options.requireProxyUsage) {
+    if (runOptions.localProxy || runOptions.requireProxyUsage) {
       localProxy = await startSocksProxy({
         auth: env.PROXY_AUTH ?? 'coreclaw-local:coreclaw-local',
         store,
@@ -113,8 +136,8 @@ export async function runCommand(projectPath = '.', options = {}) {
       console.log(`Local CoreClaw SOCKS5 proxy listening on ${localProxy.domain}`);
     }
 
-    if (options.install) {
-      const install = installCommandForProject(project);
+    if (runOptions.install) {
+      const install = installCommandForProject(project, runOptions);
       if (install) {
         console.log(`Installing dependencies: ${install[0]} ${install[1].join(' ')}`);
         const installResult = await runProcess({
@@ -124,8 +147,8 @@ export async function runCommand(projectPath = '.', options = {}) {
           env,
           store,
           label: 'install',
-          timeoutMs: parseDurationMs(options.installTimeoutMs ?? 0),
-          idleTimeoutMs: parseDurationMs(options.installIdleTimeoutMs ?? '2m'),
+          timeoutMs: parseDurationMs(runOptions.installTimeoutMs ?? 0),
+          idleTimeoutMs: parseDurationMs(runOptions.installIdleTimeoutMs ?? '2m'),
         });
         if (installResult.exitCode !== 0) {
           throw new CliError(`Dependency installation failed with exit code ${installResult.exitCode}.`);
@@ -140,8 +163,8 @@ export async function runCommand(projectPath = '.', options = {}) {
       env: workerEnv,
       store,
       label: 'worker',
-      timeoutMs: parseDurationMs(options.timeoutMs ?? 0),
-      idleTimeoutMs: parseDurationMs(options.idleTimeoutMs ?? 0),
+      timeoutMs: parseDurationMs(runOptions.timeoutMs ?? 0),
+      idleTimeoutMs: parseDurationMs(runOptions.idleTimeoutMs ?? 0),
     });
 
     store.finish({
@@ -150,7 +173,7 @@ export async function runCommand(projectPath = '.', options = {}) {
         ? `${runResult.idleTimedOut ? 'Idle timeout' : 'Timeout'} while waiting for worker process to exit.`
         : undefined,
     });
-    await validateRunOutputs(projectDir, store, options);
+    await validateRunOutputs(validationProjectDir, store, runOptions);
 
     if (runResult.exitCode !== 0) {
       throw new CliError(`Worker failed with exit code ${runResult.exitCode}.`);
@@ -160,9 +183,10 @@ export async function runCommand(projectPath = '.', options = {}) {
       throw new CliError(`Worker was killed after ${runResult.idleTimedOut ? 'idle timeout' : 'timeout'}. Results captured before timeout are preserved in ${store.runDir}.`);
     }
 
-    enforcePostRunGates(store, localProxy, options);
-    enforceBrowserCdpShimGate(store, browserShim, captchaShim, options);
-    enforceCaptchaSolverGate(store, captchaShim, options);
+    enforcePostRunGates(store, localProxy, runOptions);
+    enforceBrowserCdpShimGate(store, browserShim, captchaShim, runOptions);
+    enforceCaptchaSolverGate(store, captchaShim, runOptions);
+    enforceLightpandaGate(store, browserShim, captchaShim, runOptions);
 
     console.log(`Run ${store.status}: ${store.runId}`);
     console.log(`Results: ${path.join(store.runDir, 'results.ndjson')}`);
@@ -189,6 +213,37 @@ export async function runCommand(projectPath = '.', options = {}) {
   }
 }
 
+export function resolveRunOptions(options = {}) {
+  if (!options.strict) {
+    return options;
+  }
+
+  return {
+    ...options,
+    requireTableHeader: options.requireTableHeader ?? true,
+    requireOutputSchemaMatch: options.requireOutputSchemaMatch ?? true,
+    requireStatusOk: options.requireStatusOk ?? true,
+  };
+}
+
+function resolveRunProject(projectDir, validationProjectDir, options = {}) {
+  if (!options.runtimeLanguage) {
+    return validateProject(projectDir);
+  }
+
+  const spec = LANGUAGE_SPECS[options.runtimeLanguage];
+  if (!spec) {
+    throw new CliError(`Unsupported runtime language: ${options.runtimeLanguage}`);
+  }
+  const validation = validateProject(validationProjectDir);
+  return {
+    ...validation,
+    projectDir,
+    language: options.runtimeLanguage,
+    spec,
+  };
+}
+
 export function enforceMinimumResults(store, options) {
   if (options.minResults === undefined || options.minResults === null || options.minResults === '') {
     return;
@@ -208,6 +263,7 @@ export function enforcePostRunGates(store, localProxy, options) {
   try {
     assertSocksProxyUsed(localProxy, options);
     enforceMinimumResults(store, options);
+    enforceResultStatusGate(store.runDir, options);
     enforceTableHeaderGate(store, options);
     enforceOutputSchemaMatch(store, options);
   } catch (error) {
@@ -295,7 +351,48 @@ export function enforceBrowserCdpShimGate(store, browserShim, captchaShim, optio
 }
 
 export function shouldUseBrowserCdpShim(options = {}) {
-  return Boolean(options.browserCdpShim || options.requireBrowserCdpShim || options.captchaSolver || options.requireCaptchaSolver);
+  return Boolean(
+    options.browserCdpShim
+    || options.requireBrowserCdpShim
+    || options.lightpandaShim
+    || options.requireLightpandaShim
+    || options.captchaSolver
+    || options.requireCaptchaSolver,
+  );
+}
+
+function shouldExposeLightpandaShim(options = {}) {
+  return Boolean(options.lightpandaShim || options.requireLightpandaShim);
+}
+
+export function enforceLightpandaGate(store, browserShim, captchaShim, options) {
+  if (!options.requireLightpandaShim) {
+    return;
+  }
+
+  const shim = captchaShim ?? browserShim;
+  if (!shim) {
+    const message = '--require-lightpanda-shim requires the local Lightpanda CDP shim to be enabled.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
+  }
+
+  const lightpandaConnections = countLightpandaConnections(shim.stats);
+  if (lightpandaConnections < 1) {
+    const message = 'Worker did not connect to the local CoreClaw Lightpanda CDP shim.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
+  }
+
+  const missingAuthorization = (shim.stats.authorizationHeaders ?? []).some((header, index) => {
+    const pathValue = shim.stats.paths?.[index] ?? '';
+    return isLightpandaPath(pathValue) && !String(header ?? '').startsWith('Basic ');
+  });
+  if (missingAuthorization) {
+    const message = 'Worker connected to Lightpanda without a Basic Authorization header built from PROXY_AUTH.';
+    store.finish({ exitCode: 1, error: message });
+    throw new CliError(message);
+  }
 }
 
 export async function enforceRequiredBrowser(browserEndpoints, options = {}) {
@@ -361,6 +458,14 @@ function resolveUpstreamCdpUrl(browserEndpoints) {
     return `ws://${text}`;
   }
   return undefined;
+}
+
+function countLightpandaConnections(stats = {}) {
+  return (stats.paths ?? []).filter(isLightpandaPath).length;
+}
+
+function isLightpandaPath(pathValue) {
+  return String(pathValue ?? '').replace(/\?.*$/, '') === '/devtools/browser/new';
 }
 
 async function validateRunOutputs(projectDir, store, options) {
