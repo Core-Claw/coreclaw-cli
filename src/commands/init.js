@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { defaultsFromInputSchema } from '../runtime/input.js';
 import { CliError } from '../utils/errors.js';
 import { repoRoot } from '../utils/paths.js';
 
@@ -15,7 +16,7 @@ export async function initCommand(target = '.', options = {}) {
 
   fs.mkdirSync(projectDir, { recursive: true });
   copyTemplateSdk(language, projectDir);
-  writeTemplateProject(language, projectDir, options.name ?? path.basename(projectDir));
+  writeTemplateProject(language, projectDir, options.name ?? path.basename(projectDir), options);
 
   console.log(`Created ${language} CoreClaw worker: ${projectDir}`);
   console.log(`Next: coreclaw run ${projectDir}`);
@@ -52,8 +53,8 @@ function copyDir(sourceDir, targetDir) {
   }
 }
 
-function writeTemplateProject(language, projectDir, name) {
-  writeJson(path.join(projectDir, 'input_schema.json'), {
+function writeTemplateProject(language, projectDir, name, options = {}) {
+  const inputSchema = {
     description: `${name} CoreClaw worker`,
     b: 'startUrls',
     properties: [
@@ -67,7 +68,12 @@ function writeTemplateProject(language, projectDir, name) {
         required: true,
       },
     ],
-  });
+  };
+
+  writeJson(path.join(projectDir, 'input_schema.json'), inputSchema);
+  if (options.inputExample !== false) {
+    writeJson(path.join(projectDir, 'input.example.json'), defaultsFromInputSchema(inputSchema));
+  }
 
   writeJson(path.join(projectDir, 'output_schema.json'), [
     { name: 'url', type: 'string', description: 'URL' },

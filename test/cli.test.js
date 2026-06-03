@@ -68,6 +68,19 @@ test('parseArgs treats input-json as an alias for inline json', () => {
   );
 });
 
+test('parseArgs accepts no-input-example for init', () => {
+  assert.deepEqual(
+    parseArgs(['init', './worker', '--language', 'node', '--no-input-example']),
+    {
+      positionals: ['init', './worker'],
+      options: {
+        language: 'node',
+        inputExample: false,
+      },
+    },
+  );
+});
+
 test('parseArgs rejects unknown long options before running with defaults', () => {
   assert.throws(
     () => parseArgs(['verify', '.', '--input-jsno', '{"url":"https://example.com"}']),

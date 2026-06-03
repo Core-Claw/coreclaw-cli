@@ -25,6 +25,7 @@ test('collectFiles excludes cloud-irrelevant local artifacts', () => {
   fs.mkdirSync(path.join(dir, '.pytest_cache'));
   fs.writeFileSync(path.join(dir, '.pytest_cache', 'README.md'), '');
   fs.writeFileSync(path.join(dir, 'input_schema.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'input.example.json'), '{"items":[]}');
 
   assert.deepEqual(collectFiles(dir).sort(), ['input_schema.json', 'main.js']);
 });
@@ -33,6 +34,7 @@ test('createWorkerZip creates a portable archive with only worker files', () => 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-pack-zip-'));
   fs.writeFileSync(path.join(dir, 'main.js'), 'console.log("ok")\n');
   writeInputSchema(dir);
+  fs.writeFileSync(path.join(dir, 'input.example.json'), '{"items":[]}');
   fs.mkdirSync(path.join(dir, '.coreclaw'));
   fs.writeFileSync(path.join(dir, '.coreclaw', 'summary.json'), '{}\n');
 
@@ -231,6 +233,7 @@ test('copyWorkerFiles stages only uploadable worker files', () => {
   fs.writeFileSync(path.join(source, 'node_modules', 'dep.js'), '');
   fs.mkdirSync(path.join(source, 'dist'));
   fs.writeFileSync(path.join(source, 'dist', 'worker.zip'), '');
+  fs.writeFileSync(path.join(source, 'input.example.json'), '{"items":[]}');
 
   const manifest = copyWorkerFiles(source, target);
 
@@ -240,6 +243,7 @@ test('copyWorkerFiles stages only uploadable worker files', () => {
   assert.equal(fs.existsSync(path.join(target, '.coreclaw')), false);
   assert.equal(fs.existsSync(path.join(target, 'node_modules')), false);
   assert.equal(fs.existsSync(path.join(target, 'dist')), false);
+  assert.equal(fs.existsSync(path.join(target, 'input.example.json')), false);
 });
 
 function listZipEntries(filePath) {

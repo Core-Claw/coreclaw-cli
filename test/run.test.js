@@ -650,6 +650,10 @@ test('generated Node worker passes upload preflight and package inspection', asy
     language: 'node',
     name: 'Generated Node Worker',
   });
+  const inputExamplePath = path.join(projectDir, 'input.example.json');
+  assert.deepEqual(JSON.parse(fs.readFileSync(inputExamplePath, 'utf8')), {
+    startUrls: [{ url: 'https://example.com' }],
+  });
 
   const previousNodePath = process.env.NODE_PATH;
   process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
@@ -693,10 +697,12 @@ test('generated Node worker passes upload preflight and package inspection', asy
     assert.equal(uploadManifest.includes('main.js'), true);
     assert.equal(uploadManifest.includes('package.json'), true);
     assert.equal(uploadManifest.includes('sdk_grpc_pb.js'), true);
+    assert.equal(uploadManifest.includes('input.example.json'), false);
     assert.equal(packageValidation.ok, true);
     assert.equal(packageReport.root_entries.includes('main.js'), true);
     assert.equal(packageReport.root_entries.includes('package.json'), true);
     assert.equal(packageReport.root_entries.includes('output_schema.json'), true);
+    assert.equal(packageReport.root_entries.includes('input.example.json'), false);
   } finally {
     if (previousNodePath === undefined) {
       delete process.env.NODE_PATH;
@@ -731,6 +737,20 @@ test('generated Python worker passes upload preflight and package inspection', a
     language: 'python',
     requiredRootEntries: ['main.py', 'requirements.txt', 'sdk_pb2_grpc.py'],
   });
+});
+
+test('initCommand can skip generating local example input', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-generated-worker-'));
+  const projectDir = path.join(root, 'generated-node-worker');
+
+  await initCommand(projectDir, {
+    language: 'node',
+    name: 'Generated Node Worker',
+    inputExample: false,
+  });
+
+  assert.equal(fs.existsSync(path.join(projectDir, 'input_schema.json')), true);
+  assert.equal(fs.existsSync(path.join(projectDir, 'input.example.json')), false);
 });
 
 function defaultPythonCommand() {
@@ -1029,8 +1049,10 @@ function assertGeneratedWorkerPreflight({ result, language, requiredRootEntries 
     title: 'Example Domain',
   });
   assert.equal(uploadManifest.includes('output_schema.json'), true);
+  assert.equal(uploadManifest.includes('input.example.json'), false);
   assert.equal(packageValidation.ok, true);
   assert.equal(packageReport.root_entries.includes('output_schema.json'), true);
+  assert.equal(packageReport.root_entries.includes('input.example.json'), false);
   for (const entry of requiredRootEntries) {
     assert.equal(uploadManifest.includes(entry), true);
     assert.equal(packageReport.root_entries.includes(entry), true);

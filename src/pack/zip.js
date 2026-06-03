@@ -20,6 +20,7 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 const EXCLUDED_EXTENSIONS = new Set(['.pyc', '.pyo', '.log']);
+const EXCLUDED_FILES = new Set(['input.example.json']);
 
 export function createWorkerZip({ projectDir, outFile }) {
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
@@ -154,6 +155,10 @@ function shouldExclude(entry, fullPath) {
   }
 
   if (entry.isFile() && EXCLUDED_EXTENSIONS.has(path.extname(entry.name))) {
+    return true;
+  }
+
+  if (entry.isFile() && EXCLUDED_FILES.has(entry.name)) {
     return true;
   }
 

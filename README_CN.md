@@ -66,8 +66,8 @@ coreclaw --help
 ```bash
 node ./bin/coreclaw.js init ./my-worker --language node --name my-worker
 node ./bin/coreclaw.js validate ./my-worker --strict
-node ./bin/coreclaw.js run ./my-worker --min-results 1
-node ./bin/coreclaw.js verify ./my-worker --strict --min-results 1
+node ./bin/coreclaw.js run ./my-worker --input ./my-worker/input.example.json --min-results 1
+node ./bin/coreclaw.js verify ./my-worker --strict --input ./my-worker/input.example.json --min-results 1
 ```
 
 验证内置示例，并与一份云端输出做对比：
@@ -88,6 +88,8 @@ npm run verify:release
 ```
 
 ## CoreClaw Worker 项目结构
+
+`coreclaw init` 生成的项目还会包含 `input.example.json`。它是根据 `input_schema.json` 默认值生成的本地开发辅助输入，可直接用于第一次 `coreclaw run --input` 或 `coreclaw verify --input`。它不是 CoreClaw 平台必需文件，也不会进入上传 ZIP。
 
 ### Python 源码项目
 
@@ -165,6 +167,7 @@ CoreClaw CLI 打包时会排除：
 
 - `.coreclaw/`
 - `node_modules/`
+- `input.example.json`
 - Python virtualenv
 - 构建目录
 - 缓存目录
@@ -407,6 +410,7 @@ node ./bin/coreclaw.js doctor --python "py -3" --go go --strict
 node ./bin/coreclaw.js init ./my-node-worker --language node --name my-node-worker
 node ./bin/coreclaw.js init ./my-python-worker --language python
 node ./bin/coreclaw.js init ./my-go-worker --language go
+node ./bin/coreclaw.js init ./my-worker --language node --no-input-example
 ```
 
 常用选项：
@@ -414,8 +418,9 @@ node ./bin/coreclaw.js init ./my-go-worker --language go
 - `--language python|node|go`：Worker 语言。
 - `--name <name>`：包名或模块名。
 - `--force`：覆盖已有目标目录。
+- `--no-input-example`：不生成本地 `input.example.json`。
 
-生成项目会包含入口文件、依赖文件、SDK 文件、`README.md`、`input_schema.json` 和 `output_schema.json`。
+生成项目会包含入口文件、依赖文件、SDK 文件、`README.md`、`input_schema.json`、`output_schema.json`，默认还会包含从 schema 默认值生成的本地 `input.example.json`。
 
 ### `validate`
 

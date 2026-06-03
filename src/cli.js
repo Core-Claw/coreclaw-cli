@@ -255,7 +255,7 @@ function commandAllowedOptions(command) {
 
   switch (command) {
     case 'init':
-      return new Set(['force', 'lang', 'language', 'name']);
+      return new Set(['force', 'inputExample', 'lang', 'language', 'name']);
     case 'validate':
       return new Set(['soft', 'strict']);
     case 'run':
@@ -349,6 +349,7 @@ function isBooleanOption(name) {
   return new Set([
     'compare',
     'force',
+    'inputExample',
     'soft',
     'strict',
     'install',

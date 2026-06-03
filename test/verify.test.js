@@ -281,6 +281,7 @@ test('stageVerifyProject copies only uploadable files to a temporary project', (
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-stage-source-'));
   fs.writeFileSync(path.join(dir, 'main.js'), '');
   fs.writeFileSync(path.join(dir, 'input_schema.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'input.example.json'), '{"items":[]}');
   fs.mkdirSync(path.join(dir, '.coreclaw'));
   fs.writeFileSync(path.join(dir, '.coreclaw', 'summary.json'), '{}');
   fs.mkdirSync(path.join(dir, 'node_modules'));
@@ -295,6 +296,7 @@ test('stageVerifyProject copies only uploadable files to a temporary project', (
   assert.equal(fs.existsSync(path.join(staged.projectDir, 'main.js')), true);
   assert.equal(fs.existsSync(path.join(staged.projectDir, '.coreclaw')), false);
   assert.equal(fs.existsSync(path.join(staged.projectDir, 'node_modules')), false);
+  assert.equal(fs.existsSync(path.join(staged.projectDir, 'input.example.json')), false);
 
   fs.rmSync(staged.projectDir, { recursive: true, force: true });
 });

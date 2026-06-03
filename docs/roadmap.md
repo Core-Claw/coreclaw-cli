@@ -31,12 +31,12 @@ Completed:
 - README and README_CN describe the Worker structure and upload workflow.
 - Top-level help is grouped by workflow, and `coreclaw help <command>` shows command-specific examples.
 - `docs/commands.md` is generated from the same command metadata as CLI help.
+- `coreclaw init` writes `input.example.json` from `input_schema.json` defaults for immediate local smoke tests, with `--no-input-example` available when the extra local file is not wanted.
 
 Solvable gaps:
 
 - Add a guided `create` alias or wizard-style flow for users who do not know which language to pick.
 - Add `coreclaw examples` or `coreclaw init --template <name>` once there are more CoreClaw-specific templates.
-- Add a generated `input.example.json` option during `init` so users have an immediate test payload.
 
 Currently out of local scope:
 
@@ -187,11 +187,11 @@ Currently out of local scope:
 - Added grouped top-level help, `coreclaw help <command>`, `<command> --help`, and close-command suggestions.
 - Added generated command reference docs from CLI command metadata.
 - Added `coreclaw pack --print-files` to preview upload package contents.
+- Added default `input.example.json` generation during `coreclaw init` and excluded it from upload packaging.
 
 ## Next Milestones
 
 1. Add JSON output modes for `validate`, `run`, `verify`, and `inspect-run`.
 2. Add package size warnings for unexpectedly large uploads.
-3. Add `init --input-example` or default `input.example.json` generation.
-4. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
-5. Add more precise remediation hints for validation and runtime failures.
+3. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
+4. Add more precise remediation hints for validation and runtime failures.

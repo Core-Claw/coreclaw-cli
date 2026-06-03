@@ -38,7 +38,7 @@ Create an upload-ready Worker with SDK files and schemas
 Usage:
 
 ```bash
-coreclaw init [target] --language <python|node|go> [--name worker-name] [--force]
+coreclaw init [target] --language <python|node|go> [--name worker-name] [--force] [--no-input-example]
 ```
 
 Examples:
@@ -46,6 +46,7 @@ Examples:
 ```bash
 coreclaw init ./my-worker --language node --name my-worker
 coreclaw init ./my-go-worker --language go
+coreclaw init ./my-worker --language python --no-input-example
 ```
 
 ### `validate`
