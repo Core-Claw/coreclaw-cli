@@ -18,6 +18,8 @@ test('npm package manifest includes examples without runtime artifacts', () => {
     'examples/node-hello/output_schema.json',
     'examples/python-hello/main.py',
     'examples/python-hello/requirements.txt',
+    'tools/generate-command-docs.js',
+    'docs/commands.md',
     'docs/roadmap.md',
     'CONTRIBUTING.md',
   ]) {

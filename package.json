@@ -17,14 +17,17 @@
   "scripts": {
     "start": "node ./bin/coreclaw.js",
     "test": "node --test",
+    "docs:commands": "node ./tools/generate-command-docs.js",
     "verify": "npm test && node ./bin/coreclaw.js verify ./examples/node-hello --cloud-output ./examples/node-hello-cloud-output.json --compare-output ./tmp/node-hello-comparison.json --min-shared 1 --max-diff 0 --output ./tmp/node-hello.zip",
-    "verify:release": "npm run verify && git diff --check && npm pack --dry-run --json"
+    "verify:release": "npm run docs:commands && npm run verify && git diff --check && npm pack --dry-run --json"
   },
   "files": [
     "bin",
     "src",
     "proto",
     "templates",
+    "tools/generate-command-docs.js",
+    "docs/commands.md",
     "docs/roadmap.md",
     "examples/coreclaw-audit-profile.json",
     "examples/node-hello-cloud-output.json",

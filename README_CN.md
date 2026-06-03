@@ -36,7 +36,7 @@ CoreClaw CLI 用本地命令把这些问题提前暴露出来。
 - 将 CoreClaw 平台 JSON/CSV 输出与本地 run 输出对比。
 - 批量审计工作区内的 `worker-*` 项目。
 
-当前开发目标、已完成内容、可解决不足和仅能在云端验证的限制记录在 [docs/roadmap.md](./docs/roadmap.md)。
+当前开发目标、已完成内容、可解决不足和仅能在云端验证的限制记录在 [docs/roadmap.md](./docs/roadmap.md)。精确命令语法由 CLI 元数据生成，见 [docs/commands.md](./docs/commands.md)。
 
 ## 安装
 
@@ -385,6 +385,8 @@ node ./bin/coreclaw.js run --help
 ```
 
 当你知道要使用哪个工作流，但不确定具体参数和示例时，优先使用命令级帮助。输入未知命令时，CLI 也会尽量给出相近命令建议。
+
+同一份命令元数据也会生成 [docs/commands.md](./docs/commands.md)，便于离线阅读和发布前校验。
 
 ### `doctor`
 

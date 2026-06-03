@@ -30,6 +30,7 @@ Completed:
 - `coreclaw verify` stages a clean upload-like runtime, runs the Worker, and creates a ZIP.
 - README and README_CN describe the Worker structure and upload workflow.
 - Top-level help is grouped by workflow, and `coreclaw help <command>` shows command-specific examples.
+- `docs/commands.md` is generated from the same command metadata as CLI help.
 
 Solvable gaps:
 
@@ -164,7 +165,6 @@ Currently out of local scope:
 - Add command-specific help for every command with richer flag descriptions.
 - Add CI-friendly JSON output modes.
 - Add more Worker templates and example payloads.
-- Add a docs/reference file generated from the same command metadata as CLI help.
 - Add better remediation text for common validation and runtime failures.
 - Add versioned docs when CLI behavior becomes stable enough for releases.
 
@@ -185,11 +185,12 @@ Currently out of local scope:
 - Added package inspection for ZIP root entries and Go executable mode.
 - Added platform output verification helper scripts for local maintainers.
 - Added grouped top-level help, `coreclaw help <command>`, `<command> --help`, and close-command suggestions.
+- Added generated command reference docs from CLI command metadata.
 
 ## Next Milestones
 
 1. Add JSON output modes for `validate`, `run`, `verify`, and `inspect-run`.
-2. Add generated command reference docs from CLI metadata.
+2. Add a package manifest preview command for upload ZIP contents.
 3. Add `init --input-example` or default `input.example.json` generation.
 4. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
-5. Add a package manifest preview command for upload ZIP contents.
+5. Add more precise remediation hints for validation and runtime failures.
