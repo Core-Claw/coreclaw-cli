@@ -636,6 +636,8 @@ node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --json-outpu
 
 Use this when you already have run artifacts and want to reapply result-count, status, or output-schema gates without rerunning the Worker.
 
+`inspect-run` prints remediation hints for missing result rows, missing runtime table headers, output schema mismatches, export drift, and failing status rows. In `--json-output` mode those hints are returned as `remediation` objects so CI jobs can surface the next action without parsing human text.
+
 ### `compare`
 
 Compares CoreClaw platform output with local output.

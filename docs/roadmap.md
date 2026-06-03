@@ -81,10 +81,10 @@ Completed:
 - Local temporary state is isolated per run.
 - Node.js absolute `/tmp` writes are mapped into the run temp directory.
 - `coreclaw run --json-output`, `coreclaw verify --json-output`, and `coreclaw inspect-run --json-output` emit machine-readable summaries while progress logs go to stderr.
+- `coreclaw inspect-run` reports remediation hints for missing results, missing table headers, schema drift, export drift, and failing status rows.
 
 Solvable gaps:
 
-- Add clearer `inspect-run` remediation hints for missing results, missing table headers, and schema drift.
 - Add a stable machine-readable summary schema for CI integrations.
 
 Currently out of local scope:
@@ -195,6 +195,7 @@ Currently out of local scope:
 - Added largest-entry diagnostics to upload package inspection.
 - Added upload manifest comparison for existing ZIP packages with `inspect-package --project`.
 - Added `coreclaw env` to inspect injected runtime environment variables before running a Worker.
+- Added `inspect-run` remediation hints for common run artifact failures.
 
 ## Next Milestones
 

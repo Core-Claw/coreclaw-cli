@@ -609,6 +609,8 @@ node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --json-outpu
 
 当你已经有 `.coreclaw/runs/<run-id>`，但想重新应用结果行数、状态或 output schema 门槛时使用它。
 
+`inspect-run` 会针对缺失结果行、缺少 runtime table header、output schema 漂移、导出漂移、失败状态行输出 remediation 提示。`--json-output` 模式下这些提示会作为 `remediation` objects 返回，便于 CI 直接展示下一步修复动作。
+
 ### `compare`
 
 对比 CoreClaw 平台输出和本地输出。
@@ -928,7 +930,7 @@ CoreClaw CLI 适合 CI 和可重复脚本：
 - 每个命令只接受自己的选项。
 - Boolean 支持 `--flag`、`--no-flag`、`--flag=true|false`。
 - 校验、运行、打包、对比失败时返回非零退出码。
-- `validate`、`run`、`verify`、`inspect-run` 支持 `--json-output`，stdout 会输出机器可读 JSON。
+- `validate`、`env`、`run`、`verify`、`inspect-run` 支持 `--json-output`，stdout 会输出机器可读 JSON。
 - `--json-output` 模式下，进度和 Worker 日志写到 stderr，stdout 保持为单个 JSON 文档。
 - `compare` 和 `audit` 也可以用 `--output` 写出 JSON 报告文件。
 

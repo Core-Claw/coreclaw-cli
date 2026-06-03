@@ -19,25 +19,25 @@ export async function inspectRunCommand(runPath, options = {}) {
 
   const minResults = parseNonNegativeInteger(options.minResults ?? 0, '--min-results');
   if (report.status !== 'SUCCEEDED') {
-    throw new CliError(`Run ${report.run_id} status is ${report.status}, expected SUCCEEDED.`);
+    throw new CliError(withRemediation(report, `Run ${report.run_id} status is ${report.status}, expected SUCCEEDED.`));
   }
   if (report.result_count < minResults) {
-    throw new CliError(`Run ${report.run_id} produced ${report.result_count} result(s), expected at least ${minResults}.`);
+    throw new CliError(withRemediation(report, `Run ${report.run_id} produced ${report.result_count} result(s), expected at least ${minResults}.`, 'missing_results'));
   }
   if (report.result_count !== report.results_rows) {
-    throw new CliError(`Run ${report.run_id} summary result_count=${report.result_count} but results.ndjson has ${report.results_rows} row(s).`);
+    throw new CliError(withRemediation(report, `Run ${report.run_id} summary result_count=${report.result_count} but results.ndjson has ${report.results_rows} row(s).`, 'missing_results'));
   }
   if (report.export_rows !== null && report.export_rows !== report.result_count) {
-    throw new CliError(`Run ${report.run_id} summary result_count=${report.result_count} but export.ndjson has ${report.export_rows} row(s).`);
+    throw new CliError(withRemediation(report, `Run ${report.run_id} summary result_count=${report.result_count} but export.ndjson has ${report.export_rows} row(s).`, 'export_drift'));
   }
   if (report.output_schema_issues_rows !== null && report.output_schema_issues_rows !== report.output_schema_issue_count) {
-    throw new CliError(`Run ${report.run_id} summary output_schema_issue_count=${report.output_schema_issue_count} but output_schema_issues.json has ${report.output_schema_issues_rows} issue(s).`);
+    throw new CliError(withRemediation(report, `Run ${report.run_id} summary output_schema_issue_count=${report.output_schema_issue_count} but output_schema_issues.json has ${report.output_schema_issues_rows} issue(s).`, 'output_schema_artifact_drift'));
   }
   if (options.requireOutputSchemaMatch && report.output_schema_issue_count > 0) {
-    throw new CliError(`Run ${report.run_id} has ${report.output_schema_issue_count} output_schema mismatch issue(s). See ${report.paths.output_schema_issues}.`);
+    throw new CliError(withRemediation(report, `Run ${report.run_id} has ${report.output_schema_issue_count} output_schema mismatch issue(s). See ${report.paths.output_schema_issues}.`, 'output_schema_mismatch'));
   }
   if (shouldRequireStatusGate(options) && report.result_status_issue_count > 0) {
-    throw new CliError(`Run ${report.run_id} has ${report.result_status_issue_count} failing result status row(s). See ${report.paths.results}.`);
+    throw new CliError(withRemediation(report, `Run ${report.run_id} has ${report.result_status_issue_count} failing result status row(s). See ${report.paths.results}.`, 'result_status_failure'));
   }
 
   return report;
@@ -57,7 +57,7 @@ export function inspectRun(runDir, options = {}) {
   const outputSchemaIssuesPath = path.join(runDir, 'output_schema_issues.json');
   const statusIssues = resultStatusIssues(runDir, options);
 
-  return {
+  const report = {
     run_dir: runDir,
     run_id: summary.run_id ?? path.basename(runDir),
     status: summary.status ?? 'UNKNOWN',
@@ -81,6 +81,10 @@ export function inspectRun(runDir, options = {}) {
       output_schema_issues: outputSchemaIssuesPath,
     },
   };
+  return {
+    ...report,
+    remediation: remediationForReport(report),
+  };
 }
 
 function printRunReport(report) {
@@ -90,6 +94,63 @@ function printRunReport(report) {
   console.log(`Table headers: summary=${report.table_header_count} file=${report.table_headers_rows}`);
   console.log(`Output schema issues: summary=${report.output_schema_issue_count} file=${report.output_schema_issues_rows ?? 'missing'}`);
   console.log(`Result status issues: ${report.result_status_issue_count}`);
+  for (const item of report.remediation) {
+    console.log(`Remediation [${item.code}]: ${item.message}`);
+  }
+}
+
+function remediationForReport(report) {
+  const items = [];
+  if (report.status !== 'SUCCEEDED') {
+    items.push({
+      code: 'run_not_succeeded',
+      message: 'Review logs.ndjson and rerun coreclaw run or coreclaw verify after fixing the Worker process error.',
+    });
+  }
+  if (report.result_count === 0 || report.results_rows < report.result_count) {
+    items.push({
+      code: 'missing_results',
+      message: 'Confirm the Worker calls the SDK result push API for each successful output row and does not exit before awaiting those calls. Worker did not persist expected result rows.',
+    });
+  }
+  if (report.export_rows !== null && report.export_rows !== report.result_count) {
+    items.push({
+      code: 'export_drift',
+      message: 'Rerun the Worker after checking output_schema.json; export.ndjson should be regenerated from pushed rows and declared output columns.',
+    });
+  }
+  if (report.table_header_count === 0 || report.table_headers_rows === 0) {
+    items.push({
+      code: 'missing_table_header',
+      message: 'Set runtime table headers through the SDK before pushing rows, then rerun with --require-table-header during upload preflight.',
+    });
+  }
+  if (report.output_schema_issue_count > 0) {
+    items.push({
+      code: 'output_schema_mismatch',
+      message: 'Align output_schema.json with the JSON object keys and value types passed to the SDK result push API.',
+    });
+  }
+  if (report.output_schema_issues_rows !== null && report.output_schema_issues_rows !== report.output_schema_issue_count) {
+    items.push({
+      code: 'output_schema_artifact_drift',
+      message: 'Re-run the Worker to regenerate output_schema_issues.json, then inspect the recorded mismatch details.',
+    });
+  }
+  if (report.result_status_issue_count > 0) {
+    items.push({
+      code: 'result_status_failure',
+      message: 'Fix the Worker branch that produced failing status values, or configure --result-status-fields and --result-fail-values if the default status gate does not match this Worker.',
+    });
+  }
+  return items;
+}
+
+function withRemediation(report, message, preferredCode = null) {
+  const item = preferredCode
+    ? report.remediation.find((entry) => entry.code === preferredCode)
+    : report.remediation[0];
+  return item ? `${message}\nRemediation: ${item.message}` : message;
 }
 
 function parseNonNegativeInteger(value, name) {
@@ -114,8 +175,12 @@ function countNdjsonRows(filePath) {
 
 function readJson(filePath) {
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return JSON.parse(stripBom(fs.readFileSync(filePath, 'utf8')));
   } catch (error) {
     throw new CliError(`Invalid JSON in ${filePath}: ${error.message}`);
   }
+}
+
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
