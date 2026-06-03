@@ -2,7 +2,7 @@ import path from 'node:path';
 import { resolveProjectPath } from '../utils/paths.js';
 import { validateProject, formatIssues } from '../validation/project.js';
 import { CliError } from '../utils/errors.js';
-import { createWorkerZip } from '../pack/zip.js';
+import { createWorkerZip, previewUploadFiles } from '../pack/zip.js';
 import { prepareUploadProject } from '../pack/upload-project.js';
 import { enforcePackageGates, inspectPackage, validatePackageReport } from './inspect-package.js';
 import { enforceStrictValidation } from './validate.js';
@@ -26,6 +26,10 @@ export async function packCommand(projectPath = '.', options = {}) {
     if (uploadProject.staged && result.language === 'go') {
       console.log('Built Go upload binary: main (CGO_ENABLED=0 GOOS=linux GOARCH=amd64)');
     }
+    if (options.printFiles) {
+      printUploadFilePreview(previewUploadFiles(uploadProject.projectDir));
+      return null;
+    }
     createWorkerZip({ projectDir: uploadProject.projectDir, outFile });
   } finally {
     uploadProject.cleanup();
@@ -33,6 +37,13 @@ export async function packCommand(projectPath = '.', options = {}) {
   inspectCreatedPackage(outFile, result.language, options);
   console.log(`Created CoreClaw upload ZIP: ${outFile}`);
   return outFile;
+}
+
+function printUploadFilePreview(files) {
+  console.log('CoreClaw upload package file preview:');
+  for (const file of files) {
+    console.log(`  ${file}`);
+  }
 }
 
 function inspectCreatedPackage(outFile, language, options = {}) {

@@ -540,10 +540,11 @@ node ./bin/coreclaw.js verify ./worker \
 
 ```bash
 node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip
+node ./bin/coreclaw.js pack ./worker --print-files
 node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --strict
 ```
 
-`pack` 会校验项目、复制可上传文件、必要时构建 Go 上传二进制、写出 ZIP，并执行包检查。`--strict` 会把兼容性 warning 也作为失败处理。
+`pack` 会校验项目、复制可上传文件、必要时构建 Go 上传二进制、写出 ZIP，并执行包检查。`--print-files` 可以在不写出 ZIP 的情况下预览实际会进入上传包的文件。`--strict` 会把兼容性 warning 也作为失败处理。
 
 ### `inspect-package`
 

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { packCommand } from '../src/commands/pack.js';
 import { inspectPackage, validatePackageReport } from '../src/commands/inspect-package.js';
-import { collectFiles, copyWorkerFiles, createWorkerZip } from '../src/pack/zip.js';
+import { collectFiles, copyWorkerFiles, createWorkerZip, previewUploadFiles } from '../src/pack/zip.js';
 import { prepareUploadProject } from '../src/pack/upload-project.js';
 import { CliError } from '../src/utils/errors.js';
 
@@ -56,6 +56,47 @@ test('packCommand creates a ZIP that passes package inspection', async () => {
   assert.equal(report.root_entries.includes('main.js'), true);
   assert.equal(report.root_entries.includes('package.json'), true);
   assert.equal(report.root_entries.includes('sdk_grpc_pb.js'), true);
+});
+
+test('previewUploadFiles returns the same manifest used by ZIP creation', () => {
+  const dir = makeNodeProject();
+  fs.mkdirSync(path.join(dir, 'dist'));
+  fs.writeFileSync(path.join(dir, 'dist', 'old.zip'), '');
+  fs.mkdirSync(path.join(dir, '.coreclaw'));
+  fs.writeFileSync(path.join(dir, '.coreclaw', 'run.json'), '{}\n');
+
+  assert.deepEqual(previewUploadFiles(dir), collectFiles(dir));
+});
+
+test('packCommand print-files previews upload contents without creating a ZIP', async () => {
+  const dir = makeNodeProject();
+  const outFile = path.join(dir, 'dist', 'worker.zip');
+  const output = await captureConsole(() => packCommand(dir, { output: outFile, printFiles: true }));
+
+  assert.equal(fs.existsSync(outFile), false);
+  assert.match(output.stdout, /CoreClaw upload package file preview:/);
+  assert.match(output.stdout, /main\.js/);
+  assert.match(output.stdout, /input_schema\.json/);
+  assert.doesNotMatch(output.stdout, /\.coreclaw/);
+  assert.doesNotMatch(output.stdout, /node_modules/);
+});
+
+test('packCommand print-files previews staged Go upload binary contents', async () => {
+  const dir = makeGoProject();
+  const output = await captureConsole(() => packCommand(dir, {
+    printFiles: true,
+    go: 'custom-go',
+    spawnSyncImpl(_command, args, options) {
+      const outputIndex = args.indexOf('-o') + 1;
+      fs.writeFileSync(path.resolve(options.cwd, args[outputIndex]), 'linux-binary');
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  }));
+
+  assert.equal(fs.existsSync(path.join(dir, 'main')), false);
+  assert.match(output.stdout, /Built Go upload binary: main/);
+  assert.match(output.stdout, /^  main$/m);
+  assert.match(output.stdout, /^  main\.go$/m);
 });
 
 test('packCommand strict mode fails on static upload-readiness warnings', async () => {
@@ -204,6 +245,22 @@ test('copyWorkerFiles stages only uploadable worker files', () => {
 function listZipEntries(filePath) {
   const data = fs.readFileSync(filePath);
   return listZipEntryDetails(data).map((entry) => entry.name);
+}
+
+async function captureConsole(fn) {
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  const stdout = [];
+  const stderr = [];
+  console.log = (...args) => stdout.push(args.join(' '));
+  console.warn = (...args) => stderr.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+    console.warn = originalWarn;
+  }
+  return { stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }
 
 function createZipWithExecutableEntry() {

@@ -126,10 +126,10 @@ Completed:
 - Go root executable mode is preserved and inspected as `100755`.
 - `inspect-package` catches nested directory wrappers and missing root entries.
 - Local-only artifacts such as `.coreclaw`, `node_modules`, virtualenvs, caches, and build outputs are excluded.
+- `coreclaw pack --print-files` previews upload package contents before creating a ZIP.
 
 Solvable gaps:
 
-- Add `coreclaw pack --print-files` to list files before ZIP creation.
 - Add package size warnings for unexpectedly large uploads.
 - Add upload manifest diffing between source and package contents.
 
@@ -186,11 +186,12 @@ Currently out of local scope:
 - Added platform output verification helper scripts for local maintainers.
 - Added grouped top-level help, `coreclaw help <command>`, `<command> --help`, and close-command suggestions.
 - Added generated command reference docs from CLI command metadata.
+- Added `coreclaw pack --print-files` to preview upload package contents.
 
 ## Next Milestones
 
 1. Add JSON output modes for `validate`, `run`, `verify`, and `inspect-run`.
-2. Add a package manifest preview command for upload ZIP contents.
+2. Add package size warnings for unexpectedly large uploads.
 3. Add `init --input-example` or default `input.example.json` generation.
 4. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
 5. Add more precise remediation hints for validation and runtime failures.

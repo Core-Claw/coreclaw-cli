@@ -51,6 +51,10 @@ export function copyWorkerFiles(projectDir, targetDir) {
   return manifest;
 }
 
+export function previewUploadFiles(projectDir) {
+  return collectFiles(projectDir);
+}
+
 export function buildZipArchive(entries) {
   const localParts = [];
   const centralParts = [];

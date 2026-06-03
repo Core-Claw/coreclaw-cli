@@ -561,10 +561,11 @@ Creates an upload ZIP.
 
 ```bash
 node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip
+node ./bin/coreclaw.js pack ./worker --print-files
 node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --strict
 ```
 
-`pack` validates the project, stages uploadable files, builds Go upload binaries when needed, writes a ZIP with root entry files, and runs package inspection. Use `--strict` when missing recommended metadata or compatibility warnings should fail.
+`pack` validates the project, stages uploadable files, builds Go upload binaries when needed, writes a ZIP with root entry files, and runs package inspection. Use `--print-files` to preview the exact files that would be packaged without writing a ZIP. Use `--strict` when missing recommended metadata or compatibility warnings should fail.
 
 ### `inspect-package`
 

@@ -272,7 +272,7 @@ function commandAllowedOptions(command) {
         'staging',
       ]);
     case 'pack':
-      return new Set(['go', 'output', 'strict', 'validate']);
+      return new Set(['go', 'output', 'printFiles', 'strict', 'validate']);
     case 'audit':
       return new Set(['all', 'auditProfile', 'failOnWarn', 'ignoreIssueCodes', 'markdown', 'output', 'recursive', 'soft']);
     case 'inspect-run':
@@ -377,6 +377,7 @@ function isBooleanOption(name) {
     'requireUniqueKeys',
     'discoverChrome',
     'pack',
+    'printFiles',
   ]).has(name);
 }
 

@@ -72,9 +72,11 @@ export const COMMANDS = {
     summary: 'Create a CoreClaw upload ZIP with the entry file at archive root',
     usage: [
       'coreclaw pack [project] --output worker.zip [--strict] [--go go] [--no-validate]',
+      'coreclaw pack [project] --print-files [--strict] [--go go]',
     ],
     examples: [
       'coreclaw pack ./worker --output ./dist/worker.zip',
+      'coreclaw pack ./worker --print-files',
       'coreclaw pack ./go-worker --output ./dist/go-worker.zip --go go --strict',
     ],
   },
