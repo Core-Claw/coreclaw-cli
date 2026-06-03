@@ -129,10 +129,11 @@ Completed:
 - `coreclaw pack --print-files` previews upload package contents before creating a ZIP.
 - `inspect-package`, `pack`, and `verify` warn when upload ZIPs exceed a configurable local advisory size threshold.
 - `inspect-package` reports the largest compressed/uncompressed ZIP entries to make oversized packages easier to trim.
+- `inspect-package --project` compares an existing ZIP with the source project's expected upload manifest.
 
 Solvable gaps:
 
-- Add upload manifest diffing between source and package contents.
+- Add more upload packaging remediation hints for language-specific edge cases.
 
 Currently out of local scope:
 
@@ -192,10 +193,11 @@ Currently out of local scope:
 - Added `--json-output` for `validate`, `run`, `verify`, and `inspect-run`.
 - Added configurable package size warnings with `--max-package-size`.
 - Added largest-entry diagnostics to upload package inspection.
+- Added upload manifest comparison for existing ZIP packages with `inspect-package --project`.
 
 ## Next Milestones
 
-1. Add upload manifest diffing between source and package contents.
-2. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
-3. Add more precise remediation hints for validation and runtime failures.
-4. Stabilize and document a versioned JSON summary schema for CI integrations.
+1. Add richer examples for HTTP proxy, browser CDP, Lightpanda, and CAPTCHA Workers.
+2. Add more precise remediation hints for validation and runtime failures.
+3. Stabilize and document a versioned JSON summary schema for CI integrations.
+4. Add more Worker templates and example payloads.

@@ -178,11 +178,12 @@ CoreClaw CLI 打包时会排除：
 
 ```bash
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --project ./worker
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```
 
-包检查会显示 ZIP 大小以及最大的压缩/未压缩文件条目。CLI 默认使用 `50MB` 作为本地建议阈值，用来发现误打包的依赖、旧 ZIP、缓存或生成产物。这个阈值不是 CoreClaw 平台文档里的硬性上限；可以用 `--max-package-size` 调整，也可以用 `--max-package-size 0` 关闭这个建议 warning。
+包检查会显示 ZIP 大小以及最大的压缩/未压缩文件条目。加上 `--project ./worker` 可以把已有 ZIP 和项目预计上传清单做对照，发现缺失的运行文件或被其他压缩工具额外打进去的文件。CLI 默认使用 `50MB` 作为本地建议阈值，用来发现误打包的依赖、旧 ZIP、缓存或生成产物。这个阈值不是 CoreClaw 平台文档里的硬性上限；可以用 `--max-package-size` 调整，也可以用 `--max-package-size 0` 关闭这个建议 warning。
 
 ## input_schema.json
 
@@ -561,11 +562,12 @@ node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --
 
 ### `inspect-package`
 
-检查已有上传 ZIP，并显示最大的压缩/未压缩文件条目。
+检查已有上传 ZIP，显示最大的压缩/未压缩文件条目，并可与源项目预计上传清单对照。
 
 ```bash
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language python
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --strict
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --project ./worker
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```

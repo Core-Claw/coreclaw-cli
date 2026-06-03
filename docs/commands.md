@@ -20,7 +20,7 @@ Use this page when you need exact command syntax. For workflow guidance, start w
 ### Inspection and parity
 
 - `inspect-run` - Validate a local .coreclaw/runs/<run-id> artifact directory
-- `inspect-package` - Validate upload ZIP layout and show the largest packaged entries
+- `inspect-package` - Validate upload ZIP layout, size, largest entries, and optional project manifest parity
 - `compare` - Compare CoreClaw cloud JSON/CSV output with local run output
 
 ### Workspace and tools
@@ -156,18 +156,19 @@ coreclaw inspect-run ./worker/.coreclaw/runs/<run-id> --json-output
 
 ### `inspect-package`
 
-Validate upload ZIP layout and show the largest packaged entries
+Validate upload ZIP layout, size, largest entries, and optional project manifest parity
 
 Usage:
 
 ```bash
-coreclaw inspect-package worker.zip [--language python|node|go] [--max-package-size 50MB] [--strict]
+coreclaw inspect-package worker.zip [--language python|node|go] [--project ./worker] [--max-package-size 50MB] [--strict]
 ```
 
 Examples:
 
 ```bash
 coreclaw inspect-package ./dist/worker.zip --language node
+coreclaw inspect-package ./dist/worker.zip --language node --project ./worker
 coreclaw inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 coreclaw inspect-package ./dist/go-worker.zip --language go --strict
 ```

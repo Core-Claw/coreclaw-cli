@@ -96,11 +96,12 @@ test('parseArgs accepts no-input-example for init', () => {
 
 test('parseArgs accepts package size thresholds for upload package commands', () => {
   assert.deepEqual(
-    parseArgs(['inspect-package', './worker.zip', '--language', 'node', '--max-package-size', '25MB']),
+    parseArgs(['inspect-package', './worker.zip', '--language', 'node', '--project', './worker', '--max-package-size', '25MB']),
     {
       positionals: ['inspect-package', './worker.zip'],
       options: {
         language: 'node',
+        project: './worker',
         maxPackageSize: '25MB',
       },
     },

@@ -280,7 +280,7 @@ function commandAllowedOptions(command) {
     case 'inspect-run':
       return new Set(['jsonOutput', 'minResults', 'requireOutputSchemaMatch', 'requireResultStatusOk', 'requireStatusOk', 'resultFailValues', 'resultStatusFields']);
     case 'inspect-package':
-      return new Set(['language', 'maxPackageSize', 'strict']);
+      return new Set(['go', 'language', 'maxPackageSize', 'project', 'strict']);
     case 'compare':
       return new Set([...compare, 'output']);
     case 'doctor':
@@ -337,6 +337,7 @@ function isKnownOption(name) {
     'outputSchema',
     'proxyAuth',
     'proxyDomain',
+    'project',
     'python',
     'resultFailValues',
     'resultStatusFields',

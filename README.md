@@ -191,11 +191,12 @@ Use this gate for a ZIP created by any tool:
 
 ```bash
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --project ./worker
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```
 
-Package inspection also reports ZIP size and the largest compressed/uncompressed entries. By default the CLI uses a local advisory threshold of `50MB` to catch accidental bundled dependencies, old archives, caches, or generated assets. This threshold is not a documented CoreClaw platform hard limit. Adjust it with `--max-package-size`, or set `--max-package-size 0` to disable the advisory warning.
+Package inspection also reports ZIP size and the largest compressed/uncompressed entries. Add `--project ./worker` to compare an existing ZIP with the project's upload manifest; this catches missing runtime files and unexpected files that were added by another ZIP tool. By default the CLI uses a local advisory threshold of `50MB` to catch accidental bundled dependencies, old archives, caches, or generated assets. This threshold is not a documented CoreClaw platform hard limit. Adjust it with `--max-package-size`, or set `--max-package-size 0` to disable the advisory warning.
 
 ## Input Schema
 
@@ -581,11 +582,12 @@ node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --
 
 ### `inspect-package`
 
-Validates an existing upload ZIP and prints the largest compressed/uncompressed entries.
+Validates an existing upload ZIP, prints the largest compressed/uncompressed entries, and can compare the ZIP with a source project's expected upload manifest.
 
 ```bash
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language python
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --strict
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --project ./worker
 node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```

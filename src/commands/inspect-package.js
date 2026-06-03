@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CliError } from '../utils/errors.js';
 import { formatBytes, parseSizeBytes } from '../utils/bytes.js';
+import { resolveProjectPath } from '../utils/paths.js';
+import { previewUploadFiles } from '../pack/zip.js';
+import { prepareUploadProject } from '../pack/upload-project.js';
+import { formatIssues, validateProject } from '../validation/project.js';
 
 export const DEFAULT_MAX_PACKAGE_SIZE_BYTES = 50 * 1000 * 1000;
 const LARGEST_ENTRY_COUNT = 5;
@@ -36,6 +40,11 @@ export async function inspectPackageCommand(packagePath, options = {}) {
 
   const report = inspectPackage(path.resolve(process.cwd(), packagePath));
   Object.assign(report, validatePackageReport(report, options));
+  if (options.project) {
+    report.manifest_comparison = comparePackageManifest(report, options.project, options);
+    report.issues.push(...manifestComparisonIssues(report.manifest_comparison));
+    report.ok = !report.issues.some((issue) => issue.severity === 'error');
+  }
   printPackageReport(report);
   enforcePackageGates(report, options);
   return report;
@@ -135,6 +144,69 @@ export function validatePackageReport(report, options = {}) {
   };
 }
 
+export function comparePackageManifest(report, projectPath, options = {}) {
+  const projectDir = resolveProjectPath(projectPath);
+  const project = validateProject(projectDir);
+  if (!project.ok) {
+    const details = formatIssues(project.issues);
+    throw new CliError(`Cannot compare package manifest because project validation failed.${details ? `\n${details}` : ''}`);
+  }
+  if (report.language && report.language !== project.language) {
+    throw new CliError(`Package language "${report.language}" does not match project language "${project.language}".`);
+  }
+
+  const uploadProject = prepareUploadProject(project, options);
+  try {
+    const expectedEntries = previewUploadFiles(uploadProject.projectDir).sort();
+    const packageEntries = packageFileEntries(report).sort();
+    const expectedSet = new Set(expectedEntries);
+    const packageSet = new Set(packageEntries);
+    const missingFromPackage = expectedEntries.filter((entry) => !packageSet.has(entry));
+    const extraInPackage = packageEntries.filter((entry) => !expectedSet.has(entry));
+
+    return {
+      project_dir: projectDir,
+      expected_entry_count: expectedEntries.length,
+      package_entry_count: packageEntries.length,
+      matching_entry_count: expectedEntries.length - missingFromPackage.length,
+      missing_from_package: missingFromPackage,
+      extra_in_package: extraInPackage,
+      ok: missingFromPackage.length === 0 && extraInPackage.length === 0,
+    };
+  } finally {
+    uploadProject.cleanup();
+  }
+}
+
+export function manifestComparisonIssues(comparison) {
+  const issues = [];
+  if ((comparison?.missing_from_package?.length ?? 0) > 0) {
+    issues.push({
+      severity: 'error',
+      code: 'package_manifest_missing_entries',
+      message: `Upload ZIP is missing ${comparison.missing_from_package.length} file(s) expected from the project upload manifest: ${formatEntryList(comparison.missing_from_package)}.`,
+      evidence: {
+        project_dir: comparison.project_dir,
+        missing_from_package: comparison.missing_from_package,
+      },
+      remediation: 'Recreate the ZIP from the project root with coreclaw pack, or add the missing runtime source/assets before uploading.',
+    });
+  }
+  if ((comparison?.extra_in_package?.length ?? 0) > 0) {
+    issues.push({
+      severity: 'warn',
+      code: 'package_manifest_extra_entries',
+      message: `Upload ZIP contains ${comparison.extra_in_package.length} file(s) not produced by the project upload manifest: ${formatEntryList(comparison.extra_in_package)}.`,
+      evidence: {
+        project_dir: comparison.project_dir,
+        extra_in_package: comparison.extra_in_package,
+      },
+      remediation: 'Remove local examples, stale archives, caches, generated output, or other non-upload files from the ZIP.',
+    });
+  }
+  return issues;
+}
+
 function printPackageReport(report) {
   console.log(`Package: ${report.package_path}`);
   if (report.language_label) {
@@ -156,10 +228,21 @@ function printPackageReport(report) {
   if (main) {
     console.log(`Root main mode: ${main.mode_octal}`);
   }
+  if (report.manifest_comparison) {
+    printManifestComparison(report.manifest_comparison);
+  }
   for (const issue of report.issues ?? []) {
     const marker = issue.severity === 'error' ? 'ERROR' : 'WARN';
     console.log(`[${marker}] ${issue.message}`);
   }
+}
+
+function printManifestComparison(comparison) {
+  console.log(`Manifest comparison: ${comparison.project_dir}`);
+  console.log(`  Expected upload entries: ${comparison.expected_entry_count}`);
+  console.log(`  Matching entries: ${comparison.matching_entry_count}`);
+  console.log(`  Missing from package: ${comparison.missing_from_package.length ? formatEntryList(comparison.missing_from_package) : '(none)'}`);
+  console.log(`  Extra in package: ${comparison.extra_in_package.length ? formatEntryList(comparison.extra_in_package) : '(none)'}`);
 }
 
 function parseMaxPackageSize(value) {
@@ -277,6 +360,12 @@ function firstPathSegment(name) {
   return segments.length > 1 ? segments[0] : null;
 }
 
+function packageFileEntries(report) {
+  return report.entries
+    .filter((entry) => !entry.name.endsWith('/'))
+    .map((entry) => entry.name);
+}
+
 function largestEntries(entries, limit = LARGEST_ENTRY_COUNT) {
   return entries
     .filter((entry) => !entry.name.endsWith('/'))
@@ -293,6 +382,12 @@ function largestEntries(entries, limit = LARGEST_ENTRY_COUNT) {
       uncompressed_size: entry.uncompressed_size,
       uncompressed_size_human: formatBytes(entry.uncompressed_size),
     }));
+}
+
+function formatEntryList(entries, limit = 8) {
+  const shown = entries.slice(0, limit);
+  const suffix = entries.length > limit ? `, ... (+${entries.length - limit} more)` : '';
+  return `${shown.join(', ')}${suffix}`;
 }
 
 function readCentralDirectory(data) {

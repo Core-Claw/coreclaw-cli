@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { inspectPackage, inspectPackageCommand, validatePackageReport } from '../src/commands/inspect-package.js';
-import { buildZipArchive } from '../src/pack/zip.js';
+import { comparePackageManifest, inspectPackage, inspectPackageCommand, validatePackageReport } from '../src/commands/inspect-package.js';
+import { buildZipArchive, createWorkerZip } from '../src/pack/zip.js';
 import { CliError } from '../src/utils/errors.js';
 
 test('inspectPackage reads ZIP entries and Unix modes', () => {
@@ -66,6 +66,60 @@ test('inspectPackageCommand prints largest entries', async () => {
 
   assert.match(output, /Largest entries:/);
   assert.match(output, /large-runtime-asset\.bin/);
+});
+
+test('inspectPackageCommand compares ZIP entries with a project upload manifest', async () => {
+  const projectDir = makeNodeProject();
+  const zipPath = path.join(projectDir, 'dist', 'worker.zip');
+  createWorkerZip({ projectDir, outFile: zipPath });
+
+  const output = await captureConsole(() => inspectPackageCommand(zipPath, {
+    language: 'node',
+    project: projectDir,
+  }));
+  const report = await inspectPackageCommand(zipPath, {
+    language: 'node',
+    project: projectDir,
+  });
+
+  assert.equal(report.manifest_comparison.ok, true);
+  assert.deepEqual(report.manifest_comparison.missing_from_package, []);
+  assert.deepEqual(report.manifest_comparison.extra_in_package, []);
+  assert.match(output, /Manifest comparison:/);
+  assert.match(output, /Missing from package: \(none\)/);
+  assert.match(output, /Extra in package: \(none\)/);
+});
+
+test('inspectPackageCommand reports missing and extra manifest entries', async () => {
+  const projectDir = makeNodeProject();
+  const zipPath = writeZip([
+    { name: 'main.js', data: 'console.log("ok")', mode: 0o100644 },
+    { name: 'package.json', data: '{"dependencies":{}}', mode: 0o100644 },
+    { name: 'README.md', data: '# Test\n', mode: 0o100644 },
+    { name: 'input_schema.json', data: '{}', mode: 0o100644 },
+    { name: 'output_schema.json', data: '[]', mode: 0o100644 },
+    { name: 'sdk_pb.js', data: '', mode: 0o100644 },
+    { name: 'sdk_grpc_pb.js', data: '', mode: 0o100644 },
+    { name: 'debug.log', data: 'local log', mode: 0o100644 },
+  ]);
+
+  const report = inspectPackage(zipPath);
+  Object.assign(report, validatePackageReport(report, { language: 'node' }));
+  const comparison = comparePackageManifest(report, projectDir);
+
+  assert.equal(comparison.ok, false);
+  assert.deepEqual(comparison.missing_from_package, ['sdk.js']);
+  assert.deepEqual(comparison.extra_in_package, ['debug.log']);
+
+  await assert.rejects(
+    () => inspectPackageCommand(zipPath, { language: 'node', project: projectDir }),
+    (error) => error instanceof CliError && /Package validation failed/.test(error.message),
+  );
+
+  await assert.rejects(
+    () => inspectPackageCommand(zipPath, { language: 'node', project: projectDir, strict: true }),
+    (error) => error instanceof CliError && /Package validation failed/.test(error.message),
+  );
 });
 
 test('inspectPackageCommand validates Node and Python root entry files', async () => {
@@ -236,4 +290,34 @@ async function captureConsole(fn) {
     console.log = originalLog;
   }
   return stdout.join('\n');
+}
+
+function makeNodeProject() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-inspect-package-project-'));
+  fs.writeFileSync(path.join(dir, 'main.js'), 'console.log("ok")\n');
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'README.md'), '# Test\n');
+  fs.writeFileSync(path.join(dir, 'input_schema.json'), JSON.stringify({
+    b: 'items',
+    properties: [
+      {
+        name: 'items',
+        type: 'array',
+        editor: 'stringList',
+        default: [],
+      },
+    ],
+  }));
+  fs.writeFileSync(path.join(dir, 'output_schema.json'), JSON.stringify([
+    { name: 'ok', type: 'boolean' },
+  ]));
+  for (const file of ['sdk.js', 'sdk_pb.js', 'sdk_grpc_pb.js']) {
+    fs.writeFileSync(path.join(dir, file), '');
+  }
+  return dir;
 }
