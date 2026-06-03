@@ -1,45 +1,53 @@
 # CoreClaw CLI
 
-Local CoreClaw worker runtime, verifier, and upload preflight CLI.
-
-CoreClaw's official developer guide currently documents upload-ready worker projects, cloud-injected SDK files, `input_schema.json`, `output_schema.json`, the gRPC SDK endpoint `127.0.0.1:20086`, and runtime variables such as `PROXY_AUTH`, `PROXY_DOMAIN`, and `ChromeWs`. It also says local SDK worker mode is not yet available. This CLI fills that gap for local development.
+CoreClaw CLI is a local development, verification, and packaging tool for CoreClaw Workers. It is designed to make the local pre-upload workflow match the CoreClaw platform contract as closely as a desktop tool can: validate the Worker project structure, run the Worker through a local SDK runtime, inspect runtime output, compare platform output with local output, and create upload-ready ZIP packages.
 
 Chinese documentation: [README_CN.md](./README_CN.md).
 
-## What It Emulates
+## Why This CLI Exists
 
-- CoreClaw SDK gRPC services:
-  - `Parameter/GetInputJSONString`
-  - `Result/SetTableHeader`
-  - `Result/PushData`
-  - `Log/Debug`, `Log/Info`, `Log/Warn`, `Log/Error`
-- Runtime input injection from `input_schema.json` defaults, `--input`, or `--json`
-- Run input validation for required fields, declared value types, numeric bounds, selector options, and list editor item shapes in `input_schema.json` before the worker starts
-- Platform environment variables:
-  - `ChromeWs`
-  - `LightpandaDomain`
-  - `CDP_ENDPOINT` / `BROWSER_WS_ENDPOINT`
-  - `PROXY_AUTH` / `PROXY_DOMAIN` when cloud proxy mode is requested
-- Per-run temporary state isolation for local runs:
-  - `CORECLAW_TMP_DIR`
-  - `TMPDIR` / `TMP` / `TEMP`
-- Run lifecycle artifacts under `.coreclaw/runs/<run-id>/`
-- Output table projection and result/schema drift reporting for `output_schema.json`
-- Optional strict runtime table-header gate for workers that must call `set_table_header`
-- Optional result-status gate for workers whose output rows contain business-level failure states
-- Upload ZIP structure validation and packaging
-- Go upload packaging:
-  - clean upload staging
-  - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -o main ./main.go`
-  - executable `main` at the ZIP root
+CoreClaw Workers are uploaded as lightweight script projects. The platform provides the runtime, installs dependencies, injects environment variables, exposes a local SDK gRPC endpoint at `127.0.0.1:20086`, runs your entry file, captures logs, and stores rows pushed through the SDK.
 
-It does not emulate CoreClaw's real remote fingerprint browser pool. For browser workers, start a local Chrome with remote debugging on `127.0.0.1:9222`, or pass a real remote CDP/WebDriver endpoint with `--chrome-ws` / `--chrome-http`, then use `--require-browser` to fail fast if the endpoint is not reachable. For HTTP workers, use `--local-proxy --require-proxy-usage` to expose a local SOCKS5 proxy through `PROXY_AUTH` / `PROXY_DOMAIN` and fail the run if the worker bypasses it.
+The official Worker definition describes the required files, SDK modules, `input_schema.json`, `output_schema.json`, browser endpoints, SOCKS5 proxy variables, Lightpanda, and CAPTCHA commands. CoreClaw CLI turns those platform rules into a local preflight gate so a Worker can be checked before upload.
 
-It also does not emulate real Lightpanda page rendering locally. Use `--lightpanda-shim` to expose a local CDP shim through `LightpandaDomain`, and `--require-lightpanda-shim` to fail a smoke run if the worker does not connect to `/devtools/browser/new` or forgets the documented Basic `Authorization` header built from `PROXY_AUTH`. This verifies the Lightpanda endpoint contract before upload; real navigation/rendering must still be validated on CoreClaw or against a real upstream CDP endpoint.
+Use CoreClaw CLI to:
 
-It also does not solve real CAPTCHAs locally. Use `--captcha-solver` to expose a local CDP shim for CoreClaw's custom `Captchas.automaticSolver` command, and `--require-captcha-solver` to fail a smoke run if the worker never calls that command or calls it with params outside the documented `timeout` / `solverType` contract. This verifies the integration contract before upload; real CAPTCHA bypass still happens only in CoreClaw's hosted fingerprint browser.
+- Generate Python, Node.js, and Go Worker templates with SDK files.
+- Validate upload-required files and schema files.
+- Run a Worker locally with a CoreClaw-compatible SDK gRPC server.
+- Validate actual run input against `input_schema.json`.
+- Capture logs, table headers, pushed rows, projected exports, and runtime diagnostics.
+- Enforce result-count, status, table-header, output-schema, proxy, browser, Lightpanda, and CAPTCHA gates.
+- Create upload ZIP packages with correct archive-root layout.
+- Build Go Workers into a Linux amd64 executable named `main`.
+- Inspect ZIP packages before upload, including nested-directory mistakes and Go executable mode.
+- Compare CoreClaw platform JSON/CSV results with a local run.
+- Audit many `worker-*` projects in a workspace.
 
-## Install
+## What The CLI Emulates
+
+The local runtime implements the CoreClaw SDK services used by Worker code:
+
+- `Parameter/GetInputJSONString`
+- `Result/SetTableHeader`
+- `Result/PushData`
+- `Log/Debug`
+- `Log/Info`
+- `Log/Warn`
+- `Log/Error`
+
+It also injects the runtime variables and files needed by common Worker patterns:
+
+- `CORECLAW_TMP_DIR`, `TMPDIR`, `TMP`, and `TEMP` for per-run temporary state.
+- `PROXY_AUTH` and `PROXY_DOMAIN` for proxy contract tests.
+- `ChromeWs`, `ChromeHttp`, `CDP_ENDPOINT`, and `BROWSER_WS_ENDPOINT` for browser automation tests.
+- `LightpandaDomain` for Lightpanda endpoint contract tests.
+- A local SOCKS5 proxy when `--local-proxy` is enabled.
+- A local browser CDP shim when `--browser-cdp-shim`, `--lightpanda-shim`, or `--captcha-solver` is enabled.
+
+The CLI does not replace the hosted CoreClaw platform. It does not provide the real remote fingerprint browser pool, does not render pages with the real Lightpanda service, and does not solve real CAPTCHAs. For those features, the CLI validates the documented connection and command contracts locally, then you still run the final proof on CoreClaw.
+
+## Installation
 
 From this repository:
 
@@ -48,79 +56,584 @@ npm install
 node ./bin/coreclaw.js --help
 ```
 
-For local development, you can use the executable directly:
+During local development you can call the executable by path:
 
 ```bash
 node E:/worker/coreclaw-cli/bin/coreclaw.js doctor
 ```
 
-Before pushing CLI changes:
+After installing the package globally or linking it into your shell, the executable name is:
 
 ```bash
-npm run verify
+coreclaw --help
 ```
 
-This runs the unit suite and then executes `coreclaw verify` against the Node example, including a cloud-output comparison against `examples/node-hello-cloud-output.json`. The test suite also smoke-tests generated Node and Python templates end to end: `init` creates a worker, `verify` runs it from upload-like staging with strict result/table-header/output-schema gates, and the produced ZIP passes package inspection.
+## Quick Start
 
-## Commands
-
-### Create a Worker
+Create a Node.js Worker, run it locally, verify it from upload-like staging, and produce a ZIP:
 
 ```bash
 node ./bin/coreclaw.js init ./my-worker --language node --name my-worker
+node ./bin/coreclaw.js validate ./my-worker --strict
+node ./bin/coreclaw.js run ./my-worker --min-results 1
+node ./bin/coreclaw.js verify ./my-worker --strict --min-results 1
+```
+
+Run the built-in example:
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-hello \
+  --cloud-output ./examples/node-hello-cloud-output.json \
+  --compare-output ./tmp/node-hello-comparison.json \
+  --min-shared 1 \
+  --max-diff 0 \
+  --output ./tmp/node-hello.zip
+```
+
+Run the full release verification for this CLI repository:
+
+```bash
+npm run verify:release
+```
+
+## CoreClaw Worker Contract
+
+A Worker is not only a script. It is a project with a fixed entry file, dependency file, SDK files, input schema, output schema, and documentation. The platform reads those files to prepare the UI, install dependencies, start the script, and collect results.
+
+### Python Source Project
+
+```text
+main.py
+requirements.txt
+README.md
+input_schema.json
+output_schema.json
+sdk.py
+sdk_pb2.py
+sdk_pb2_grpc.py
+```
+
+### Node.js Source Project
+
+```text
+main.js
+package.json
+README.md
+input_schema.json
+output_schema.json
+sdk.js
+sdk_pb.js
+sdk_grpc_pb.js
+```
+
+Node.js Workers should use CommonJS for the SDK files:
+
+```javascript
+const coresdk = require('./sdk')
+```
+
+The documented package shape is `main.js` with CommonJS semantics. Runtime dependencies such as `@grpc/grpc-js`, `google-protobuf`, `puppeteer-core`, `axios`, or `socks-proxy-agent` must be declared under `dependencies` or `optionalDependencies`, not only `devDependencies`.
+
+### Go Source Project
+
+```text
+main.go
+go.mod
+go.sum
+README.md
+input_schema.json
+output_schema.json
+GoSdk/
+  sdk.go
+  sdk.pb.go
+  sdk_grpc.pb.go
+```
+
+Go has two different contracts:
+
+- The source project contains `main.go`, `go.mod`, `go.sum`, `GoSdk/`, schemas, and docs.
+- The uploaded ZIP must contain a compiled Linux amd64 executable named `main` at the ZIP root.
+
+CoreClaw CLI builds that upload binary with:
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -o main ./main.go
+```
+
+On Windows, ordinary ZIP tools can lose the executable bit from a Go binary. `coreclaw pack` and `coreclaw verify` preserve the root `main` mode as `100755` in the ZIP and `coreclaw inspect-package` checks it before upload.
+
+## Upload Package Contract
+
+CoreClaw ZIP uploads must put the runtime entry at the archive root:
+
+- Python: `main.py` at ZIP root.
+- Node.js: `main.js` at ZIP root.
+- Go: compiled executable `main` at ZIP root.
+
+Do not upload a ZIP that contains an extra wrapper directory such as `worker/main.js`. The platform expects the entry file at the archive root.
+
+CoreClaw CLI excludes local-only artifacts from packages:
+
+- `.coreclaw/`
+- `node_modules/`
+- Python virtualenvs
+- build directories
+- caches
+- git metadata
+- temporary files
+
+Use this gate for a ZIP created by any tool:
+
+```bash
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node
+node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
+```
+
+## Input Schema
+
+`input_schema.json` defines the launch form shown on CoreClaw. The CLI validates it statically and also validates the actual runtime input before starting a local run.
+
+The root object uses:
+
+- `description`: optional Worker summary shown to users.
+- `b`: required task-splitting key. It must match the `name` of an array property.
+- `properties`: required array of input field definitions.
+
+Example:
+
+```json
+{
+  "description": "Fetch pages and return basic metadata.",
+  "b": "urls",
+  "properties": [
+    {
+      "title": "URLs",
+      "name": "urls",
+      "type": "array",
+      "editor": "requestList",
+      "default": [
+        { "url": "https://example.com" }
+      ],
+      "required": true
+    },
+    {
+      "title": "Timeout (ms)",
+      "name": "timeoutMs",
+      "type": "integer",
+      "editor": "number",
+      "minimum": 1000,
+      "maximum": 120000,
+      "default": 60000
+    }
+  ]
+}
+```
+
+Supported property types:
+
+- `string`
+- `integer`
+- `boolean`
+- `array`
+- `object`
+
+Supported editors include:
+
+- `input`
+- `textarea`
+- `number`
+- `select`
+- `radio`
+- `checkbox`
+- `switch`
+- `datepicker`
+- `requestList`
+- `requestListSource`
+- `stringList`
+
+Important schema rules:
+
+- Every `name` must be unique.
+- `name` should be an ASCII identifier used by your code.
+- `b` must point to an array property.
+- `requestList` items must contain a non-empty `url`.
+- `stringList` items must contain a non-empty `string`.
+- `requestListSource` may define custom item parameters with `param_list`.
+- `select`, `radio`, and `checkbox` values must be declared in `options`.
+- Numeric inputs can declare `minimum` and `maximum`.
+- Required fields must be present and non-empty at run time.
+
+Run input can come from schema defaults, an input file, inline JSON, or a split item:
+
+```bash
+node ./bin/coreclaw.js run ./worker --input input.json
+node ./bin/coreclaw.js run ./worker --json "{\"timeoutMs\":60000}"
+node ./bin/coreclaw.js run ./worker --input-json "{\"timeoutMs\":60000}"
+node ./bin/coreclaw.js run ./worker --split 0
+```
+
+On Windows and in CI, prefer `--input input.json` for complex payloads because shell quoting can modify inline JSON.
+
+## Output Schema
+
+`output_schema.json` defines the result table shown to users and exported from the platform. It is a JSON array:
+
+```json
+[
+  {
+    "name": "url",
+    "type": "string",
+    "description": "URL"
+  },
+  {
+    "name": "status",
+    "type": "string",
+    "description": "Status"
+  },
+  {
+    "name": "html_length",
+    "type": "integer",
+    "description": "HTML Length"
+  }
+]
+```
+
+Supported output types:
+
+- `string`
+- `integer`
+- `boolean`
+- `array`
+- `object`
+
+The `name` values must match the keys your Worker pushes through the SDK. During local runs the CLI writes:
+
+- `results.ndjson`: raw SDK `push_data` rows.
+- `export.ndjson`: rows projected through `output_schema.json`.
+- `output_schema_issues.json`: field drift, extra fields, missing fields, wrong types, or non-object pushed rows.
+
+Use `--require-output-schema-match` when schema drift should fail the local run or upload preflight.
+
+## SDK Usage
+
+Worker code communicates with CoreClaw through the SDK files included in the project. CoreClaw CLI runs a local compatible gRPC server so these calls work on your machine.
+
+### Read Input
+
+Python:
+
+```python
+from sdk import CoreSDK
+
+input_dict = CoreSDK.Parameter.get_input_json_dict()
+input_json = CoreSDK.Parameter.get_input_json_str()
+```
+
+Node.js:
+
+```javascript
+const coresdk = require('./sdk')
+
+const input = await coresdk.parameter.getInputJSONObject()
+const inputJson = await coresdk.parameter.getInputJSONString()
+```
+
+Go:
+
+```go
+inputJSON, err := coresdk.Parameter.GetInputJSONString(ctx)
+```
+
+### Log Progress
+
+Python:
+
+```python
+CoreSDK.Log.debug("debug details")
+CoreSDK.Log.info("normal progress")
+CoreSDK.Log.warn("recoverable warning")
+CoreSDK.Log.error("error details")
+```
+
+Node.js:
+
+```javascript
+await coresdk.log.debug('debug details')
+await coresdk.log.info('normal progress')
+await coresdk.log.warn('recoverable warning')
+await coresdk.log.error('error details')
+```
+
+Go:
+
+```go
+coresdk.Log.Debug(ctx, "debug details")
+coresdk.Log.Info(ctx, "normal progress")
+coresdk.Log.Warn(ctx, "recoverable warning")
+coresdk.Log.Error(ctx, "error details")
+```
+
+### Define Table Headers
+
+```javascript
+await coresdk.result.setTableHeader([
+  { label: 'URL', key: 'url', format: 'text' },
+  { label: 'Status', key: 'status', format: 'text' },
+])
+```
+
+`set_table_header` is the runtime table contract. The CLI warns when a Worker never calls it. Add `--require-table-header` when it must be a hard gate.
+
+### Push Result Rows
+
+```javascript
+await coresdk.result.pushData({
+  url: 'https://example.com',
+  status: 'ok',
+})
+```
+
+Rows should be JSON objects whose keys match `output_schema.json` and the runtime table header keys.
+
+## Command Reference
+
+### `doctor`
+
+Checks local tool availability and browser endpoint discovery.
+
+```bash
+node ./bin/coreclaw.js doctor
+node ./bin/coreclaw.js doctor --python "py -3" --go go --strict
+```
+
+Use it before debugging Workers locally. It reports configured Python, Node.js, Go, and local Chrome CDP availability.
+
+### `init`
+
+Creates a new upload-ready Worker.
+
+```bash
+node ./bin/coreclaw.js init ./my-node-worker --language node --name my-node-worker
 node ./bin/coreclaw.js init ./my-python-worker --language python
 node ./bin/coreclaw.js init ./my-go-worker --language go
 ```
 
-Generated projects include the mandatory SDK files documented by CoreClaw:
+Options:
 
-- Python: `sdk.py`, `sdk_pb2.py`, `sdk_pb2_grpc.py`
-- Node.js: `sdk.js`, `sdk_pb.js`, `sdk_grpc_pb.js`
-- Go: `GoSdk/sdk.go`, `GoSdk/sdk.pb.go`, `GoSdk/sdk_grpc.pb.go`
+- `--language python|node|go`: Worker language.
+- `--name <name>`: package/module name used where relevant.
+- `--force`: overwrite an existing target directory.
 
-### Validate
+Generated Workers include entry files, dependency files, SDK files, `README.md`, `input_schema.json`, and `output_schema.json`.
+
+### `validate`
+
+Runs static upload-readiness checks.
 
 ```bash
-node ./bin/coreclaw.js validate ./examples/node-hello
-node ./bin/coreclaw.js validate ./examples/node-hello --strict
+node ./bin/coreclaw.js validate ./worker
+node ./bin/coreclaw.js validate ./worker --strict
 ```
 
-Validation checks:
+Validation covers:
 
-- Exactly one entry file: `main.py`, `main.js`, or `main.go`
-- Required dependency, SDK, and input schema files
-- `README.md` presence as an upload-ready worker documentation warning
-- Node `package.json` `main` / `type` values against the documented `main.js` + CommonJS contract
-- Node source `require()` / `import` third-party package names against `package.json` runtime dependencies
-- Python source `import` / `from` third-party package names against `requirements.txt`, excluding SDK files, local modules, and test-only sources
-- SDK runtime dependencies declared in the platform dependency file:
-  - Python: `grpcio`, `protobuf` in `requirements.txt`
-  - Node.js: `@grpc/grpc-js`, `google-protobuf` in `package.json`
-  - Go: `google.golang.org/grpc`, `google.golang.org/protobuf` in `go.mod`, with matching checksums in `go.sum`
-- HTTP request workers that use clients such as `requests`, `httpx`, `axios`, `fetch`, `undici`, or Go `net/http` read both `PROXY_AUTH` and `PROXY_DOMAIN`
-- `input_schema.json` root fields, unique property names, supported types/editors, documented editor/type pairings, numeric `minimum` / `maximum` bounds, selector `options`, `requestListSource.param_list`, and default value shapes
-- `input_schema.b` points to an array property
-- `output_schema.json` column names and supported types when present
+- Required root files for Python, Node.js, and Go.
+- Exactly one language entry file.
+- SDK files.
+- Dependency declarations.
+- Node.js `main.js` and CommonJS package contract.
+- Node.js third-party imports missing from runtime dependencies.
+- Python third-party imports missing from `requirements.txt`.
+- Go SDK dependencies and required `go.sum` checksums.
+- `input_schema.json` structure, field names, editors, types, required fields, options, numeric bounds, and `b` split key.
+- `output_schema.json` column names and supported types.
+- HTTP Workers that appear to bypass `PROXY_AUTH` / `PROXY_DOMAIN`.
+- Browser Workers that do not read `ChromeWs`, `ChromeHttp`, `LightpandaDomain`, `CDP_ENDPOINT`, or `BROWSER_WS_ENDPOINT`.
 
-CoreClaw installs dependencies from `requirements.txt`, `package.json`, or `go.mod` after upload. The CLI therefore rejects workers that rely on locally installed SDK packages but do not declare those packages for the cloud installer. For Node.js workers, validation also warns when source files import third-party packages that are missing from `dependencies` or `optionalDependencies`, because a local `node_modules` directory can otherwise hide upload-time failures. For Python workers, validation warns when runtime source imports common third-party modules that are missing from `requirements.txt`, with package-name normalization for mappings such as `bs4` -> `beautifulsoup4`, `cv2` -> `opencv-python`, and `grpc` -> `grpcio`. For Go workers, `go.sum` must already contain checksums for SDK dependencies because `verify` and `pack` build with `-mod=readonly`; run `go mod tidy` or `go mod download` before preflight if checksums are missing.
+By default, compatibility warnings do not fail validation. Use `--strict` for new Workers or pre-upload checks where warnings should fail.
 
-CoreClaw runs HTTP request workers inside an isolated network sandbox. If source files appear to make direct HTTP requests, validation warns unless the project reads both `PROXY_AUTH` and `PROXY_DOMAIN` so it can build the documented SOCKS5 proxy URL. Browser automation workers that connect through `ChromeWs` or `LightpandaDomain` are not treated as direct HTTP proxy workers by this static check.
+### `run`
 
-For browser automation source files, validation also warns when Playwright, Puppeteer, Selenium, DrissionPage, or CDP-style code does not read CoreClaw's remote browser environment. Upload-ready browser workers should read `PROXY_AUTH` plus one of `ChromeWs`, `ChromeHttp`, `LightpandaDomain`, `CDP_ENDPOINT`, or `BROWSER_WS_ENDPOINT`; launching a local browser should be kept behind a local-development branch. This catches workers that pass locally by starting a browser on the developer machine but cannot connect to CoreClaw's hosted browser backend after upload.
+Runs a Worker locally against the CoreClaw SDK runtime emulator.
 
-Use `--strict` when validation should behave like a new-worker upload readiness gate: warnings such as missing `README.md`, missing `output_schema.json`, legacy schema types, or Node package metadata drift become failures. Default validation stays compatible with older workers so existing projects can still be inspected and run locally.
+```bash
+node ./bin/coreclaw.js run ./worker --input input.json --min-results 1
+node ./bin/coreclaw.js run ./worker --json "{\"url\":\"https://example.com\"}"
+node ./bin/coreclaw.js run ./worker --split 0
+node ./bin/coreclaw.js run ./worker --timeout-ms 10m --idle-timeout-ms 30s
+node ./bin/coreclaw.js run ./worker --strict --min-results 1
+```
 
-At run time, the CLI also validates the actual input assembled from defaults, `--input`, or `--json`. If a field marked `"required": true` is missing or empty, if a declared input field has the wrong JSON type, if a numeric value is outside `minimum` / `maximum`, if a `select`/`radio`/`checkbox` value is outside `options`, or if list editor items do not match the documented shape, the command fails before creating run artifacts or starting the worker, matching CoreClaw's form-level launch behavior.
+Important runtime gates:
 
-For list editors, `requestList` items must include a non-empty `url`, `stringList` items must include a non-empty `string`, and `requestListSource` items may use custom fields declared in `param_list`. Static validation checks the `param_list` structure, duplicate param names, supported param types/editors, numeric bounds, selector options, and editor/type pairings. Run-time validation then checks required `param_list` fields, JSON types, numeric bounds, and selector options per list item.
+```bash
+node ./bin/coreclaw.js run ./worker --require-status-ok
+node ./bin/coreclaw.js run ./worker --require-status-ok --result-status-fields status,check_status --result-fail-values fail,error
+node ./bin/coreclaw.js run ./worker --require-table-header
+node ./bin/coreclaw.js run ./worker --require-output-schema-match
+node ./bin/coreclaw.js run ./worker --min-results 1
+```
 
-CoreClaw's docs describe `output_schema.json` for upload-ready projects, but the current platform still accepts older workers without it. The CLI treats a missing `output_schema.json` as a warning, not a blocker. Local `export.ndjson` keeps the full raw result rows when no output schema exists.
+`--require-status-ok` fails when result rows contain failure-like status values. It checks `status` by default. Use `--result-status-fields` and `--result-fail-values` for Worker-specific fields and values.
 
-When `output_schema.json` exists, local runs project `export.ndjson` through the declared columns and record result/schema drift in `output_schema_issues.json`. They also warn when runtime `set_table_header` keys or formats drift from `output_schema.json`. Add `--require-output-schema-match` to `run` or `verify` when you want upload-preflight behavior to fail if pushed rows are missing declared fields, include undeclared fields, have the wrong declared field type, or are not JSON objects.
+`--strict` enables strict static validation plus default runtime gates for table header, output schema, and status rows unless explicitly overridden.
 
-CoreClaw's SDK docs describe `set_table_header` as the runtime table-definition step before returning results. The CLI warns when a worker never calls it, but keeps old `output_schema.json`-only workers compatible by default. Add `--require-table-header` to `run` or `verify` when you want that SDK contract to be a hard upload preflight gate.
+Run artifacts are written to:
 
-### Audit Many Workers
+```text
+.coreclaw/runs/<run-id>/
+  input.json
+  env.json
+  command.json
+  upload_manifest.json
+  logs.ndjson
+  results.ndjson
+  export.ndjson
+  output_schema_issues.json
+  table_headers.json
+  captcha_solver_calls.json
+  tmp/
+  summary.json
+```
+
+Some files are present only when the related feature is used.
+
+### `verify`
+
+Runs upload preflight. This is the main command to use before uploading a Worker to CoreClaw.
+
+```bash
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --min-results 1
+node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
+node ./bin/coreclaw.js verify ./worker --no-pack
+node ./bin/coreclaw.js verify ./worker --no-staging --no-install
+```
+
+`verify` performs these steps:
+
+1. Static project validation.
+2. Copy uploadable files into a clean staging directory.
+3. Install dependencies in staging.
+4. Execute the staged Worker through the local CoreClaw SDK runtime.
+5. Enforce result-count and status gates.
+6. Optionally compare with CoreClaw cloud output.
+7. Create an upload ZIP unless `--no-pack` is used.
+8. Inspect the generated package.
+
+For Python, staged verify creates a temporary virtual environment so globally installed packages cannot hide missing `requirements.txt` entries.
+
+For Node.js, staged verify installs runtime dependencies with `npm ci --omit=dev` or `npm install --omit=dev`, so dev-only packages cannot hide upload failures.
+
+For Go, staged verify builds the Linux amd64 `main` executable and then runs from an upload-like runtime staging directory that contains the compiled binary and schema files.
+
+`verify` defaults `--require-status-ok` on. Use `--no-require-status-ok` only when a Worker uses `status` for non-error domain labels.
+
+Strict upload preflight:
+
+```bash
+node ./bin/coreclaw.js verify ./worker \
+  --strict \
+  --input input.json \
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
+```
+
+### `pack`
+
+Creates an upload ZIP.
+
+```bash
+node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip
+node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --strict
+```
+
+`pack` validates the project, stages uploadable files, builds Go upload binaries when needed, writes a ZIP with root entry files, and runs package inspection. Use `--strict` when missing recommended metadata or compatibility warnings should fail.
+
+### `inspect-package`
+
+Validates an existing upload ZIP.
+
+```bash
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language python
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --strict
+node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go
+```
+
+It checks:
+
+- Required root entry file.
+- Required SDK and dependency files where applicable.
+- Nested directory mistakes.
+- Recommended metadata files.
+- Go root executable named `main`.
+- Go executable mode `100755`.
+
+### `inspect-run`
+
+Validates a captured local run directory.
+
+```bash
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --min-results 1
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-status-ok
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-output-schema-match
+```
+
+Use this when you already have run artifacts and want to reapply result-count, status, or output-schema gates without rerunning the Worker.
+
+### `compare`
+
+Compares CoreClaw platform output with local output.
+
+```bash
+node ./bin/coreclaw.js compare \
+  ./cloud-output.json \
+  ./worker/.coreclaw/runs/<run-id> \
+  --output ./tmp/cloud-comparison.json \
+  --min-shared 1 \
+  --max-diff 0 \
+  --require-unique-keys \
+  --require-status-ok \
+  --output-schema ./worker/output_schema.json
+```
+
+Cloud output can be:
+
+- A JSON array of result rows.
+- A CoreClaw result-list API wrapper with rows under `data.list`, `data.rows`, `data.items`, `data.results`, `data.records`, or similar result containers.
+- A CSV export file.
+
+If the API response only contains `data.download_url`, download the export first and pass the downloaded JSON or CSV file to `compare`.
+
+Useful options:
+
+- `--key-fields url,check_name`: choose comparison key fields.
+- `--ignore-fields completed_at,__coreclaw_data_id__`: ignore volatile fields.
+- `--ignore-keys key1,key2`: ignore known platform-only or local-only rows.
+- `--ignore-keys-file file`: load ignored keys from JSON or text.
+- `--compare-profile profile.json`: reuse compare settings.
+- `--min-shared <n>`: require at least N matching keys.
+- `--max-diff <n>`: limit value differences.
+- `--max-only-cloud <n>` / `--max-only-local <n>`: limit one-sided rows.
+- `--require-output-schema-match`: validate rows against `output_schema.json`.
+- `--require-status-ok`: fail on status failure rows.
+
+`verify` can run the same comparison as part of upload preflight:
+
+```bash
+node ./bin/coreclaw.js verify ./worker \
+  --input input.json \
+  --cloud-output ./cloud-output.csv \
+  --compare-output ./tmp/cloud-comparison.json \
+  --min-shared 1 \
+  --max-diff 0
+```
+
+Use `--no-compare` when you want `--cloud-output` recorded in command history but do not want to compare in that run.
+
+### `audit`
+
+Audits many Worker projects under a root directory.
 
 ```bash
 node ./bin/coreclaw.js audit E:/worker \
@@ -129,320 +642,338 @@ node ./bin/coreclaw.js audit E:/worker \
   --soft
 
 node ./bin/coreclaw.js audit E:/worker \
-  --ignore-issue-codes missing_output_schema_legacy,input_legacy_type_alias,output_legacy_type_alias \
+  --audit-profile ./examples/coreclaw-audit-profile.json \
   --fail-on-warn
-
-node ./bin/coreclaw.js audit E:/worker \
-  --audit-profile ./examples/coreclaw-audit-profile.json
 ```
 
-Audit discovers `worker-*` directories below a root, runs the same project/schema checks as `validate`, and writes reusable JSON/Markdown reports. Use `--all` only when you intentionally want to validate any directory that contains `main.py`, `main.js`, or `main.go`, such as examples with nonstandard names. It treats missing `output_schema.json` and legacy `type: "number"` as warnings because current CoreClaw keeps compatibility with older workers.
+By default, `audit` discovers `worker-*` directories. Use `--all` only when you intentionally want to validate any directory with a Worker entry file.
 
-Add `--fail-on-warn` when audit should be a strict upload-readiness gate. Use `--ignore-issue-codes code1,code2` to keep known compatibility issues visible in `ignored_issues` while excluding them from pass/warn/error counts. This lets CI fail on new warnings while continuing to tolerate documented legacy codes such as `missing_output_schema_legacy`.
+Useful options:
 
-Use `--audit-profile <file>` to keep recurring audit gates in a reusable JSON file. The profile accepts snake_case or camelCase fields: `fail_on_warn`, `ignore_issue_codes`, `all`, `recursive`, `soft`, `output`, and `markdown`. Relative `output` and `markdown` paths are resolved from the profile file directory. Command-line options override profile values, while `ignore_issue_codes` is merged so one-off tolerated codes can be added without editing the profile.
+- `--recursive`: scan recursively.
+- `--all`: include non-`worker-*` directories that look like Workers.
+- `--soft`: write reports without failing the process.
+- `--fail-on-warn`: treat warnings as failures.
+- `--ignore-issue-codes code1,code2`: keep known issues visible but exclude them from pass/fail counts.
+- `--audit-profile profile.json`: reuse audit settings.
 
-The example audit profile deliberately does not ignore `http_proxy_env_not_used`. That warning points to a platform network-sandbox risk: a worker can succeed on a developer machine with direct outbound network but fail after upload unless it uses CoreClaw's documented SOCKS5 proxy variables.
+The JSON report includes issue codes, evidence, docs-backed remediation text, ignored issues, and summary counts. The Markdown report is suitable for workspace reviews.
 
-### Run Locally
+## Platform Feature Workflows
+
+### HTTP SOCKS5 Proxy
+
+CoreClaw HTTP request Workers must use the platform proxy because the runtime network is isolated. Read:
+
+- `PROXY_AUTH`: `username:password`
+- `PROXY_DOMAIN`: proxy host and port
+
+Node.js example:
+
+```javascript
+const axios = require('axios')
+const { SocksProxyAgent } = require('socks-proxy-agent')
+
+const proxyAuth = process.env.PROXY_AUTH
+const proxyDomain = process.env.PROXY_DOMAIN
+const proxyUrl = proxyAuth && proxyDomain ? `socks5://${proxyAuth}@${proxyDomain}` : null
+
+const axiosConfig = { timeout: 30000 }
+if (proxyUrl) {
+  const agent = new SocksProxyAgent(proxyUrl)
+  axiosConfig.httpAgent = agent
+  axiosConfig.httpsAgent = agent
+  axiosConfig.proxy = false
+}
+
+const response = await axios.get('https://ipinfo.io/ip', axiosConfig)
+```
+
+Local proof:
 
 ```bash
-node ./bin/coreclaw.js run ./examples/node-hello
-node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://example.com\"}"
-node ./bin/coreclaw.js run ./examples/node-hello --input input.json
-node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
-node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
-node ./bin/coreclaw.js run ./examples/node-hello --require-status-ok
-node ./bin/coreclaw.js run ./examples/node-hello --strict
-node ./bin/coreclaw.js run ./examples/node-hello --require-table-header
-node ./bin/coreclaw.js run ./examples/node-hello --require-output-schema-match
-node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
-node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
-node ./bin/coreclaw.js run ./lightpanda-worker --lightpanda-shim --require-lightpanda-shim --min-results 1
-node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
+node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage --min-results 1
 ```
 
-The run starts a local CoreClaw SDK gRPC server on `127.0.0.1:20086`, then executes the worker.
+`--local-proxy` starts a local authenticated SOCKS5 proxy and injects matching env variables. `--require-proxy-usage` fails if the Worker never opens a SOCKS5 connection.
 
-Use `--timeout-ms` to cap the whole worker process and `--idle-timeout-ms` to stop a worker that has stopped producing output but still has open Node/Python/Go handles. Durations accept milliseconds, `s`, or `m`.
-
-If the input schema marks a field as required, local runs require a non-empty value for that field. Declared fields must also match their schema type, for example `integer` must be an integer, `boolean` must be a boolean, and `array` must be a JSON array. Numeric fields must stay inside `minimum` / `maximum` when those bounds are declared. Selector inputs must use values declared in `options`; `requestList`, `requestListSource`, and `stringList` values are validated against their documented item shapes. Use `--input input.json` or `--json '{"field":"value"}'` when the schema does not provide a default. On Windows and in repeatable scripts, prefer `--input input.json` for non-trivial payloads because PowerShell quoting can change inline JSON before it reaches Node.js.
-
-Use `--min-results` for real worker smoke tests. Some existing workers can exit with code `0` after logging an upstream or browser error, so result count is the reliable success gate.
-
-Use `--require-status-ok` when result rows include a `status` field and values such as `fail`, `failed`, `failure`, or `error` should make the local run fail even if the worker process exits with code `0`. Tune worker-specific schemas with `--result-status-fields status,check_status` and `--result-fail-values fail,error,manual`. This gate is opt-in because some workers use non-error status values such as `manual`, `skipped`, or domain-specific labels.
-
-Use `--require-table-header` when upload preflight should require the worker to call the SDK runtime table-header API. This is stricter than the default compatibility mode and catches workers that only rely on a static `output_schema.json`.
-
-Use `--require-output-schema-match` when validating workers for upload. It keeps legacy workers compatible by default, but makes schema drift a hard failure when explicitly requested.
-
-Use `run --strict` when direct local debugging should use the same default runtime gates as strict upload preflight. It fails on static validation warnings unless `--skip-validate` is passed, and defaults on `--require-table-header`, `--require-output-schema-match`, and `--require-status-ok`; explicit command-line values still win. Use `verify --strict` before upload because it also stages the uploadable files and inspects the final ZIP package.
-
-Each run gets an isolated temporary directory at `.coreclaw/runs/<run-id>/tmp`. For Node.js workers, the CLI also preloads a small local hook that maps absolute `/tmp/...` file operations into that run directory, which prevents stale host-machine `/tmp` state from changing repeat runs.
-
-If Chrome remote debugging is reachable at `http://127.0.0.1:9222/json/version`, the CLI automatically discovers the browser WebSocket path and injects:
-
-- `ChromeWs=127.0.0.1:9222/devtools/browser/<id>`
-- `ChromeHttp=127.0.0.1:9222`
-- `CDP_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
-- `BROWSER_WS_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
-
-Use `--no-discover-chrome` to disable this discovery. Without a detected browser, `ChromeWs` and `ChromeHttp` fall back to `127.0.0.1:9222` so the environment still looks like CoreClaw's documented host-style browser variables. `ChromeHttp` is used by Selenium Remote WebDriver workers, while `ChromeWs` is used by Playwright, Puppeteer, and DrissionPage CDP workers.
-
-Use `--require-browser` for browser worker smoke tests. It turns browser availability into a preflight gate: local Chrome discovery passes immediately, host-style CDP endpoints are checked through `/json/version`, and Selenium-style endpoints are checked through `/status`. If no endpoint is reachable, the run fails before creating run artifacts instead of letting a browser worker fail later with a less specific connection error.
-
-Use `--browser-cdp-shim` when testing browser workers that should connect through CoreClaw's host-style `ChromeWs` variable. The CLI starts a local CDP WebSocket shim, injects `ChromeWs=<host:port>`, `ChromeHttp=<host:port>`, and a full `CDP_ENDPOINT`, and accepts both `ws://<ChromeWs>/devtools/browser/<id>` and DrissionPage's documented `ws://<ChromeWs>/ws?apiKey=<PROXY_AUTH>` path. Add `--require-browser-cdp-shim` to fail the run if the worker never connects to that shim.
-
-Use `--lightpanda-shim` when testing workers that read CoreClaw's documented `LightpandaDomain` variable. The CLI starts the local CDP WebSocket shim, injects `LightpandaDomain=<host:port>` plus `PROXY_AUTH`, and accepts the documented normalized endpoint `ws://<LightpandaDomain>/devtools/browser/new`. Add `--require-lightpanda-shim` to fail the run if the worker never connects to that path or connects without a Basic `Authorization` header. The shim returns basic `Browser.getVersion` metadata and forwards other CDP traffic to a discovered or explicit upstream CDP endpoint when one exists.
-
-Use `--captcha-solver` when testing workers that call CoreClaw's documented custom CDP method `Captchas.automaticSolver`. The CLI starts the same local CDP WebSocket shape, injects it through `ChromeWs`, `CDP_ENDPOINT`, and `BROWSER_WS_ENDPOINT`, and returns `{ "status": true }` for `Captchas.automaticSolver`. Other CDP messages are forwarded to the discovered or explicit upstream CDP endpoint when one exists. Add `--require-captcha-solver` to fail the run if no solver call was observed, `timeout` is not a positive number, or `solverType` is not one of CoreClaw's documented values. Observed solver calls are written to `captcha_solver_calls.json`.
-
-Artifacts are written to:
-
-```text
-.coreclaw/runs/<run-id>/
-  input.json
-  env.json
-  command.json
-  upload_manifest.json # files used by staged upload-like preflight runs
-  logs.ndjson
-  results.ndjson      # raw SDK push_data payloads
-  export.ndjson       # CoreClaw-style output_schema-projected rows
-  output_schema_issues.json # present when pushed rows drift from output_schema.json
-  captcha_solver_calls.json # present when --require-captcha-solver observes solver calls
-  table_headers.json
-  tmp/                # per-run temporary state
-  summary.json
-```
-
-`summary.json` records both `project_dir` and `worker_dir`. In regular `run` commands these paths are the same. In staged `verify` commands, `project_dir` is the original worker directory where artifacts are stored, while `worker_dir` is the temporary upload-like execution directory.
-
-### Upload Preflight
-
-```bash
-node ./bin/coreclaw.js verify ./examples/node-hello --min-results 1
-node ./bin/coreclaw.js verify ./worker --strict --min-results 1
-node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
-node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud-output.json --min-shared 1 --max-diff 0
-node ./bin/coreclaw.js verify ./worker --cloud-output ./cloud-output.json --no-compare
-node ./bin/coreclaw.js verify ./worker --no-staging --no-install
-node ./bin/coreclaw.js verify ./worker --no-pack
-node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
-node ./bin/coreclaw.js verify ./worker --no-require-status-ok --min-results 1
-node ./bin/coreclaw.js verify ./worker --require-table-header --require-output-schema-match --min-results 1
-node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
-node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
-node ./bin/coreclaw.js verify ./browser-worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
-node ./bin/coreclaw.js verify ./lightpanda-worker --lightpanda-shim --require-lightpanda-shim --min-results 1
-node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
-node ./bin/coreclaw.js inspect-package ./dist/my-worker.zip --language node
-node ./bin/coreclaw.js inspect-package ./dist/my-go-worker.zip --language go
-```
-
-`verify` is the upload-before-you-upload gate. It runs static validation, copies the uploadable worker files to `.coreclaw/staging/<stage-id>/`, installs dependencies there, executes the staged worker in the local CoreClaw runtime, enforces a result-count gate, fails on result rows with failure status values, optionally requires a runtime table-header call, optionally enforces result/output_schema matching, optionally compares the local run with a CoreClaw cloud JSON export, and creates an upload ZIP unless `--no-pack` is passed. For Node.js workers, staged dependency installation uses `npm ci --omit=dev` or `npm install --omit=dev`, so dev-only packages cannot make local preflight pass when the platform runtime would be missing them. For Python workers, staged dependency installation runs inside a temporary virtual environment created from the configured `--python`, so globally installed packages cannot hide missing `requirements.txt` entries. This catches workers that only pass because the source directory contains ignored files such as `.coreclaw`, `node_modules`, virtualenvs, `dist`, or other files that will not be uploaded.
-
-`verify` defaults on `--require-status-ok` because a worker can push diagnostic rows such as `status=fail` while still exiting with code `0`. Use `--no-require-status-ok` only for workers whose `status` field has domain-specific non-error semantics, or tune the gate with `--result-status-fields` and `--result-fail-values`.
-
-Add `--strict` for new-worker upload preflight. Strict verify fails on static validation warnings and additionally defaults on `--require-table-header` and `--require-output-schema-match`; explicit command-line values still win, so you can temporarily relax one runtime gate while keeping the rest of strict mode.
-
-Boolean flags support `--flag`, `--no-flag`, and explicit `--flag=true|false`. Unknown long options fail before any worker starts, and options are checked against the selected command, so command typos such as `--input-jsno` or passing `--cloud-output` to `run` cannot silently fall back to schema defaults. Prefer `--no-install`, `--no-pack`, `--no-staging`, or `--no-compare` in scripts when disabling preflight steps. For Windows CI or PowerShell commands, prefer `--input input.json` over inline `--json` / `--input-json` when the payload contains nested objects or arrays.
-
-For Go workers, `verify` now treats source files and runtime files as separate platform contracts. It first validates and builds the upload artifact from a clean staged source tree with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -o main ./main.go`. It then executes a second upload-like runtime staging directory that contains the compiled entry binary plus schema files, not the original Go source tree. This matches the observed CoreClaw platform behavior where the Go runtime can expose `main` while `main.go`, `go.mod`, and `GoSdk/` are not visible from the worker process. Use `run` for source-directory debugging with `go run .`; use `verify` as the upload-before-you-upload gate. Use `--go <binary>` when you need a pinned Go toolchain or `go` is not on `PATH`.
-
-By default, run artifacts are still written under the original project `.coreclaw/runs/<run-id>/`, packages are written under `.coreclaw/verify/<verify-id>/`, and cloud comparison reports are written to `.coreclaw/runs/<run-id>/cloud-comparison.json`. Staged preflight runs also write `upload_manifest.json` into the run directory so you can audit exactly which files were copied into the upload-like execution directory. Use `--compare-output <file>` to write the comparison report somewhere else. Use `--no-staging` or `--no-install` only when debugging the source directory directly.
-
-### Inspect a Run
-
-```bash
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --min-results 1
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-status-ok
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-status-ok --result-status-fields check_status --result-fail-values fail,error,manual
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-output-schema-match
-```
-
-`inspect-run` checks that `summary.json`, `results.ndjson`, `export.ndjson`, and `output_schema_issues.json` agree with each other. It can also apply the same result-status gate to already captured run artifacts. Use it after running real workers so a clean process exit is not mistaken for a successful data-producing run.
-
-### Simulate Split Tasks
-
-CoreClaw's `input_schema.b` field is the task splitting key and must reference an array property. Use `--split <index>` to run one expanded item locally:
-
-```bash
-node ./bin/coreclaw.js run ./examples/node-hello --split 0
-```
-
-For a `requestList` item like `{ "url": "https://example.com" }`, the worker receives `url` as a top-level value, matching the single-item pattern used by existing CoreClaw workers.
-
-### Runtime Environment Overrides
-
-```bash
-node ./bin/coreclaw.js run ./worker \
-  --proxy-auth "user:pass" \
-  --proxy-domain "proxy.example:6000" \
-  --chrome-ws "127.0.0.1:9222" \
-  --chrome-http "127.0.0.1:9222" \
-  --lightpanda-domain "lightpanda-inner.coreclaw.com"
-```
-
-Default local runs use direct outbound network:
-
-- `PROXY_AUTH` is unset
-- `PROXY_DOMAIN` is unset
-- `ChromeWs` is auto-discovered from local Chrome CDP when available; otherwise `127.0.0.1:9222`
-- `ChromeHttp` follows `ChromeWs` host/port by default, or can be set explicitly for Selenium workers
-- `LightpandaDomain` is unset unless explicitly passed with `--lightpanda-domain` or enabled with `--lightpanda-shim`
-
-`coreclaw doctor` checks whether local Chrome CDP is reachable at `127.0.0.1:9222` and prints the browser variables that local runs will inject.
-
-To emulate CoreClaw's SOCKS5 proxy path for HTTP workers, start the local proxy:
-
-```bash
-node ./bin/coreclaw.js run ./worker --local-proxy
-node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage
-```
-
-`--local-proxy` starts an authenticated SOCKS5 proxy on `127.0.0.1:<port>` and injects matching `PROXY_AUTH` / `PROXY_DOMAIN` values. `--require-proxy-usage` also enables the proxy and fails the run if the worker never opens a SOCKS5 CONNECT request. Use this gate for HTTP request workers so local verification catches code that succeeds only by using direct host networking.
-
-For browser workers, pair `--require-browser` with `--chrome-ws` or `--chrome-http` when using a non-default endpoint:
-
-```bash
-node ./bin/coreclaw.js verify ./worker --chrome-ws "127.0.0.1:9222/devtools/browser/<id>" --require-browser --min-results 1
-node ./bin/coreclaw.js verify ./worker --chrome-http "127.0.0.1:9515" --require-browser --min-results 1
-```
-
-The first form matches Playwright, Puppeteer, and explicit CDP endpoint workers. The second form matches Selenium Remote WebDriver workers.
-
-For CoreClaw-style host-only CDP variables, including DrissionPage workers that build `ws://{ChromeWs}/ws?apiKey={PROXY_AUTH}`:
-
-```bash
-node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
-```
-
-The shim returns basic `Browser.getVersion` metadata even without an upstream browser, and forwards all other CDP traffic to a discovered or explicit upstream endpoint when one exists.
-
-For Lightpanda workers that normalize `LightpandaDomain` to `ws://<domain>/devtools/browser/new` and send Basic auth from `PROXY_AUTH`:
-
-```bash
-node ./bin/coreclaw.js verify ./worker --lightpanda-shim --require-lightpanda-shim --min-results 1
-```
-
-Use `--lightpanda-domain <domain-or-endpoint>` when you want to run against an explicit real endpoint instead of the local shim. Bare domains are preserved in `LightpandaDomain` so the worker can apply the documented normalization rule; the local run still injects `PROXY_AUTH` when `LightpandaDomain` is present.
-
-For CAPTCHA-aware browser workers:
-
-```bash
-node ./bin/coreclaw.js verify ./worker --captcha-solver --require-captcha-solver --min-results 1
-```
-
-This local shim proves that your code sends `Captchas.automaticSolver` with the expected CDP shape. With `--require-captcha-solver`, it also validates that `timeout` is a positive number and `solverType` is one of CoreClaw's documented values: `cloudflare`, `datadome`, `google-v2`, `google-v3`, `oocl_slide`, `perimeterx`, `shein_same_object_click`, `temu_auto`, `tiktok_slide_simple`, or `tiktok_slide_auto`. It intentionally does not bypass real website challenges; run the same worker on CoreClaw to validate the hosted solver against real targets.
-
-To emulate CoreClaw cloud proxy variables without a real proxy, opt in explicitly:
+Use `--cloud-proxy` only to inject placeholder cloud-style variables without starting a real proxy:
 
 ```bash
 node ./bin/coreclaw.js run ./worker --cloud-proxy
 ```
 
-Cloud proxy mode exposes local placeholders:
+### Browser Automation
 
-- `PROXY_AUTH=coreclaw-local:coreclaw-local`
-- `PROXY_DOMAIN=127.0.0.1:6000`
+CoreClaw browser Workers should connect to platform-hosted browsers instead of launching a local browser in production code.
 
-### Package for Upload
+Common injected variables:
 
-```bash
-node ./bin/coreclaw.js pack ./examples/node-hello --output ./dist/node-hello.zip
-node ./bin/coreclaw.js pack ./examples/node-hello --output ./dist/node-hello.zip --strict
-node ./bin/coreclaw.js pack ./my-go-worker --output ./dist/my-go-worker.zip --go go
-```
+- `ChromeWs`: host-style CDP WebSocket endpoint for Playwright, Puppeteer, and DrissionPage.
+- `ChromeHttp`: host-style HTTP endpoint for Selenium Remote WebDriver.
+- `CDP_ENDPOINT`: full `ws://...` endpoint for tools that expect a complete URL.
+- `BROWSER_WS_ENDPOINT`: full browser WebSocket endpoint alias.
 
-The ZIP has the worker entry file at archive root and excludes `.coreclaw`, `node_modules`, virtualenvs, build outputs, caches, and git metadata. After creating the ZIP, `pack` immediately runs the same package inspection gate used by `inspect-package`, so root-entry mistakes and Go executable-mode problems fail before the file is uploaded. `verify` uses `pack` for its final upload artifact, so this package gate is also part of upload preflight. Add `--strict` to fail on static validation warnings and package recommended-root warnings before writing an upload candidate.
-
-For Go workers, `pack` builds the Linux amd64 upload executable in a temporary staging directory with `-mod=readonly` and adds `main` to the ZIP with executable permissions. The source directory is not modified, and missing `go.sum` checksums fail before upload instead of being silently generated by a local build.
-
-Use `inspect-package` when you need to validate an existing ZIP before upload, especially if it was created outside `coreclaw pack`. It checks that Python, Node.js, or Go entry files are at the archive root and reports the common mistake where the ZIP contains a nested worker directory wrapper such as `worker/main.js` instead of root `main.js`. For Go uploads, it also checks that the archive has a root `main` executable and that its Unix mode is `100755`, which catches Windows-created archives that would otherwise fail on the platform before worker logs appear. Add `--strict` when missing recommended root metadata such as `README.md` or `output_schema.json` should fail the package check.
-
-## Cloud Comparison Workflow
-
-For a cloud run exported as JSON or CSV, compare it with a local run's captured results as a standalone step:
+Local Chrome discovery:
 
 ```bash
-node ./bin/coreclaw.js compare \
-  E:/worker/coreclaw_UsernameFinder_v1.0.2_20260601.json \
-  E:/worker/worker-username-finder/.coreclaw/runs/<run-id> \
-  --output ./tmp/username-finder-comparison.json \
-  --compare-profile E:/worker/worker-username-finder/.coreclaw/profiles/cloud-parity.json \
-  --min-shared 1
+node ./bin/coreclaw.js doctor
+node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 ```
 
-The cloud path may be a JSON array export, a saved `/api/v1/run/result/list` response such as `data.list[]`, or a downloaded CSV export. If you pass the `/api/v1/run/result/export` response that only contains `data.download_url`, download that file first and compare the downloaded JSON/CSV. CSV fields are kept as strings; prefer JSON when `--require-output-schema-match` needs to distinguish numbers or booleans from strings.
+If Chrome remote debugging is running on `127.0.0.1:9222`, the CLI discovers `/json/version` and injects the browser WebSocket path.
 
-This compares row counts, shared keys, cloud-only rows, local-only rows, and value differences. Difference reports include `changed_fields` for each changed row and `value_diff_fields_top_20` so you can quickly separate timestamp/noise fields from real contract drift. Use `--ignore-fields completed_at,updated_at` to remove known noisy fields from value-diff comparisons; status and output_schema gates still inspect the original rows. Use `--ignore-keys key1,key2` or `--ignore-keys-file <file>` when a known run profile intentionally emits different row identities, such as platform-only browser probe rows versus local skipped group rows; ignored keys are removed only from duplicate/shared/only/value-diff comparisons, while status and output_schema gates still inspect the original rows. The ignore-keys file may be a JSON array, a JSON object with `ignore_keys` or `ignoreKeys`, or a plain text file with one key per line and `#` comments. It also reports duplicate comparison keys on both sides; add `--require-unique-keys` to fail if the chosen key would otherwise hide rows behind a last-row-wins comparison. It also reports result-status issues on both the CoreClaw cloud output and the local output; add `--require-status-ok` to fail if either side contains failure status values. Pass `--output-schema <file>` to validate both cloud and local rows against a worker `output_schema.json`; add `--require-output-schema-match` to make that a hard gate. The local path can be a run directory, `export.ndjson`, or `results.ndjson`. Use `--key-fields username,site,urlUser` when the default key is not specific enough, and CI gates such as `--min-shared`, `--max-diff`, `--max-only-local`, and `--max-only-cloud` when cloud parity should be strict. For network-heavy workers, expect output differences unless the local machine uses equivalent CoreClaw proxy/browser infrastructure.
+Explicit endpoint:
 
-Use `--compare-profile <file>` to keep recurring cloud-parity gates in a reusable JSON file. The profile accepts snake_case or camelCase fields such as `key_fields`, `ignore_fields`, `ignore_keys`, `min_shared`, `max_diff`, `max_only_cloud`, `max_only_local`, `require_unique_keys`, `require_status_ok`, `output_schema`, and `require_output_schema_match`. Relative profile paths such as `output_schema`, `ignore_keys_file`, and `output` are resolved from the profile file directory, not the current shell directory. Command-line options override profile values, while `ignore_fields` and `ignore_keys` are merged so temporary one-off ignores can be added without editing the profile.
+```bash
+node ./bin/coreclaw.js verify ./browser-worker \
+  --chrome-ws "127.0.0.1:9222/devtools/browser/<id>" \
+  --require-browser \
+  --min-results 1
+```
 
-When the same profile is passed to `verify`, it can also carry a small set of upload-preflight run defaults: `local_proxy`, `cloud_proxy`, `proxy_auth`, `proxy_domain`, `browser_cdp_shim`, `require_browser_cdp_shim`, `lightpanda_shim`, `require_lightpanda_shim`, `captcha_solver`, `require_captcha_solver`, `require_proxy_usage`, `require_browser`, `require_status_ok`, `require_result_status_ok`, `result_status_fields`, `result_fail_values`, `lightpanda_domain`, `chrome_ws`, and `chrome_http`. This keeps a worker-specific cloud-parity profile self-contained, for example a docs-contract profile can set `local_proxy: true` so proxy rows are reproduced locally without repeating `--local-proxy` on every verify command, or set `require_status_ok: false` when local-only rows intentionally report platform-injected values as missing while the cloud output is the authoritative pass/fail source. Explicit command-line options still override profile defaults.
+Browser CDP contract shim:
 
-The same comparison can be folded into upload preflight:
+```bash
+node ./bin/coreclaw.js verify ./browser-worker \
+  --browser-cdp-shim \
+  --require-browser-cdp-shim \
+  --min-results 1
+```
+
+The shim accepts `ws://<ChromeWs>/devtools/browser/<id>` and DrissionPage-style `ws://<ChromeWs>/ws?apiKey=<PROXY_AUTH>`. It is useful when you need to prove that Worker code reads and connects to CoreClaw's environment variables.
+
+### Lightpanda
+
+Lightpanda is a CoreClaw-hosted browser endpoint exposed through CDP. It is not an automation framework. You still use Playwright or another CDP client, but connect to `LightpandaDomain` instead of starting a browser locally.
+
+Worker code should:
+
+1. Read `LightpandaDomain`.
+2. Normalize a bare domain to `ws://<domain>/devtools/browser/new`.
+3. Read `PROXY_AUTH`.
+4. Send Basic `Authorization` built from `PROXY_AUTH`.
+5. Connect with Playwright `connect_over_cdp`.
+
+Local contract proof:
+
+```bash
+node ./bin/coreclaw.js verify ./lightpanda-worker \
+  --lightpanda-shim \
+  --require-lightpanda-shim \
+  --min-results 1
+```
+
+Use a real explicit endpoint when available:
+
+```bash
+node ./bin/coreclaw.js verify ./lightpanda-worker \
+  --lightpanda-domain "lightpanda-inner.coreclaw.com" \
+  --min-results 1
+```
+
+The shim validates the endpoint shape and Basic auth usage. Real navigation and rendering still require CoreClaw or a real upstream CDP endpoint.
+
+### CAPTCHA Handling
+
+CoreClaw exposes a custom CDP command:
+
+```text
+Captchas.automaticSolver
+```
+
+Parameters:
+
+- `timeout`: positive number of seconds.
+- `solverType`: one of the documented solver types.
+
+Documented solver types:
+
+- `cloudflare`
+- `datadome`
+- `google-v2`
+- `google-v3`
+- `oocl_slide`
+- `perimeterx`
+- `shein_same_object_click`
+- `temu_auto`
+- `tiktok_slide_simple`
+- `tiktok_slide_auto`
+
+Always branch on the command response. `status=false` or a message such as `target page don't have verify code` is not a success.
+
+Local contract proof:
+
+```bash
+node ./bin/coreclaw.js verify ./browser-worker \
+  --captcha-solver \
+  --require-captcha-solver \
+  --min-results 1
+```
+
+The local shim returns `{ "status": true }` for `Captchas.automaticSolver`, records calls in `captcha_solver_calls.json`, and fails when required calls are missing or params are invalid.
+
+## Production-Ready Worker Workflow
+
+Use this sequence for new Workers:
+
+1. Generate or prepare the Worker project.
+2. Write `input_schema.json` so the UI form matches the intended run parameters.
+3. Write `output_schema.json` so output fields match `push_data` rows.
+4. Read input through the SDK.
+5. Log meaningful progress with the SDK.
+6. Set runtime table headers.
+7. Push one JSON object per result row.
+8. Route HTTP requests through `PROXY_AUTH` / `PROXY_DOMAIN`.
+9. Connect browser Workers through `ChromeWs`, `ChromeHttp`, `LightpandaDomain`, or full CDP endpoint env vars.
+10. Run `coreclaw validate --strict`.
+11. Run `coreclaw verify --strict --input input.json --min-results 1`.
+12. Upload the ZIP produced by `verify`, or package with `coreclaw pack`.
+13. Run the Worker on CoreClaw.
+14. Export CoreClaw output as JSON or CSV.
+15. Run `coreclaw compare` or `coreclaw verify --cloud-output`.
+
+Recommended strict pre-upload command:
 
 ```bash
 node ./bin/coreclaw.js verify ./worker \
+  --strict \
   --input input.json \
-  --cloud-output E:/worker/coreclaw_UsernameFinder_v1.0.2_20260601.json \
-  --compare-output ./tmp/username-finder-comparison.json \
-  --compare-profile E:/worker/worker-username-finder/.coreclaw/profiles/cloud-parity.json \
-  --key-fields username,site,urlUser \
-  --min-shared 1 \
-  --max-diff 0
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
 ```
 
-When `verify` receives `--cloud-output`, schema selection is explicit-first: `--output-schema` wins, then profile `output_schema`, then the worker's own `output_schema.json` when no compare profile is used.
-
-## Development
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the local verification gate, runtime compatibility rules, and the real-worker smoke matrix used before releasing CLI changes.
-
-## Verified Locally
-
-On this Windows machine:
+Add feature gates based on Worker type:
 
 ```bash
-node ./bin/coreclaw.js validate ./examples/node-hello
-node ./bin/coreclaw.js run ./examples/node-hello
-node ./bin/coreclaw.js validate ./examples/python-hello
-node ./bin/coreclaw.js doctor --python "py -3" --strict
-node ./bin/coreclaw.js run ./examples/python-hello --python "py -3"
+# HTTP request Worker
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --local-proxy --require-proxy-usage --min-results 1
+
+# Browser Worker
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --require-browser --min-results 1
+
+# Host-style ChromeWs / DrissionPage contract
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --browser-cdp-shim --require-browser-cdp-shim --min-results 1
+
+# Lightpanda contract
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --lightpanda-shim --require-lightpanda-shim --min-results 1
+
+# CAPTCHA CDP command contract
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --captcha-solver --require-captcha-solver --min-results 1
 ```
 
-The Python example uses `--python "py -3"` because this machine's default `python` points to a Hermes virtual environment without `pip`. The same option is used for dependency installation during `verify`, so prefer `--python` over `--command` for Python workers. Add `doctor --strict` to fail preflight scripts when Node, npm, Python, pip, or Go is missing.
+## Compare Profiles
 
-Real worker smoke runs verified during development:
+A compare profile lets you keep cloud/local parity rules in a JSON file.
+
+Example:
+
+```json
+{
+  "key_fields": ["url", "check_name"],
+  "ignore_fields": ["completed_at", "__coreclaw_data_id__"],
+  "min_shared": 1,
+  "max_diff": 0,
+  "require_unique_keys": true,
+  "require_status_ok": true,
+  "result_status_fields": ["status"],
+  "result_fail_values": ["fail", "failed", "failure", "error"]
+}
+```
+
+Run:
 
 ```bash
-# Node.js, no browser dependency
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-dedup-datasets --input %TEMP%/coreclaw-dedup-smoke-input.json --timeout-ms 30s --idle-timeout-ms 10s
-node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-dedup-datasets/.coreclaw/runs/<run-id> --min-results 2
-
-# Python, explicit interpreter because this machine's default python is a Hermes venv
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-yfinance --input %TEMP%/coreclaw-yfinance-smoke-input.json --python "py -3" --timeout-ms 60s --idle-timeout-ms 20s --min-results 1
-
-# Go, browser/CDP worker. Start Chrome remote debugging first, then run:
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --require-browser --timeout-ms 90s --idle-timeout-ms 30s --min-results 1
-node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-google-maps-scraper/.coreclaw/runs/<run-id> --min-results 1
-
-# Go, browser worker with a local Chrome CDP endpoint
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --chrome-ws 127.0.0.1:9222/devtools/browser/<id> --require-browser --timeout-ms 90s --idle-timeout-ms 30s
-node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-google-maps-scraper/.coreclaw/runs/<run-id> --min-results 1
+node ./bin/coreclaw.js compare ./cloud-output.json ./worker/.coreclaw/runs/<run-id> --compare-profile ./compare-profile.json
 ```
 
-## Official-Docs Contract Used
+`verify --compare-profile` can also read run defaults from the profile for recurring preflight checks, including proxy, browser, Lightpanda, CAPTCHA, and result-status settings.
 
-This implementation is based on the local official docs under:
+## Exit Codes And Scripting
 
-- `E:\worker\knowledge-files\docs\developer-guide\develop-worker\quick-start.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\project-structure.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\sdk-modules.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\input-schema.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\output-schema.md`
-- `E:\worker\knowledge-files\docs\developer-guide\builds-and-runs.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\platform-features\proxy-support.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\platform-features\browser-fingerprinting.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\browser-automation\lightpanda.md`
+CoreClaw CLI is built for CI and repeatable local scripts:
+
+- Unknown long options fail before the Worker starts.
+- Options are validated per command.
+- Boolean flags support `--flag`, `--no-flag`, and `--flag=true|false`.
+- Most commands return exit code `0` on pass and non-zero on validation, runtime, package, or comparison failure.
+- Reports are written as JSON where supported so automated jobs can consume them.
+
+## Troubleshooting
+
+### "The Worker runs locally but fails after upload"
+
+Run upload preflight instead of source-directory run:
+
+```bash
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --min-results 1
+```
+
+`verify` catches missing dependency declarations, ignored files, missing SDK files, output drift, missing runtime table headers, and package-root mistakes.
+
+### "Go upload fails without Worker logs"
+
+Inspect the package:
+
+```bash
+node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
+```
+
+The ZIP root must contain executable `main` with mode `100755`. Do not upload only `main.go`.
+
+### "HTTP requests work on my machine but not on CoreClaw"
+
+Use the platform SOCKS5 variables:
+
+```bash
+node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage --min-results 1
+```
+
+Validation also warns when HTTP libraries are detected but `PROXY_AUTH` and `PROXY_DOMAIN` are not read.
+
+### "Browser Worker starts a local browser"
+
+Production Worker code should connect to injected browser endpoints. Use local browser launch only behind an explicit local-development branch. Validate with:
+
+```bash
+node ./bin/coreclaw.js validate ./worker --strict
+node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
+```
+
+### "Cloud JSON contains only download_url"
+
+Download the file first, then compare the downloaded JSON or CSV. `compare` reads result rows, not metadata-only API responses.
+
+### "Inline JSON breaks on Windows"
+
+Use an input file:
+
+```bash
+node ./bin/coreclaw.js verify ./worker --input input.json --min-results 1
+```
+
+## Repository Verification
+
+For contributors to this CLI repository:
+
+```bash
+npm test
+npm run verify
+npm run verify:release
+```
+
+`npm run verify:release` runs the test suite, verifies the Node example with cloud-output comparison, checks whitespace with `git diff --check`, and runs `npm pack --dry-run --json`.
+
+Workspace-level matrix tools are available for CoreClaw CLI maintainers:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\verify-windows-worker-matrix.ps1
+node .\tools\verify-platform-output.js worker-definition-node-puppeteer-contract-test E:\downloads\node-output.json
+```
+
+These tools are repository verification helpers. They are not required for ordinary Worker authors.
+
+## License
+
+MIT

@@ -44,7 +44,6 @@
     "examples/python-hello/sdk.py",
     "examples/python-hello/sdk_pb2.py",
     "examples/python-hello/sdk_pb2_grpc.py",
-    "validation",
     "README.md",
     "README_CN.md",
     "CONTRIBUTING.md",

@@ -1,42 +1,40 @@
-# CoreClaw CLI
+# CoreClaw CLI 中文说明
 
-CoreClaw worker 本地运行时、验证器和上传前预检 CLI。
+CoreClaw CLI 是面向 CoreClaw Worker 的本地开发、验证和打包工具。它的目标不是做一个普通脚本启动器，而是把 CoreClaw 平台文档里的 Worker 结构、SDK 调用、输入输出 schema、代理、浏览器端点、Lightpanda、CAPTCHA 命令和上传 ZIP 规则变成本地可执行的预检流程。
 
-CoreClaw 官方开发者文档描述了上传就绪的 worker 项目结构、平台注入的 SDK 文件、`input_schema.json`、`output_schema.json`、SDK gRPC 端点 `127.0.0.1:20086`，以及 `PROXY_AUTH`、`PROXY_DOMAIN`、`ChromeWs` 等运行时变量。同时，官方文档也说明本地 SDK worker 模式尚不可用。本 CLI 的目标就是补齐这个缺口，让开发者在上传前尽量做到“本地跑通 = 平台跑通”。
+英文说明见 [README.md](./README.md)。
 
-## 模拟能力
+## 这个工具解决什么问题
 
-- CoreClaw SDK gRPC 服务：
-  - `Parameter/GetInputJSONString`
-  - `Result/SetTableHeader`
-  - `Result/PushData`
-  - `Log/Debug`、`Log/Info`、`Log/Warn`、`Log/Error`
-- 从 `input_schema.json` 默认值、`--input` 或 `--json` 注入运行输入。
-- worker 启动前校验实际输入是否满足 `input_schema.json` 的 required 字段、声明类型、数值边界、选择器选项和列表编辑器项结构。
-- 平台环境变量：
-  - `ChromeWs`
-  - `LightpandaDomain`
-  - `CDP_ENDPOINT` / `BROWSER_WS_ENDPOINT`
-  - 请求云端代理模式时的 `PROXY_AUTH` / `PROXY_DOMAIN`
-- 每次运行独立的临时状态目录：
-  - `CORECLAW_TMP_DIR`
-  - `TMPDIR` / `TMP` / `TEMP`
-- `.coreclaw/runs/<run-id>/` 下的运行生命周期产物。
-- `output_schema.json` 输出表投影，以及结果/schema 漂移记录。
-- 可选严格校验 worker 是否调用了 runtime `set_table_header`。
-- 可选校验结果行里的业务失败状态。
-- 上传 ZIP 结构验证和打包。
-- `verify` 默认从上传包视角的临时 staging 目录运行，并在该目录安装依赖。
-- Go 上传打包：
-  - 干净的上传 staging。
-  - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -o main ./main.go`。
-  - ZIP 根目录包含可执行文件 `main`。
+CoreClaw Worker 上传后由平台准备运行环境、安装依赖、注入环境变量、提供 `127.0.0.1:20086` 的 SDK gRPC 服务、执行入口文件、收集日志并保存 SDK 推送的数据行。
 
-它不会模拟 CoreClaw 真实的远程指纹浏览器池。浏览器 worker 可以启动本地 Chrome remote debugging `127.0.0.1:9222`，或用 `--chrome-ws` / `--chrome-http` 传入真实远程 CDP/WebDriver 端点，再配合 `--require-browser` 在端点不可用时提前失败。HTTP worker 可以使用 `--local-proxy --require-proxy-usage` 通过 `PROXY_AUTH` / `PROXY_DOMAIN` 暴露本地 SOCKS5 代理，并在 worker 绕过代理时让 run 失败。
+这意味着一个 Worker 不是单个脚本，而是一个符合平台规范的项目。常见上传失败并不是业务代码本身的问题，而是：
 
-它也不会在本地模拟真实 Lightpanda 页面渲染。`--lightpanda-shim` 会通过 `LightpandaDomain` 暴露一个本地 CDP shim；`--require-lightpanda-shim` 会在 worker 没有连接 `/devtools/browser/new`，或没有按文档用 `PROXY_AUTH` 构造 Basic `Authorization` header 时让 smoke run 失败。这个门槛验证的是上传前 Lightpanda 端点契约；真实导航和渲染仍需在 CoreClaw 平台或真实上游 CDP endpoint 上验证。
+- ZIP 根目录多包了一层目录。
+- Go 上传包没有编译后的 Linux amd64 可执行文件 `main`。
+- Windows 打包丢失 Go `main` 的可执行权限。
+- `requirements.txt`、`package.json` 或 `go.mod/go.sum` 缺少运行时依赖。
+- 本地能联网，但平台网络沙箱中没有使用 `PROXY_AUTH` / `PROXY_DOMAIN`。
+- 浏览器 Worker 本地启动浏览器，但上传后没有读取 `ChromeWs`、`ChromeHttp` 或 `LightpandaDomain`。
+- `input_schema.json` 的字段、类型、默认值、拆分 key 不符合平台表单规则。
+- `output_schema.json` 和实际 `push_data` 字段不一致。
+- Worker 进程退出码是 `0`，但输出行里已经包含 `status=fail` 之类的业务失败。
 
-它也不会在本地真正破解 CAPTCHA。`--captcha-solver` 会暴露一个本地 CDP shim，用来模拟 CoreClaw 文档里的自定义命令 `Captchas.automaticSolver`；`--require-captcha-solver` 会在 worker 没有调用该命令，或调用参数不符合官方 `timeout` / `solverType` 契约时让 smoke run 失败。这个门槛验证的是上传前集成契约，真实 CAPTCHA 绕过仍然只发生在 CoreClaw 托管的指纹浏览器中。
+CoreClaw CLI 用本地命令把这些问题提前暴露出来。
+
+## 主要能力
+
+- 生成 Python、Node.js、Go Worker 模板，并包含官方 SDK 文件。
+- 校验 Worker 根目录必需文件、依赖文件、SDK 文件、输入输出 schema。
+- 本地启动 CoreClaw SDK gRPC 兼容服务，让 Worker 的 SDK 调用可运行。
+- 根据 `input_schema.json` 校验实际运行输入。
+- 捕获日志、表头、原始结果行、按 `output_schema.json` 投影后的导出行和 schema 漂移。
+- 强制结果行数、结果状态、runtime table header、output schema、代理使用、浏览器连接、Lightpanda 连接、CAPTCHA 调用等门槛。
+- 生成 CoreClaw 上传 ZIP，确保入口文件位于 ZIP 根目录。
+- 为 Go Worker 构建 Linux amd64 可执行文件 `main`，并保留 ZIP 内 `100755` 可执行权限。
+- 检查已有 ZIP 的根目录结构、嵌套目录错误、Go 可执行权限等问题。
+- 将 CoreClaw 平台 JSON/CSV 输出与本地 run 输出对比。
+- 批量审计工作区内的 `worker-*` 项目。
 
 ## 安装
 
@@ -47,128 +45,413 @@ npm install
 node ./bin/coreclaw.js --help
 ```
 
-本地开发时也可以直接调用可执行文件：
+本地开发时可以直接用路径调用：
 
 ```bash
 node E:/worker/coreclaw-cli/bin/coreclaw.js doctor
 ```
 
-提交 CLI 改动前运行：
+如果已经全局安装或 link 到 shell，可以使用：
 
 ```bash
-npm run verify
+coreclaw --help
 ```
 
-这个命令会先跑单元测试，再对 Node 示例 worker 执行 `coreclaw verify`，包括与 `examples/node-hello-cloud-output.json` 的云端输出对比。测试套件还会对生成的 Node 和 Python 模板做端到端 smoke：`init` 创建 worker，`verify` 从上传视角 staging 执行，并启用结果行、table-header、output-schema 等严格门槛，最后确认生成的 ZIP 通过包检查。
+## 快速开始
 
-## 命令
-
-### 创建 Worker
+创建一个 Node.js Worker，并完成本地验证和上传包生成：
 
 ```bash
 node ./bin/coreclaw.js init ./my-worker --language node --name my-worker
+node ./bin/coreclaw.js validate ./my-worker --strict
+node ./bin/coreclaw.js run ./my-worker --min-results 1
+node ./bin/coreclaw.js verify ./my-worker --strict --min-results 1
+```
+
+验证内置示例，并与一份云端输出做对比：
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-hello \
+  --cloud-output ./examples/node-hello-cloud-output.json \
+  --compare-output ./tmp/node-hello-comparison.json \
+  --min-shared 1 \
+  --max-diff 0 \
+  --output ./tmp/node-hello.zip
+```
+
+本仓库发布前校验：
+
+```bash
+npm run verify:release
+```
+
+## CoreClaw Worker 项目结构
+
+### Python 源码项目
+
+```text
+main.py
+requirements.txt
+README.md
+input_schema.json
+output_schema.json
+sdk.py
+sdk_pb2.py
+sdk_pb2_grpc.py
+```
+
+### Node.js 源码项目
+
+```text
+main.js
+package.json
+README.md
+input_schema.json
+output_schema.json
+sdk.js
+sdk_pb.js
+sdk_grpc_pb.js
+```
+
+Node.js Worker 推荐按官方 SDK 文件使用 CommonJS：
+
+```javascript
+const coresdk = require('./sdk')
+```
+
+`package.json` 应符合 `main.js` + CommonJS 的运行约定。运行时依赖必须声明在 `dependencies` 或 `optionalDependencies` 中，不要只放在 `devDependencies`。例如 `@grpc/grpc-js`、`google-protobuf`、`puppeteer-core`、`axios`、`socks-proxy-agent` 等。
+
+### Go 源码项目
+
+```text
+main.go
+go.mod
+go.sum
+README.md
+input_schema.json
+output_schema.json
+GoSdk/
+  sdk.go
+  sdk.pb.go
+  sdk_grpc.pb.go
+```
+
+Go Worker 需要区分两个阶段：
+
+- 源码项目：包含 `main.go`、`go.mod`、`go.sum`、`GoSdk/`、schema 和 README。
+- 上传 ZIP：根目录必须包含编译后的 Linux amd64 可执行文件 `main`。
+
+CoreClaw CLI 会用下面的方式构建 Go 上传入口：
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -o main ./main.go
+```
+
+在 Windows 上用普通压缩工具打包 Go Worker 时，容易丢失 Linux 可执行权限。`coreclaw pack` 和 `coreclaw verify` 会保留 ZIP 中根目录 `main` 的 `100755` mode，`coreclaw inspect-package` 也会检查这一点。
+
+## 上传 ZIP 结构
+
+上传 ZIP 的运行入口必须在 archive root：
+
+- Python：根目录 `main.py`。
+- Node.js：根目录 `main.js`。
+- Go：根目录编译后二进制 `main`。
+
+不要上传包含额外目录层级的 ZIP，例如 ZIP 内是 `worker/main.js`。平台查找的是 ZIP 根目录入口。
+
+CoreClaw CLI 打包时会排除：
+
+- `.coreclaw/`
+- `node_modules/`
+- Python virtualenv
+- 构建目录
+- 缓存目录
+- git metadata
+- 临时文件
+
+检查任意 ZIP：
+
+```bash
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node
+node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
+```
+
+## input_schema.json
+
+`input_schema.json` 定义 CoreClaw 启动 Worker 时展示给用户的输入表单。CLI 会做静态校验，也会在本地 run 前校验实际输入。
+
+根字段：
+
+- `description`：可选，Worker 说明。
+- `b`：必填，任务拆分 key，必须指向一个 `array` 类型 property。
+- `properties`：必填，输入项数组。
+
+示例：
+
+```json
+{
+  "description": "Fetch pages and return basic metadata.",
+  "b": "urls",
+  "properties": [
+    {
+      "title": "URLs",
+      "name": "urls",
+      "type": "array",
+      "editor": "requestList",
+      "default": [
+        { "url": "https://example.com" }
+      ],
+      "required": true
+    },
+    {
+      "title": "Timeout (ms)",
+      "name": "timeoutMs",
+      "type": "integer",
+      "editor": "number",
+      "minimum": 1000,
+      "maximum": 120000,
+      "default": 60000
+    }
+  ]
+}
+```
+
+支持的 `type`：
+
+- `string`
+- `integer`
+- `boolean`
+- `array`
+- `object`
+
+常见 `editor`：
+
+- `input`
+- `textarea`
+- `number`
+- `select`
+- `radio`
+- `checkbox`
+- `switch`
+- `datepicker`
+- `requestList`
+- `requestListSource`
+- `stringList`
+
+重要规则：
+
+- 每个 `name` 必须唯一。
+- `name` 建议使用 ASCII 标识符，便于代码读取。
+- `b` 必须指向一个 `array` property。
+- `requestList` 每一项必须包含非空 `url`。
+- `stringList` 每一项必须包含非空 `string`。
+- `requestListSource` 可以通过 `param_list` 声明自定义列表项字段。
+- `select`、`radio`、`checkbox` 的值必须来自 `options`。
+- 数值字段可以声明 `minimum` 和 `maximum`。
+- `required: true` 的字段在运行时必须存在且非空。
+
+传入运行输入：
+
+```bash
+node ./bin/coreclaw.js run ./worker --input input.json
+node ./bin/coreclaw.js run ./worker --json "{\"timeoutMs\":60000}"
+node ./bin/coreclaw.js run ./worker --input-json "{\"timeoutMs\":60000}"
+node ./bin/coreclaw.js run ./worker --split 0
+```
+
+在 Windows 和 CI 脚本里，复杂输入优先使用 `--input input.json`，避免 shell 改写 inline JSON。
+
+## output_schema.json
+
+`output_schema.json` 定义平台展示和导出的结果表。它是一个 JSON 数组：
+
+```json
+[
+  {
+    "name": "url",
+    "type": "string",
+    "description": "URL"
+  },
+  {
+    "name": "status",
+    "type": "string",
+    "description": "Status"
+  },
+  {
+    "name": "html_length",
+    "type": "integer",
+    "description": "HTML Length"
+  }
+]
+```
+
+支持的输出类型：
+
+- `string`
+- `integer`
+- `boolean`
+- `array`
+- `object`
+
+`name` 必须和 Worker 调用 SDK `push_data` 时的字段一致。本地运行时 CLI 会写出：
+
+- `results.ndjson`：SDK `push_data` 原始结果行。
+- `export.ndjson`：按 `output_schema.json` 投影后的结果行。
+- `output_schema_issues.json`：字段缺失、额外字段、类型错误、非 object 结果行等问题。
+
+如果希望 schema 漂移直接导致本地 run 或上传预检失败，使用：
+
+```bash
+--require-output-schema-match
+```
+
+## SDK 使用方式
+
+Worker 通过项目里的 SDK 文件和 CoreClaw 平台通信。CoreClaw CLI 会在本地启动兼容的 gRPC server，让这些 SDK 调用可以在本机运行。
+
+### 读取输入
+
+Python：
+
+```python
+from sdk import CoreSDK
+
+input_dict = CoreSDK.Parameter.get_input_json_dict()
+input_json = CoreSDK.Parameter.get_input_json_str()
+```
+
+Node.js：
+
+```javascript
+const coresdk = require('./sdk')
+
+const input = await coresdk.parameter.getInputJSONObject()
+const inputJson = await coresdk.parameter.getInputJSONString()
+```
+
+Go：
+
+```go
+inputJSON, err := coresdk.Parameter.GetInputJSONString(ctx)
+```
+
+### 写日志
+
+```javascript
+await coresdk.log.debug('debug details')
+await coresdk.log.info('normal progress')
+await coresdk.log.warn('recoverable warning')
+await coresdk.log.error('error details')
+```
+
+### 设置 runtime 表头
+
+```javascript
+await coresdk.result.setTableHeader([
+  { label: 'URL', key: 'url', format: 'text' },
+  { label: 'Status', key: 'status', format: 'text' },
+])
+```
+
+CLI 默认会在 Worker 没有调用 table header API 时给出 warning。上传前希望强制执行这个 SDK 契约时使用：
+
+```bash
+--require-table-header
+```
+
+### 推送结果行
+
+```javascript
+await coresdk.result.pushData({
+  url: 'https://example.com',
+  status: 'ok',
+})
+```
+
+建议每次推送一个 JSON object，并确保字段和 `output_schema.json`、runtime table header 的 key 一致。
+
+## 命令说明
+
+### `doctor`
+
+检查本地工具和浏览器端点。
+
+```bash
+node ./bin/coreclaw.js doctor
+node ./bin/coreclaw.js doctor --python "py -3" --go go --strict
+```
+
+它会报告 Python、Node.js、Go、Chrome CDP 发现情况。调试 Worker 前建议先跑一次。
+
+### `init`
+
+创建新的 Worker。
+
+```bash
+node ./bin/coreclaw.js init ./my-node-worker --language node --name my-node-worker
 node ./bin/coreclaw.js init ./my-python-worker --language python
 node ./bin/coreclaw.js init ./my-go-worker --language go
 ```
 
-生成的项目会包含 CoreClaw 官方文档要求的 SDK 文件：
+常用选项：
 
-- Python: `sdk.py`, `sdk_pb2.py`, `sdk_pb2_grpc.py`
-- Node.js: `sdk.js`, `sdk_pb.js`, `sdk_grpc_pb.js`
-- Go: `GoSdk/sdk.go`, `GoSdk/sdk.pb.go`, `GoSdk/sdk_grpc.pb.go`
+- `--language python|node|go`：Worker 语言。
+- `--name <name>`：包名或模块名。
+- `--force`：覆盖已有目标目录。
 
-### 静态校验
+生成项目会包含入口文件、依赖文件、SDK 文件、`README.md`、`input_schema.json` 和 `output_schema.json`。
+
+### `validate`
+
+静态校验 Worker 是否符合上传准备要求。
 
 ```bash
-node ./bin/coreclaw.js validate ./examples/node-hello
+node ./bin/coreclaw.js validate ./worker
+node ./bin/coreclaw.js validate ./worker --strict
 ```
 
 校验内容包括：
 
-- 根目录只能有一个入口文件：`main.py`、`main.js` 或 `main.go`。
-- 必需的依赖文件、SDK 文件和 `input_schema.json`。
-- 缺少 `README.md` 时给出上传就绪 worker 文档 warning。
-- 按官方 `main.js` + CommonJS 契约检查 Node `package.json` 的 `main` / `type` 字段。
-- SDK 运行时依赖必须声明在平台依赖文件中：
-  - Python: `requirements.txt` 中的 `grpcio`、`protobuf`
-  - Node.js: `package.json` 中的 `@grpc/grpc-js`、`google-protobuf`
-  - Go: `go.mod` 中的 `google.golang.org/grpc`、`google.golang.org/protobuf`
-- `input_schema.json` 根字段、唯一 property name、受支持的类型/editor、官方文档中的 editor/type 搭配、数值 `minimum` / `maximum` 边界、selector `options`、`requestListSource.param_list` 和 default 形态。
-- `input_schema.b` 必须指向一个 array property。
-- 存在 `output_schema.json` 时校验列名和受支持类型。
+- Python、Node.js、Go 的根目录必需文件。
+- 是否只有一个语言入口。
+- SDK 文件是否齐全。
+- 依赖声明是否齐全。
+- Node.js `main.js` + CommonJS 契约。
+- Node.js 源码中第三方依赖是否声明在运行时依赖中。
+- Python 源码中第三方依赖是否声明在 `requirements.txt` 中。
+- Go SDK 依赖和 `go.sum` checksum。
+- `input_schema.json` 的结构、字段名、editor/type、required、options、数值边界、`b` 拆分 key。
+- `output_schema.json` 的列名和类型。
+- HTTP Worker 是否读取 `PROXY_AUTH` / `PROXY_DOMAIN`。
+- 浏览器 Worker 是否读取 `ChromeWs`、`ChromeHttp`、`LightpandaDomain`、`CDP_ENDPOINT` 或 `BROWSER_WS_ENDPOINT`。
 
-CoreClaw 上传后会从 `requirements.txt`、`package.json` 或 `go.mod` 安装依赖。因此 CLI 会拒绝那些本地机器因为已安装 SDK 包而能运行、但云端安装文件没有声明这些包的 worker。
+默认模式会兼容旧 Worker，warning 不一定失败。新 Worker 或上传前建议使用 `--strict`。
 
-运行时，CLI 还会校验由默认值、`--input` 或 `--json` 拼出的实际输入。如果某个字段标记了 `"required": true` 但本次输入缺失或为空，或者声明字段的 JSON 类型不匹配，或者数值字段超出 `minimum` / `maximum`，或者 `select`/`radio`/`checkbox` 的值不在 `options` 中，或者列表编辑器项结构不符合文档，命令会在创建 run 产物和启动 worker 前失败，贴近 CoreClaw 表单层的启动行为。
+### `run`
 
-列表编辑器中，`requestList` 项必须包含非空 `url`，`stringList` 项必须包含非空 `string`，`requestListSource` 项可以使用 `param_list` 声明的自定义字段。静态校验会检查 `param_list` 结构、重复 param name、受支持的 param type/editor、数值边界、selector options 以及 editor/type 搭配；运行时再逐项校验 required 字段、JSON 类型、数值边界和 selector options。
-
-官方文档把 `output_schema.json` 描述为上传就绪项目文件，但当前平台仍兼容没有 `output_schema.json` 的老 worker。因此 CLI 把缺失 `output_schema.json` 作为 warning，而不是阻塞错误。没有 output schema 时，本地 `export.ndjson` 会保留完整原始结果行。
-
-当存在 `output_schema.json` 时，本地运行会按声明列生成 `export.ndjson`，并把 pushed result 与 schema 的漂移记录到 `output_schema_issues.json`。runtime `set_table_header` 的 key 或 format 与 `output_schema.json` 不一致时也会给出 warning。需要上传前严格门槛时，在 `run` 或 `verify` 中加入 `--require-output-schema-match`；如果结果行缺少声明字段、包含未声明字段、声明字段类型错误，或不是 JSON object，命令会失败。
-
-CoreClaw SDK 文档把 `set_table_header` 描述为返回结果前的 runtime 表结构定义步骤。CLI 默认只在 worker 没有调用它时给出 warning，以兼容只依赖 `output_schema.json` 的历史 worker。需要把这个 SDK 契约变成上传前 hard gate 时，在 `run` 或 `verify` 中加入 `--require-table-header`。
-
-### 批量审计 Worker
+在本地 CoreClaw SDK runtime 中运行 Worker。
 
 ```bash
-node ./bin/coreclaw.js audit E:/worker \
-  --output ./tmp/all-workers-audit.json \
-  --markdown ./tmp/all-workers-audit.md \
-  --soft
+node ./bin/coreclaw.js run ./worker --input input.json --min-results 1
+node ./bin/coreclaw.js run ./worker --json "{\"url\":\"https://example.com\"}"
+node ./bin/coreclaw.js run ./worker --split 0
+node ./bin/coreclaw.js run ./worker --timeout-ms 10m --idle-timeout-ms 30s
+node ./bin/coreclaw.js run ./worker --strict --min-results 1
 ```
 
-`audit` 会发现根目录下的 `worker-*` 项目，执行与 `validate` 相同的项目/schema 校验，并写出 JSON/Markdown 报告。只有当你明确想校验任何包含 `main.py`、`main.js` 或 `main.go` 的目录时，才使用 `--all`。
-
-### 本地运行
+常用运行门槛：
 
 ```bash
-node ./bin/coreclaw.js run ./examples/node-hello
-node ./bin/coreclaw.js run ./examples/node-hello --json "{\"url\":\"https://example.com\"}"
-node ./bin/coreclaw.js run ./examples/node-hello --input input.json
-node ./bin/coreclaw.js run ./examples/node-hello --timeout-ms 10m --idle-timeout-ms 30s
-node ./bin/coreclaw.js run ./examples/node-hello --min-results 1
-node ./bin/coreclaw.js run ./examples/node-hello --require-status-ok
-node ./bin/coreclaw.js run ./examples/node-hello --require-table-header
-node ./bin/coreclaw.js run ./examples/node-hello --require-output-schema-match
-node ./bin/coreclaw.js run ./worker --local-proxy --require-proxy-usage
-node ./bin/coreclaw.js run ./browser-worker --require-browser --min-results 1
-node ./bin/coreclaw.js run ./lightpanda-worker --lightpanda-shim --require-lightpanda-shim --min-results 1
-node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
+node ./bin/coreclaw.js run ./worker --require-status-ok
+node ./bin/coreclaw.js run ./worker --require-status-ok --result-status-fields status,check_status --result-fail-values fail,error
+node ./bin/coreclaw.js run ./worker --require-table-header
+node ./bin/coreclaw.js run ./worker --require-output-schema-match
+node ./bin/coreclaw.js run ./worker --min-results 1
 ```
 
-`run` 会启动本地 CoreClaw SDK gRPC server，监听 `127.0.0.1:20086`，然后执行 worker。
+`--require-status-ok` 会检查结果行中的失败状态。默认检查 `status` 字段，默认失败值包括 `fail`、`failed`、`failure`、`error` 等。不同 Worker 可用 `--result-status-fields` 和 `--result-fail-values` 调整。
 
-`--timeout-ms` 用于限制整个 worker 进程运行时间；`--idle-timeout-ms` 用于停止已经不再输出但仍有 Node/Python/Go handle 未退出的 worker。时长支持毫秒、`s` 和 `m`。
-
-如果 input schema 把某个字段标记为 required，本地 run 也要求该字段有非空值。声明字段还必须匹配 schema 类型，例如 `integer` 必须是整数，`boolean` 必须是布尔值，`array` 必须是 JSON 数组。声明了 `minimum` / `maximum` 的数值字段必须落在边界内。选择器输入必须使用 `options` 里声明的值；`requestList`、`requestListSource` 和 `stringList` 会按各自文档形态校验每个列表项。schema 没有提供 default 时，使用 `--input input.json` 或 `--json '{"field":"value"}'` 传入。
-
-真实 worker 冒烟测试应使用 `--min-results`。有些 worker 会在上游或浏览器失败后仍以 exit code `0` 退出，因此结果行数才是更可靠的成功门槛。
-
-当结果行里包含 `status` 字段，并且 `fail`、`failed`、`failure` 或 `error` 这类值应该让本地运行失败时，使用 `--require-status-ok`。不同 worker 可以用 `--result-status-fields status,check_status` 和 `--result-fail-values fail,error,manual` 调整字段和值。这个门槛默认不启用，因为有些 worker 会使用 `manual`、`skipped` 或业务自定义状态，它们不一定代表运行失败。
-
-当上传前预检需要强制 worker 调用 SDK runtime table-header API 时，使用 `--require-table-header`。它比默认兼容模式更严格，可以捕获只依赖静态 `output_schema.json`、但没有设置 runtime 表头的 worker。
-
-上传前验证建议加 `--require-output-schema-match`。默认行为继续兼容老 worker；显式启用后，输出字段和 `output_schema.json` 不一致会成为 hard failure。
-
-每次运行都会得到独立临时目录 `.coreclaw/runs/<run-id>/tmp`。Node.js worker 还会默认预加载一个本地 hook，把绝对路径 `/tmp/...` 文件操作映射到该运行目录，避免宿主机旧 `/tmp` 状态影响重复运行。
-
-如果 `http://127.0.0.1:9222/json/version` 可访问，CLI 会自动发现本地 Chrome browser WebSocket 路径并注入：
-
-- `ChromeWs=127.0.0.1:9222/devtools/browser/<id>`
-- `ChromeHttp=127.0.0.1:9222`
-- `CDP_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
-- `BROWSER_WS_ENDPOINT=ws://127.0.0.1:9222/devtools/browser/<id>`
-
-用 `--no-discover-chrome` 可关闭自动发现。未检测到浏览器时，`ChromeWs` 和 `ChromeHttp` 都会回退为 `127.0.0.1:9222`，保持与 CoreClaw 文档中 host-style browser 变量一致的环境形态。`ChromeHttp` 用于 Selenium Remote WebDriver worker；`ChromeWs` 用于 Playwright、Puppeteer 和 DrissionPage CDP worker。
-
-浏览器 worker 的 smoke test 建议加 `--require-browser`。它会把浏览器可用性变成预检门槛：本地 Chrome 自动发现成功时直接通过，host-style CDP 端点会检查 `/json/version`，Selenium 风格端点会检查 `/status`。如果没有任何端点可访问，命令会在创建 run 产物前失败，避免 worker 内部才报出不明确的浏览器连接错误。
-
-测试应通过 CoreClaw host-style `ChromeWs` 变量连接浏览器的 worker 时，使用 `--browser-cdp-shim`。CLI 会启动本地 CDP WebSocket shim，注入 `ChromeWs=<host:port>`、`ChromeHttp=<host:port>` 和完整 `CDP_ENDPOINT`，并同时接受 `ws://<ChromeWs>/devtools/browser/<id>` 以及 DrissionPage 文档里的 `ws://<ChromeWs>/ws?apiKey=<PROXY_AUTH>` 路径。加上 `--require-browser-cdp-shim` 后，如果 worker 从未连接该 shim，run 会失败。
-
-测试读取 CoreClaw 文档中 `LightpandaDomain` 变量的 worker 时，使用 `--lightpanda-shim`。CLI 会启动本地 CDP WebSocket shim，注入 `LightpandaDomain=<host:port>` 和 `PROXY_AUTH`，并接受文档要求的归一化端点 `ws://<LightpandaDomain>/devtools/browser/new`。加上 `--require-lightpanda-shim` 后，如果 worker 从未连接该路径，或连接时没有 Basic `Authorization` header，run 会失败。shim 会返回基础 `Browser.getVersion` 元数据；存在本地发现或显式传入的上游 CDP endpoint 时，其它 CDP 流量会继续转发。
-
-测试会调用 CoreClaw 自定义 CDP 方法 `Captchas.automaticSolver` 的 worker 时，使用 `--captcha-solver`。CLI 会启动相同形态的本地 CDP WebSocket shim，并通过 `ChromeWs`、`CDP_ENDPOINT` 和 `BROWSER_WS_ENDPOINT` 注入该端点，对 `Captchas.automaticSolver` 返回 `{ "status": true }`。其它 CDP 消息会在存在本地或显式上游 CDP 端点时继续转发。加上 `--require-captcha-solver` 后，如果本次运行没有观察到 solver 调用、`timeout` 不是正数、或 `solverType` 不在 CoreClaw 官方映射表中，run 会失败。观测到的 solver 调用会写入 `captcha_solver_calls.json`。
+`--strict` 会启用严格静态校验，并默认启用 table header、output schema、status 行等运行时门槛，除非你显式覆盖。
 
 运行产物：
 
@@ -177,236 +460,501 @@ node ./bin/coreclaw.js run ./browser-worker --captcha-solver --require-captcha-s
   input.json
   env.json
   command.json
-  upload_manifest.json # staged verify 使用的上传文件清单
+  upload_manifest.json
   logs.ndjson
-  results.ndjson      # SDK push_data 原始 payload
-  export.ndjson       # 按 output_schema 投影后的 CoreClaw 风格输出
-  output_schema_issues.json # pushed rows 与 output_schema.json 不一致时存在
-  captcha_solver_calls.json # --require-captcha-solver 观察到 solver 调用时存在
+  results.ndjson
+  export.ndjson
+  output_schema_issues.json
   table_headers.json
-  tmp/                # 每次运行独立临时状态
+  captcha_solver_calls.json
+  tmp/
   summary.json
 ```
 
-`summary.json` 会记录 `project_dir` 和 `worker_dir`。普通 `run` 中两者相同；staged `verify` 中，`project_dir` 是保存产物的原 worker 目录，`worker_dir` 是临时上传包视角执行目录。
+部分文件只在对应功能启用时出现。
 
-### 上传前预检
+### `verify`
+
+上传前预检命令，也是上传前最重要的本地门槛。
 
 ```bash
-node ./bin/coreclaw.js verify ./examples/node-hello --min-results 1
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --min-results 1
 node ./bin/coreclaw.js verify ./worker --input input.json --timeout-ms 10m --idle-timeout-ms 30s --min-results 1
-node ./bin/coreclaw.js verify ./worker --input input.json --cloud-output ./cloud-output.json --min-shared 1 --max-diff 0
-node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 node ./bin/coreclaw.js verify ./worker --no-pack
-node ./bin/coreclaw.js verify ./my-go-worker --go go --min-results 1
-node ./bin/coreclaw.js verify ./worker --require-status-ok --min-results 1
-node ./bin/coreclaw.js verify ./worker --require-table-header --require-output-schema-match --min-results 1
-node ./bin/coreclaw.js verify ./worker --require-output-schema-match --min-results 1
-node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
-node ./bin/coreclaw.js verify ./browser-worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
-node ./bin/coreclaw.js verify ./lightpanda-worker --lightpanda-shim --require-lightpanda-shim --min-results 1
-node ./bin/coreclaw.js verify ./browser-worker --captcha-solver --require-captcha-solver --min-results 1
-node ./bin/coreclaw.js inspect-package ./dist/my-worker.zip --language node
-node ./bin/coreclaw.js inspect-package ./dist/my-go-worker.zip --language go
+node ./bin/coreclaw.js verify ./worker --no-staging --no-install
 ```
 
-`verify` 是上传前门槛。它会执行静态校验，把可上传 worker 文件复制到 `.coreclaw/staging/<stage-id>/`，在 staging 目录安装依赖，从 staging 目录启动本地 CoreClaw runtime 执行 worker，校验结果行数，可选在结果行包含失败状态值时失败，可选强制要求 runtime table-header 调用，可选强制校验结果与 `output_schema.json` 一致，可选对比 CoreClaw 云端 JSON 导出，并在未传 `--no-pack` 时创建上传 ZIP。
+`verify` 会执行：
 
-这种默认行为能捕获只因为源目录里存在 `.coreclaw`、`node_modules`、`dist` 或其他不会上传的文件而本地跑通的假阳性。
+1. 静态项目校验。
+2. 把可上传文件复制到干净 staging 目录。
+3. 在 staging 中安装依赖。
+4. 用本地 CoreClaw SDK runtime 执行 staged Worker。
+5. 强制结果行数和状态门槛。
+6. 可选对比 CoreClaw 云端输出。
+7. 除非使用 `--no-pack`，否则创建上传 ZIP。
+8. 检查生成的上传包。
 
-对于 Go worker，`verify` 现在把源码文件和运行时文件视为两个不同的平台契约。它会先在干净的源码 staging 中校验并构建上传产物：`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -o main ./main.go`。随后再用第二个上传视角的 runtime staging 执行 worker，这个运行目录只包含编译后的入口二进制和 schema 文件，而不是原始 Go 源码树。这匹配当前 CoreClaw 平台观察到的行为：Go 运行时可以看到 `main`，但 worker 进程不一定能看到 `main.go`、`go.mod` 和 `GoSdk/`。需要调试源码目录时使用 `run` 的 `go run .`；上传前门槛使用 `verify`。需要固定 Go 工具链或 `go` 不在 `PATH` 时，使用 `--go <binary>`。
+Python verify 会创建临时 virtualenv，避免全局 Python 包掩盖 `requirements.txt` 缺失。
 
-默认情况下，运行产物仍写入原项目 `.coreclaw/runs/<run-id>/`；上传包默认写入 `.coreclaw/verify/<verify-id>/`；云端对比报告默认写入 `.coreclaw/runs/<run-id>/cloud-comparison.json`。staged preflight 还会在 run 目录写入 `upload_manifest.json`，用于审计到底哪些文件进入了上传包视角的执行目录。`--no-staging` 或 `--no-install` 只建议用于直接调试源目录行为。
+Node.js verify 会用 `npm ci --omit=dev` 或 `npm install --omit=dev` 安装运行时依赖，避免 dev-only 依赖掩盖平台上传失败。
 
-### 检查运行产物
+Go verify 会构建 Linux amd64 `main`，再从上传视角的 runtime staging 目录执行，而不是直接依赖源码目录。
+
+`verify` 默认启用 `--require-status-ok`。如果你的 Worker 的 `status` 字段不是错误语义，而是业务标签，可以用：
 
 ```bash
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --min-results 1
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-status-ok
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-status-ok --result-status-fields check_status --result-fail-values fail,error,manual
-node ./bin/coreclaw.js inspect-run ./examples/node-hello/.coreclaw/runs/<run-id> --require-output-schema-match
+--no-require-status-ok
 ```
 
-`inspect-run` 会检查 `summary.json`、`results.ndjson`、`export.ndjson` 和 `output_schema_issues.json` 的一致性，也可以对已经捕获的运行产物应用同一套结果状态门槛。真实 worker 执行后应使用它，避免把“进程正常退出”误判为“产生了可用数据”。
-
-### 模拟拆分任务
-
-CoreClaw 的 `input_schema.b` 是任务拆分 key，必须指向一个数组 property。用 `--split <index>` 可以在本地运行一个展开后的单项任务：
+推荐上传前严格命令：
 
 ```bash
-node ./bin/coreclaw.js run ./examples/node-hello --split 0
+node ./bin/coreclaw.js verify ./worker \
+  --strict \
+  --input input.json \
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
 ```
 
-对于 `{ "url": "https://example.com" }` 这样的 `requestList` 项，worker 会收到顶层 `url`，匹配现有 CoreClaw worker 常见的单项任务输入形态。
+### `pack`
 
-### 运行环境覆盖
+创建上传 ZIP。
 
 ```bash
-node ./bin/coreclaw.js run ./worker \
-  --proxy-auth "user:pass" \
-  --proxy-domain "proxy.example:6000" \
-  --chrome-ws "127.0.0.1:9222" \
-  --chrome-http "127.0.0.1:9222" \
-  --lightpanda-domain "lightpanda-inner.coreclaw.com"
+node ./bin/coreclaw.js pack ./worker --output ./dist/worker.zip
+node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --strict
 ```
 
-默认本地运行使用直连网络：
+`pack` 会校验项目、复制可上传文件、必要时构建 Go 上传二进制、写出 ZIP，并执行包检查。`--strict` 会把兼容性 warning 也作为失败处理。
 
-- 不设置 `PROXY_AUTH`
-- 不设置 `PROXY_DOMAIN`
-- `ChromeWs` 优先从本地 Chrome CDP 自动发现；否则为 `127.0.0.1:9222`
-- `ChromeHttp` 默认跟随 `ChromeWs` 的 host/port，也可以为 Selenium worker 显式设置
-- `LightpandaDomain` 默认不设置，除非显式传入 `--lightpanda-domain` 或启用 `--lightpanda-shim`
+### `inspect-package`
 
-`coreclaw doctor` 会检查 `127.0.0.1:9222` 的本地 Chrome CDP 是否可访问，并打印本地运行会注入的 browser 变量。
-
-如需模拟 CoreClaw 的 SOCKS5 代理路径，可以启动本地代理：
+检查已有上传 ZIP。
 
 ```bash
-node ./bin/coreclaw.js run ./worker --local-proxy
-node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language python
+node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --strict
+node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go
 ```
 
-`--local-proxy` 会在 `127.0.0.1:<port>` 启动带认证的 SOCKS5 代理，并注入匹配的 `PROXY_AUTH` / `PROXY_DOMAIN`。`--require-proxy-usage` 也会启用该代理，并在 worker 从未发起 SOCKS5 CONNECT 时让 run 失败。HTTP 请求型 worker 应使用这个门槛，避免代码只是因为本机直连网络而跑通。
+它会检查：
 
-浏览器 worker 使用非默认端点时，把 `--require-browser` 和 `--chrome-ws` 或 `--chrome-http` 搭配使用：
+- 根目录入口文件。
+- 必需 SDK 和依赖文件。
+- ZIP 是否多包了一层目录。
+- 推荐元数据文件。
+- Go 根目录是否有可执行 `main`。
+- Go `main` 是否是 `100755` mode。
+
+### `inspect-run`
+
+检查已有本地运行产物。
 
 ```bash
-node ./bin/coreclaw.js verify ./worker --chrome-ws "127.0.0.1:9222/devtools/browser/<id>" --require-browser --min-results 1
-node ./bin/coreclaw.js verify ./worker --chrome-http "127.0.0.1:9515" --require-browser --min-results 1
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --min-results 1
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-status-ok
+node ./bin/coreclaw.js inspect-run ./worker/.coreclaw/runs/<run-id> --require-output-schema-match
 ```
 
-第一种对应 Playwright、Puppeteer 和显式 CDP endpoint worker；第二种对应 Selenium Remote WebDriver worker。
+当你已经有 `.coreclaw/runs/<run-id>`，但想重新应用结果行数、状态或 output schema 门槛时使用它。
 
-对于使用 CoreClaw host-only CDP 变量的 worker，尤其是会拼出 `ws://{ChromeWs}/ws?apiKey={PROXY_AUTH}` 的 DrissionPage worker：
+### `compare`
+
+对比 CoreClaw 平台输出和本地输出。
 
 ```bash
-node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
+node ./bin/coreclaw.js compare \
+  ./cloud-output.json \
+  ./worker/.coreclaw/runs/<run-id> \
+  --output ./tmp/cloud-comparison.json \
+  --min-shared 1 \
+  --max-diff 0 \
+  --require-unique-keys \
+  --require-status-ok \
+  --output-schema ./worker/output_schema.json
 ```
 
-没有上游浏览器时，shim 也会返回基础 `Browser.getVersion` 元数据；存在本地发现或显式传入的上游 CDP endpoint 时，其它 CDP 流量会继续转发。
+云端输出可以是：
 
-对于会把 `LightpandaDomain` 归一化为 `ws://<domain>/devtools/browser/new`，并用 `PROXY_AUTH` 发送 Basic auth 的 Lightpanda worker：
+- JSON 数组。
+- CoreClaw result-list API 包装结果，例如 `data.list`、`data.rows`、`data.items`、`data.results`、`data.records` 等。
+- CSV 导出文件。
+
+如果 API 响应里只有 `data.download_url`，请先下载真实 JSON/CSV 文件，再交给 `compare`。
+
+常用选项：
+
+- `--key-fields url,check_name`：指定对比 key。
+- `--ignore-fields completed_at,__coreclaw_data_id__`：忽略波动字段。
+- `--ignore-keys key1,key2`：忽略已知只在云端或本地出现的行。
+- `--ignore-keys-file file`：从 JSON 或文本加载忽略 key。
+- `--compare-profile profile.json`：复用对比配置。
+- `--min-shared <n>`：至少 N 个共同 key。
+- `--max-diff <n>`：限制字段值差异数量。
+- `--max-only-cloud <n>` / `--max-only-local <n>`：限制单侧行数。
+- `--require-output-schema-match`：按 `output_schema.json` 校验行。
+- `--require-status-ok`：检查失败状态行。
+
+`verify` 也可以在上传预检中直接做云端对比：
 
 ```bash
-node ./bin/coreclaw.js verify ./worker --lightpanda-shim --require-lightpanda-shim --min-results 1
+node ./bin/coreclaw.js verify ./worker \
+  --input input.json \
+  --cloud-output ./cloud-output.csv \
+  --compare-output ./tmp/cloud-comparison.json \
+  --min-shared 1 \
+  --max-diff 0
 ```
 
-如果想连接显式真实端点而不是本地 shim，使用 `--lightpanda-domain <domain-or-endpoint>`。裸域名会原样放进 `LightpandaDomain`，让 worker 自己按文档规则归一化；本地 run 只要存在 `LightpandaDomain` 就会同时注入 `PROXY_AUTH`。
-
-对于带 CAPTCHA 处理逻辑的浏览器 worker：
+如果需要保留 `--cloud-output` 但本次不对比，可以加：
 
 ```bash
-node ./bin/coreclaw.js verify ./worker --captcha-solver --require-captcha-solver --min-results 1
+--no-compare
 ```
 
-这个本地 shim 用来证明代码按预期发送了 `Captchas.automaticSolver` CDP 调用。启用 `--require-captcha-solver` 时，它还会校验 `timeout` 必须是正数，`solverType` 必须是 CoreClaw 官方文档列出的值之一：`cloudflare`、`datadome`、`google-v2`、`google-v3`、`oocl_slide`、`perimeterx`、`shein_same_object_click`、`temu_auto`、`tiktok_slide_simple` 或 `tiktok_slide_auto`。它不会绕过真实网站挑战；真实目标上的求解效果仍需在 CoreClaw 云端指纹浏览器里验证。
+### `audit`
 
-如需模拟 CoreClaw 云端代理变量但没有真实代理，可以显式使用：
+批量审计一个目录下的 Worker。
+
+```bash
+node ./bin/coreclaw.js audit E:/worker \
+  --output ./tmp/all-workers-audit.json \
+  --markdown ./tmp/all-workers-audit.md \
+  --soft
+
+node ./bin/coreclaw.js audit E:/worker \
+  --audit-profile ./examples/coreclaw-audit-profile.json \
+  --fail-on-warn
+```
+
+默认发现 `worker-*` 目录。只有当你明确想审计所有带 Worker 入口文件的目录时，才使用 `--all`。
+
+常用选项：
+
+- `--recursive`：递归扫描。
+- `--all`：包含非 `worker-*` 但看起来像 Worker 的目录。
+- `--soft`：写报告但不让进程失败。
+- `--fail-on-warn`：warning 也失败。
+- `--ignore-issue-codes code1,code2`：保留已知问题记录，但不计入 pass/fail。
+- `--audit-profile profile.json`：复用审计配置。
+
+报告会包含 issue code、证据、文档依据、修复建议、ignored issues 和汇总计数。
+
+## 平台功能本地验证
+
+### HTTP SOCKS5 代理
+
+CoreClaw 的 HTTP 请求 Worker 运行在网络沙箱中，必须使用平台代理：
+
+- `PROXY_AUTH`：`username:password`
+- `PROXY_DOMAIN`：代理 host 和 port
+
+Node.js 示例：
+
+```javascript
+const axios = require('axios')
+const { SocksProxyAgent } = require('socks-proxy-agent')
+
+const proxyAuth = process.env.PROXY_AUTH
+const proxyDomain = process.env.PROXY_DOMAIN
+const proxyUrl = proxyAuth && proxyDomain ? `socks5://${proxyAuth}@${proxyDomain}` : null
+
+const axiosConfig = { timeout: 30000 }
+if (proxyUrl) {
+  const agent = new SocksProxyAgent(proxyUrl)
+  axiosConfig.httpAgent = agent
+  axiosConfig.httpsAgent = agent
+  axiosConfig.proxy = false
+}
+
+const response = await axios.get('https://ipinfo.io/ip', axiosConfig)
+```
+
+本地证明 Worker 确实使用代理：
+
+```bash
+node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage --min-results 1
+```
+
+`--local-proxy` 会启动本地带认证 SOCKS5 代理并注入 env；`--require-proxy-usage` 会在 Worker 没有发起 SOCKS5 CONNECT 时失败。
+
+如果只想注入云端风格占位变量，不启动真实代理：
 
 ```bash
 node ./bin/coreclaw.js run ./worker --cloud-proxy
 ```
 
-cloud proxy mode 会暴露本地占位变量：
+### 浏览器自动化
 
-- `PROXY_AUTH=coreclaw-local:coreclaw-local`
-- `PROXY_DOMAIN=127.0.0.1:6000`
+CoreClaw 浏览器 Worker 不应该在生产代码里启动本地浏览器，而应该连接平台注入的远程浏览器端点。
 
-### 打包上传
+常见变量：
 
-```bash
-node ./bin/coreclaw.js pack ./examples/node-hello --output ./dist/node-hello.zip
-node ./bin/coreclaw.js pack ./my-go-worker --output ./dist/my-go-worker.zip --go go
-```
+- `ChromeWs`：Playwright、Puppeteer、DrissionPage 使用的 host-style CDP WebSocket。
+- `ChromeHttp`：Selenium Remote WebDriver 使用的 HTTP endpoint。
+- `CDP_ENDPOINT`：完整 `ws://...` endpoint。
+- `BROWSER_WS_ENDPOINT`：完整 browser WebSocket endpoint alias。
 
-ZIP 会把 worker 入口文件放在 archive root，并排除 `.coreclaw`、`node_modules`、virtualenv、构建产物、缓存和 git metadata。创建 ZIP 后，`pack` 会立即执行与 `inspect-package` 相同的包检查门槛；根目录入口错误和 Go 可执行权限问题会在上传前直接失败。`verify` 的最终上传产物也由 `pack` 生成，因此这个包检查同样属于上传前预检。
-
-对于 Go worker，`pack` 会在临时 staging 目录构建 Linux amd64 上传可执行文件，并把带可执行权限的 `main` 加入 ZIP。源目录不会被修改。
-
-如果需要在上传前检查一个已有 ZIP，尤其是这个 ZIP 不是由 `coreclaw pack` 生成的，使用 `inspect-package`。它会检查 Python、Node.js 或 Go 的入口文件是否位于 archive root，并报告常见的“多套了一层 worker 目录”问题，例如 ZIP 里是 `worker/main.js` 而不是根目录 `main.js`。对于 Go 上传包，它还会验证 ZIP 根目录存在可执行文件 `main`，并且 Unix mode 是 `100755`，可以提前发现 Windows 压缩工具丢失可执行权限导致平台在 worker 日志出现前直接失败的问题。
-
-## 云端输出对比
-
-当你有 CoreClaw 云端 run 导出的 JSON 或 CSV，可以把它和本地 run 捕获的结果对比：
+本地 Chrome 检测：
 
 ```bash
-node ./bin/coreclaw.js compare \
-  E:/worker/coreclaw_UsernameFinder_v1.0.2_20260601.json \
-  E:/worker/worker-username-finder/.coreclaw/runs/<run-id> \
-  --output ./tmp/username-finder-comparison.json \
-  --compare-profile E:/worker/worker-username-finder/.coreclaw/profiles/cloud-parity.json \
-  --min-shared 1
+node ./bin/coreclaw.js doctor
+node ./bin/coreclaw.js verify ./browser-worker --require-browser --min-results 1
 ```
 
-云端路径可以是 JSON 数组导出、保存下来的 `/api/v1/run/result/list` 响应（例如 `data.list[]`），也可以是下载后的 CSV 导出。如果传入的是 `/api/v1/run/result/export` 返回的只包含 `data.download_url` 的响应，需要先下载这个文件，再对下载得到的 JSON/CSV 做 compare。CSV 字段会按字符串保留；如果 `--require-output-schema-match` 需要区分数字、布尔和字符串，优先使用 JSON。
+如果本地 Chrome remote debugging 在 `127.0.0.1:9222`，CLI 会通过 `/json/version` 自动发现 browser WebSocket。
 
-该命令会对比行数、shared keys、cloud-only rows、local-only rows 和 value differences。差异报告会给每个变化行写出 `changed_fields`，并汇总 `value_diff_fields_top_20`，方便先区分时间戳/噪音字段和真正的合同漂移。使用 `--ignore-fields completed_at,updated_at` 可以在 value diff 计算前移除已知噪音字段；status 和 output_schema 门槛仍然检查原始结果行。当某些已知运行档位会刻意产出不同 row identity 时，例如平台侧细分 browser probe 行、本地侧 skipped group 行，可以用 `--ignore-keys key1,key2` 或 `--ignore-keys-file <file>` 只把这些 key 从 duplicate/shared/only/value-diff 统计中移除；status 和 output_schema 门槛仍然检查原始结果行。ignore-keys 文件可以是 JSON 数组、带 `ignore_keys` 或 `ignoreKeys` 字段的 JSON 对象，或一行一个 key 且支持 `#` 注释的纯文本文件。它也会分别报告两侧重复 comparison key；加入 `--require-unique-keys` 后，如果当前 key 会导致 last-row-wins 覆盖行，命令会失败。它也会分别报告 CoreClaw 云端输出和本地输出里的结果状态问题。加入 `--require-status-ok` 后，只要任一侧包含失败状态值，命令就会失败。传入 `--output-schema <file>` 后，还会用 worker 的 `output_schema.json` 校验云端和本地结果行；加入 `--require-output-schema-match` 后，schema 漂移会成为 hard gate。本地路径可以是 run 目录、`export.ndjson` 或 `results.ndjson`。默认 key 不够具体时可使用 `--key-fields username,site,urlUser`。需要严格云端一致性时可使用 `--min-shared`、`--max-diff`、`--max-only-local`、`--max-only-cloud` 作为 CI gate。
+显式端点：
 
-使用 `--compare-profile <file>` 可以把反复使用的云端一致性门槛放进一个 JSON 文件。profile 支持 snake_case 或 camelCase 字段，例如 `key_fields`、`ignore_fields`、`ignore_keys`、`min_shared`、`max_diff`、`max_only_cloud`、`max_only_local`、`require_unique_keys`、`require_status_ok`、`output_schema`、`require_output_schema_match`。profile 里的 `output_schema`、`ignore_keys_file`、`output` 等相对路径会按 profile 文件所在目录解析，而不是按当前 shell 目录解析。命令行参数会覆盖 profile 中的同名值；`ignore_fields` 和 `ignore_keys` 会合并，便于临时追加一次性忽略项而不修改 profile。
+```bash
+node ./bin/coreclaw.js verify ./browser-worker \
+  --chrome-ws "127.0.0.1:9222/devtools/browser/<id>" \
+  --require-browser \
+  --min-results 1
+```
 
-同一个 profile 传给 `verify` 时，也可以携带一小组上传前运行默认项：`local_proxy`、`cloud_proxy`、`proxy_auth`、`proxy_domain`、`browser_cdp_shim`、`require_browser_cdp_shim`、`lightpanda_shim`、`require_lightpanda_shim`、`captcha_solver`、`require_captcha_solver`、`require_proxy_usage`、`require_browser`、`require_status_ok`、`require_result_status_ok`、`result_status_fields`、`result_fail_values`、`lightpanda_domain`、`chrome_ws` 和 `chrome_http`。这样 worker 专属的云端一致性 profile 可以自包含，例如 docs-contract profile 可以设置 `local_proxy: true`，以后每次 verify 都不需要重复传 `--local-proxy`；如果本地 local 行会故意把平台注入变量报告为缺失，而云端输出才是最终通过依据，也可以设置 `require_status_ok: false`。显式命令行参数仍然会覆盖 profile 默认值。
+验证 host-style `ChromeWs` / DrissionPage 连接契约：
 
-也可以把对比合并进上传前预检：
+```bash
+node ./bin/coreclaw.js verify ./browser-worker \
+  --browser-cdp-shim \
+  --require-browser-cdp-shim \
+  --min-results 1
+```
+
+这个 shim 接受 `ws://<ChromeWs>/devtools/browser/<id>` 和 DrissionPage 风格 `ws://<ChromeWs>/ws?apiKey=<PROXY_AUTH>`，用于证明 Worker 代码确实读取并连接 CoreClaw 的环境变量。
+
+### Lightpanda
+
+Lightpanda 是 CoreClaw 托管的 CDP 浏览器端点，不是自动化框架。你仍然用 Playwright 等库写自动化逻辑，只是连接 `LightpandaDomain`，而不是启动本地浏览器。
+
+Worker 代码应当：
+
+1. 读取 `LightpandaDomain`。
+2. 如果它是裸域名，归一化为 `ws://<domain>/devtools/browser/new`。
+3. 读取 `PROXY_AUTH`。
+4. 用 `PROXY_AUTH` 生成 Basic `Authorization`。
+5. 用 Playwright `connect_over_cdp` 连接。
+
+本地契约验证：
+
+```bash
+node ./bin/coreclaw.js verify ./lightpanda-worker \
+  --lightpanda-shim \
+  --require-lightpanda-shim \
+  --min-results 1
+```
+
+使用真实显式端点：
+
+```bash
+node ./bin/coreclaw.js verify ./lightpanda-worker \
+  --lightpanda-domain "lightpanda-inner.coreclaw.com" \
+  --min-results 1
+```
+
+本地 shim 校验 endpoint 形状和 Basic auth。真实页面导航和渲染仍需要在 CoreClaw 平台或真实上游 CDP endpoint 上验证。
+
+### CAPTCHA
+
+CoreClaw 通过自定义 CDP 命令提供 CAPTCHA 处理：
+
+```text
+Captchas.automaticSolver
+```
+
+参数：
+
+- `timeout`：正数，秒。
+- `solverType`：官方文档中的 solver 类型。
+
+支持的 solverType：
+
+- `cloudflare`
+- `datadome`
+- `google-v2`
+- `google-v3`
+- `oocl_slide`
+- `perimeterx`
+- `shein_same_object_click`
+- `temu_auto`
+- `tiktok_slide_simple`
+- `tiktok_slide_auto`
+
+调用后必须判断返回结果。`status=false` 或 `target page don't have verify code` 不能当成成功。
+
+本地契约验证：
+
+```bash
+node ./bin/coreclaw.js verify ./browser-worker \
+  --captcha-solver \
+  --require-captcha-solver \
+  --min-results 1
+```
+
+本地 shim 会对 `Captchas.automaticSolver` 返回 `{ "status": true }`，把调用记录写入 `captcha_solver_calls.json`，并在缺少调用或参数不符合文档时失败。
+
+## 推荐的生产 Worker 流程
+
+新 Worker 建议按这个顺序：
+
+1. 生成或准备 Worker 项目。
+2. 编写 `input_schema.json`，让平台表单和实际输入一致。
+3. 编写 `output_schema.json`，让输出列和 `push_data` 字段一致。
+4. 通过 SDK 读取输入。
+5. 通过 SDK 写日志。
+6. 设置 runtime table header。
+7. 每次推送一个 JSON object 结果行。
+8. HTTP 请求使用 `PROXY_AUTH` / `PROXY_DOMAIN`。
+9. 浏览器 Worker 使用 `ChromeWs`、`ChromeHttp`、`LightpandaDomain` 或完整 CDP endpoint。
+10. 运行 `coreclaw validate --strict`。
+11. 运行 `coreclaw verify --strict --input input.json --min-results 1`。
+12. 上传 `verify` 生成的 ZIP，或用 `coreclaw pack` 生成 ZIP。
+13. 在 CoreClaw 平台真实运行。
+14. 导出平台 JSON 或 CSV。
+15. 用 `coreclaw compare` 或 `coreclaw verify --cloud-output` 对比平台与本地结果。
+
+通用上传前命令：
 
 ```bash
 node ./bin/coreclaw.js verify ./worker \
+  --strict \
   --input input.json \
-  --cloud-output E:/worker/coreclaw_UsernameFinder_v1.0.2_20260601.json \
-  --compare-output ./tmp/username-finder-comparison.json \
-  --compare-profile E:/worker/worker-username-finder/.coreclaw/profiles/cloud-parity.json \
-  --key-fields username,site,urlUser \
-  --min-shared 1 \
-  --max-diff 0
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
 ```
 
-`verify` 收到 `--cloud-output` 时，schema 优先级是：显式 `--output-schema` 优先，其次是 profile 里的 `output_schema`，没有 compare profile 时才默认使用当前 worker 自己的 `output_schema.json`。
-
-网络较重的 worker 如果本地机器没有等价的 CoreClaw 代理/浏览器基础设施，输出可能与云端不同。此时应记录差异，而不是直接把行数漂移视为 CLI runtime 失败。
-
-## 开发
-
-本地验证 gate、runtime 兼容规则和真实 worker smoke matrix 见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
-
-## 本机验证记录
-
-当前 Windows 机器上已验证：
+按 Worker 类型增加门槛：
 
 ```bash
-node ./bin/coreclaw.js validate ./examples/node-hello
-node ./bin/coreclaw.js run ./examples/node-hello
-node ./bin/coreclaw.js validate ./examples/python-hello
-node ./bin/coreclaw.js doctor --python "py -3" --strict
-node ./bin/coreclaw.js run ./examples/python-hello --python "py -3"
+# HTTP 请求 Worker
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --local-proxy --require-proxy-usage --min-results 1
+
+# 浏览器 Worker
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --require-browser --min-results 1
+
+# host-style ChromeWs / DrissionPage 契约
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --browser-cdp-shim --require-browser-cdp-shim --min-results 1
+
+# Lightpanda 契约
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --lightpanda-shim --require-lightpanda-shim --min-results 1
+
+# CAPTCHA CDP 命令契约
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --captcha-solver --require-captcha-solver --min-results 1
 ```
 
-Python 示例使用 `--python "py -3"`，因为当前机器的默认 `python` 指向一个没有 `pip` 的 Hermes venv。`verify` 安装依赖时也会使用同一个 `--python` 配置，所以 Python worker 优先使用 `--python`，不要依赖 `--command`。上传前脚本可以加 `doctor --strict`，让 Node、npm、Python、pip 或 Go 缺失时直接失败。
+## compare profile
 
-真实 worker 开发期间 smoke run：
+对比配置可以写成 JSON 文件复用：
+
+```json
+{
+  "key_fields": ["url", "check_name"],
+  "ignore_fields": ["completed_at", "__coreclaw_data_id__"],
+  "min_shared": 1,
+  "max_diff": 0,
+  "require_unique_keys": true,
+  "require_status_ok": true,
+  "result_status_fields": ["status"],
+  "result_fail_values": ["fail", "failed", "failure", "error"]
+}
+```
+
+运行：
 
 ```bash
-# Node.js，无浏览器依赖
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-dedup-datasets --input %TEMP%/coreclaw-dedup-smoke-input.json --timeout-ms 30s --idle-timeout-ms 10s
-node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-dedup-datasets/.coreclaw/runs/<run-id> --min-results 2
-
-# Python，显式解释器
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-yfinance --input %TEMP%/coreclaw-yfinance-smoke-input.json --python "py -3" --timeout-ms 60s --idle-timeout-ms 20s --min-results 1
-
-# Go，浏览器/CDP worker
-node E:/worker/coreclaw-cli/bin/coreclaw.js run E:/worker/worker-google-maps-scraper --input %TEMP%/coreclaw-google-maps-smoke-input.json --chrome-ws 127.0.0.1:9222/devtools/browser/<id> --require-browser --timeout-ms 90s --idle-timeout-ms 30s
-node E:/worker/coreclaw-cli/bin/coreclaw.js inspect-run E:/worker/worker-google-maps-scraper/.coreclaw/runs/<run-id> --min-results 1
+node ./bin/coreclaw.js compare ./cloud-output.json ./worker/.coreclaw/runs/<run-id> --compare-profile ./compare-profile.json
 ```
 
-## 使用的官方文档契约
+`verify --compare-profile` 也可以读取 profile 里的运行默认值，例如代理、浏览器、Lightpanda、CAPTCHA 和结果状态设置。
 
-实现依据本地官方文档：
+## 脚本化和退出码
 
-- `E:\worker\knowledge-files\docs\developer-guide\develop-worker\quick-start.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\project-structure.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\sdk-modules.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\input-schema.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\output-schema.md`
-- `E:\worker\knowledge-files\docs\developer-guide\builds-and-runs.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\platform-features\proxy-support.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\platform-features\browser-fingerprinting.md`
-- `E:\worker\knowledge-files\docs\developer-guide\worker-definition\browser-automation\lightpanda.md`
+CoreClaw CLI 适合 CI 和可重复脚本：
+
+- 未知长选项会在 Worker 启动前失败。
+- 每个命令只接受自己的选项。
+- Boolean 支持 `--flag`、`--no-flag`、`--flag=true|false`。
+- 校验、运行、打包、对比失败时返回非零退出码。
+- 支持 JSON 报告输出，便于自动化读取。
+
+## 常见问题
+
+### 本地 run 通过，但上传后失败
+
+不要只用源码目录 `run`，改用上传视角的 `verify`：
+
+```bash
+node ./bin/coreclaw.js verify ./worker --strict --input input.json --min-results 1
+```
+
+它会捕获缺失依赖声明、被忽略文件、SDK 文件缺失、输出漂移、runtime table header 缺失、ZIP 根目录错误等问题。
+
+### Go 上传直接失败且没有 Worker 日志
+
+检查 ZIP：
+
+```bash
+node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --strict
+```
+
+ZIP 根目录必须包含 `100755` mode 的可执行文件 `main`。不要只上传 `main.go`。
+
+### HTTP 请求本机能访问，平台不能访问
+
+平台是网络沙箱，必须使用 SOCKS5 代理：
+
+```bash
+node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage --min-results 1
+```
+
+静态校验也会在检测到 HTTP 库但没有读取 `PROXY_AUTH` / `PROXY_DOMAIN` 时给出 warning。
+
+### 浏览器 Worker 在本地启动浏览器
+
+生产 Worker 应连接平台注入的浏览器 endpoint。本地启动浏览器应该只放在明确的本地调试分支里。
+
+```bash
+node ./bin/coreclaw.js validate ./worker --strict
+node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-shim --min-results 1
+```
+
+### 云端 JSON 只有 download_url
+
+先下载真实 JSON 或 CSV 文件，再传给 `compare`。`compare` 读取的是结果行，不是只有下载链接的元数据响应。
+
+### Windows inline JSON 被转义影响
+
+使用输入文件：
+
+```bash
+node ./bin/coreclaw.js verify ./worker --input input.json --min-results 1
+```
+
+## 本仓库验证
+
+给 CLI 本身做贡献时：
+
+```bash
+npm test
+npm run verify
+npm run verify:release
+```
+
+`npm run verify:release` 会运行单元测试、验证 Node 示例并做云端输出对比、执行 `git diff --check`，以及 `npm pack --dry-run --json`。
+
+维护者可使用工作区矩阵脚本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\verify-windows-worker-matrix.ps1
+node .\tools\verify-platform-output.js worker-definition-node-puppeteer-contract-test E:\downloads\node-output.json
+```
+
+这些是本仓库维护工具，普通 Worker 作者不需要使用。
+
+## License
+
+MIT
