@@ -36,6 +36,8 @@ CoreClaw CLI 用本地命令把这些问题提前暴露出来。
 - 将 CoreClaw 平台 JSON/CSV 输出与本地 run 输出对比。
 - 批量审计工作区内的 `worker-*` 项目。
 
+当前开发目标、已完成内容、可解决不足和仅能在云端验证的限制记录在 [docs/roadmap.md](./docs/roadmap.md)。
+
 ## 安装
 
 在仓库内：
@@ -371,6 +373,18 @@ await coresdk.result.pushData({
 建议每次推送一个 JSON object，并确保字段和 `output_schema.json`、runtime table header 的 key 一致。
 
 ## 命令说明
+
+### `help`
+
+显示顶层帮助或某个命令的详细帮助。
+
+```bash
+node ./bin/coreclaw.js --help
+node ./bin/coreclaw.js help verify
+node ./bin/coreclaw.js run --help
+```
+
+当你知道要使用哪个工作流，但不确定具体参数和示例时，优先使用命令级帮助。输入未知命令时，CLI 也会尽量给出相近命令建议。
 
 ### `doctor`
 

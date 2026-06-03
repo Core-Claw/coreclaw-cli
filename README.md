@@ -24,6 +24,8 @@ Use CoreClaw CLI to:
 - Compare CoreClaw platform JSON/CSV results with a local run.
 - Audit many `worker-*` projects in a workspace.
 
+The current development goals, completed work, known solvable gaps, and known cloud-only limitations are tracked in [docs/roadmap.md](./docs/roadmap.md).
+
 ## What The CLI Emulates
 
 The local runtime implements the CoreClaw SDK services used by Worker code:
@@ -396,6 +398,18 @@ await coresdk.result.pushData({
 Rows should be JSON objects whose keys match `output_schema.json` and the runtime table header keys.
 
 ## Command Reference
+
+### `help`
+
+Shows top-level help or command-specific help.
+
+```bash
+node ./bin/coreclaw.js --help
+node ./bin/coreclaw.js help verify
+node ./bin/coreclaw.js run --help
+```
+
+Use command-specific help when you know the workflow but need the exact flags or examples. Unknown command names also include a close-match suggestion when possible.
 
 ### `doctor`
 

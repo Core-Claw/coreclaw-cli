@@ -25,6 +25,7 @@
     "src",
     "proto",
     "templates",
+    "docs/roadmap.md",
     "examples/coreclaw-audit-profile.json",
     "examples/node-hello-cloud-output.json",
     "examples/node-hello/input_schema.json",

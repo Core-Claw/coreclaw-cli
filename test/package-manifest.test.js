@@ -18,6 +18,7 @@ test('npm package manifest includes examples without runtime artifacts', () => {
     'examples/node-hello/output_schema.json',
     'examples/python-hello/main.py',
     'examples/python-hello/requirements.txt',
+    'docs/roadmap.md',
     'CONTRIBUTING.md',
   ]) {
     assert.equal(files.has(required), true, `${required} should be published`);
