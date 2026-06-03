@@ -10,6 +10,7 @@ Use this page when you need exact command syntax. For workflow guidance, start w
 
 - `init` - Create an upload-ready Worker with SDK files and schemas
 - `validate` - Check Worker root files, dependencies, SDK files, and schemas
+- `env` - Print CoreClaw runtime environment variables without running a Worker
 - `run` - Run a Worker locally with the CoreClaw SDK runtime emulator
 
 ### Upload preflight
@@ -65,6 +66,25 @@ Examples:
 coreclaw validate ./worker
 coreclaw validate ./worker --strict
 coreclaw validate ./worker --json-output
+```
+
+### `env`
+
+Print CoreClaw runtime environment variables without running a Worker
+
+Usage:
+
+```bash
+coreclaw env [project] [--cloud-proxy | --local-proxy] [--chrome-ws host] [--lightpanda-domain host] [--json-output]
+coreclaw env [project] [--proxy-auth user:pass] [--proxy-domain host:port] [--no-discover-chrome]
+```
+
+Examples:
+
+```bash
+coreclaw env ./worker
+coreclaw env ./worker --cloud-proxy --lightpanda-domain lightpanda-inner.coreclaw.com
+coreclaw env ./worker --json-output
 ```
 
 ### `run`

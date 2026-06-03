@@ -66,6 +66,7 @@ coreclaw --help
 ```bash
 node ./bin/coreclaw.js init ./my-worker --language node --name my-worker
 node ./bin/coreclaw.js validate ./my-worker --strict
+node ./bin/coreclaw.js env ./my-worker --cloud-proxy
 node ./bin/coreclaw.js run ./my-worker --input ./my-worker/input.example.json --min-results 1
 node ./bin/coreclaw.js verify ./my-worker --strict --input ./my-worker/input.example.json --min-results 1
 ```
@@ -452,6 +453,19 @@ node ./bin/coreclaw.js validate ./worker --json-output
 - 浏览器 Worker 是否读取 `ChromeWs`、`ChromeHttp`、`LightpandaDomain`、`CDP_ENDPOINT` 或 `BROWSER_WS_ENDPOINT`。
 
 默认模式会兼容旧 Worker，warning 不一定失败。新 Worker 或上传前建议使用 `--strict`。
+
+### `env`
+
+在不启动 Worker 的情况下打印 CoreClaw runtime 环境变量。它不会启动 SDK runtime、Worker 进程、本地代理或 CDP shim，适合在调试代理、浏览器、Lightpanda 代码前确认变量名和 endpoint 形状。
+
+```bash
+node ./bin/coreclaw.js env ./worker
+node ./bin/coreclaw.js env ./worker --cloud-proxy --lightpanda-domain lightpanda-inner.coreclaw.com
+node ./bin/coreclaw.js env ./worker --proxy-auth user:pass --proxy-domain proxy.example:6000
+node ./bin/coreclaw.js env ./worker --json-output
+```
+
+输出会遮蔽 `PROXY_AUTH` 等敏感值。
 
 ### `run`
 

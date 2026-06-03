@@ -47,6 +47,13 @@ It also injects the runtime variables and files needed by common Worker patterns
 - A local SOCKS5 proxy when `--local-proxy` is enabled.
 - A local browser CDP shim when `--browser-cdp-shim`, `--lightpanda-shim`, or `--captcha-solver` is enabled.
 
+Use `coreclaw env` when you want to inspect these variables before starting a Worker:
+
+```bash
+node ./bin/coreclaw.js env ./worker --cloud-proxy --lightpanda-domain lightpanda-inner.coreclaw.com
+node ./bin/coreclaw.js env ./worker --json-output
+```
+
 The CLI does not replace the hosted CoreClaw platform. It does not provide the real remote fingerprint browser pool, does not render pages with the real Lightpanda service, and does not solve real CAPTCHAs. For those features, the CLI validates the documented connection and command contracts locally, then you still run the final proof on CoreClaw.
 
 ## Installation
@@ -77,6 +84,7 @@ Create a Node.js Worker, run it locally, verify it from upload-like staging, and
 ```bash
 node ./bin/coreclaw.js init ./my-worker --language node --name my-worker
 node ./bin/coreclaw.js validate ./my-worker --strict
+node ./bin/coreclaw.js env ./my-worker --cloud-proxy
 node ./bin/coreclaw.js run ./my-worker --input ./my-worker/input.example.json --min-results 1
 node ./bin/coreclaw.js verify ./my-worker --strict --input ./my-worker/input.example.json --min-results 1
 ```
@@ -477,6 +485,19 @@ Validation covers:
 - Browser Workers that do not read `ChromeWs`, `ChromeHttp`, `LightpandaDomain`, `CDP_ENDPOINT`, or `BROWSER_WS_ENDPOINT`.
 
 By default, compatibility warnings do not fail validation. Use `--strict` for new Workers or pre-upload checks where warnings should fail.
+
+### `env`
+
+Prints the CoreClaw runtime environment variables that `run` would inject, without starting the SDK runtime, Worker process, local proxy, or CDP shims.
+
+```bash
+node ./bin/coreclaw.js env ./worker
+node ./bin/coreclaw.js env ./worker --cloud-proxy --lightpanda-domain lightpanda-inner.coreclaw.com
+node ./bin/coreclaw.js env ./worker --proxy-auth user:pass --proxy-domain proxy.example:6000
+node ./bin/coreclaw.js env ./worker --json-output
+```
+
+Use it when browser or proxy code is failing before the Worker reaches meaningful SDK logs, or when you want to confirm the exact names and normalized endpoint shapes before writing automation code. Sensitive values such as `PROXY_AUTH` are masked in output.
 
 ### `run`
 
@@ -933,7 +954,7 @@ CoreClaw CLI is built for CI and repeatable local scripts:
 - Options are validated per command.
 - Boolean flags support `--flag`, `--no-flag`, and `--flag=true|false`.
 - Most commands return exit code `0` on pass and non-zero on validation, runtime, package, or comparison failure.
-- `validate`, `run`, `verify`, and `inspect-run` support `--json-output` for machine-readable stdout.
+- `validate`, `env`, `run`, `verify`, and `inspect-run` support `--json-output` for machine-readable stdout.
 - In `--json-output` mode, progress and Worker logs are written to stderr while stdout remains one JSON document.
 - Compare and audit reports can also be written to files with `--output`.
 

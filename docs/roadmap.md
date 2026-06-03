@@ -104,12 +104,12 @@ Completed:
 - `--browser-cdp-shim` validates host-style `ChromeWs` and DrissionPage-style paths.
 - `--lightpanda-shim` validates `LightpandaDomain` normalization and Basic auth.
 - `--captcha-solver` validates `Captchas.automaticSolver` command shape and params.
+- `coreclaw env` prints the runtime environment variables and normalized endpoint shape without executing a Worker.
 
 Solvable gaps:
 
 - Add more visible run summaries for observed proxy connections, CDP connections, and CAPTCHA calls.
 - Add example Workers for each browser backend contract.
-- Add a command that prints the exact env vars a run would inject without executing a Worker.
 
 Currently out of local scope:
 
@@ -194,6 +194,7 @@ Currently out of local scope:
 - Added configurable package size warnings with `--max-package-size`.
 - Added largest-entry diagnostics to upload package inspection.
 - Added upload manifest comparison for existing ZIP packages with `inspect-package --project`.
+- Added `coreclaw env` to inspect injected runtime environment variables before running a Worker.
 
 ## Next Milestones
 

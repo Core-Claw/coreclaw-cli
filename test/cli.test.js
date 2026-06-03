@@ -33,6 +33,13 @@ test('runCli prints command-specific help from command help flag', async () => {
   assert.match(output, /Run a Worker locally with the CoreClaw SDK runtime emulator/);
 });
 
+test('runCli prints env command help', async () => {
+  const output = await captureStdout(() => runCli(['node', 'coreclaw', 'env', '--help']));
+
+  assert.match(output, /^coreclaw env/m);
+  assert.match(output, /Print CoreClaw runtime environment variables without running a Worker/);
+});
+
 test('runCli suggests close command names', async () => {
   await assert.rejects(
     () => runCli(['node', 'coreclaw', 'verfy']),
@@ -135,6 +142,14 @@ test('runCli rejects options that are valid globally but not for the command', a
 test('runCli accepts verify-only no-compare option', async () => {
   await assert.rejects(
     () => runCli(['node', 'coreclaw', 'verify', '.', '--no-compare', '--definitely-unknown']),
+    (error) => error instanceof CliError
+      && /Unknown option "--definitely-unknown"/.test(error.message),
+  );
+});
+
+test('runCli accepts env runtime endpoint options', async () => {
+  await assert.rejects(
+    () => runCli(['node', 'coreclaw', 'env', '.', '--cloud-proxy', '--lightpanda-domain', 'lightpanda-inner.coreclaw.com', '--definitely-unknown']),
     (error) => error instanceof CliError
       && /Unknown option "--definitely-unknown"/.test(error.message),
   );

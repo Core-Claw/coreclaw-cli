@@ -3,7 +3,7 @@ export const CLI_VERSION = '0.1.0';
 export const COMMAND_GROUPS = [
   {
     title: 'Worker development',
-    commands: ['init', 'validate', 'run'],
+    commands: ['init', 'validate', 'env', 'run'],
   },
   {
     title: 'Upload preflight',
@@ -40,6 +40,18 @@ export const COMMANDS = {
       'coreclaw validate ./worker',
       'coreclaw validate ./worker --strict',
       'coreclaw validate ./worker --json-output',
+    ],
+  },
+  env: {
+    summary: 'Print CoreClaw runtime environment variables without running a Worker',
+    usage: [
+      'coreclaw env [project] [--cloud-proxy | --local-proxy] [--chrome-ws host] [--lightpanda-domain host] [--json-output]',
+      'coreclaw env [project] [--proxy-auth user:pass] [--proxy-domain host:port] [--no-discover-chrome]',
+    ],
+    examples: [
+      'coreclaw env ./worker',
+      'coreclaw env ./worker --cloud-proxy --lightpanda-domain lightpanda-inner.coreclaw.com',
+      'coreclaw env ./worker --json-output',
     ],
   },
   run: {

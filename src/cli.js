@@ -1,5 +1,6 @@
 import { initCommand } from './commands/init.js';
 import { validateCommand } from './commands/validate.js';
+import { envCommand } from './commands/env.js';
 import { runCommand } from './commands/run.js';
 import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
@@ -53,6 +54,9 @@ export async function runCli(argv) {
       return;
     case 'validate':
       await validateCommand(parsed.positionals[0] ?? '.', parsed.options);
+      return;
+    case 'env':
+      await envCommand(parsed.positionals[0] ?? '.', parsed.options);
       return;
     case 'run':
       await runCommand(parsed.positionals[0] ?? '.', withDefaults(parsed.options, { python: 'python', node: 'node', go: 'go' }));
@@ -259,6 +263,20 @@ function commandAllowedOptions(command) {
       return new Set(['force', 'inputExample', 'lang', 'language', 'name']);
     case 'validate':
       return new Set(['jsonOutput', 'soft', 'strict']);
+    case 'env':
+      return new Set([
+        'chromeHttp',
+        'chromeWs',
+        'cloudProxy',
+        'discoverChrome',
+        'jsonOutput',
+        'lightpandaDomain',
+        'localProxy',
+        'mockNetwork',
+        'proxyAuth',
+        'proxyDomain',
+        'runtimeTmpDir',
+      ]);
     case 'run':
       return runtime;
     case 'verify':
@@ -341,6 +359,7 @@ function isKnownOption(name) {
     'python',
     'resultFailValues',
     'resultStatusFields',
+    'runtimeTmpDir',
     'split',
     'timeoutMs',
   ]).has(name);
