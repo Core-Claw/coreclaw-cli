@@ -4,6 +4,7 @@ import { CliError } from '../utils/errors.js';
 import { formatBytes, parseSizeBytes } from '../utils/bytes.js';
 
 export const DEFAULT_MAX_PACKAGE_SIZE_BYTES = 50 * 1000 * 1000;
+const LARGEST_ENTRY_COUNT = 5;
 
 const PACKAGE_SPECS = {
   python: {
@@ -46,6 +47,7 @@ export function inspectPackage(packagePath) {
   }
   const data = fs.readFileSync(packagePath);
   const entries = readCentralDirectory(data);
+  const totalUncompressedSize = entries.reduce((total, entry) => total + entry.uncompressed_size, 0);
   return {
     package_path: packagePath,
     package_size: data.length,
@@ -60,9 +62,10 @@ export function inspectPackage(packagePath) {
       .filter(Boolean)))
       .sort(),
     entries,
+    largest_entries: largestEntries(entries),
     total_compressed_size: entries.reduce((total, entry) => total + entry.compressed_size, 0),
-    total_uncompressed_size: entries.reduce((total, entry) => total + entry.uncompressed_size, 0),
-    total_uncompressed_size_human: formatBytes(entries.reduce((total, entry) => total + entry.uncompressed_size, 0)),
+    total_uncompressed_size: totalUncompressedSize,
+    total_uncompressed_size_human: formatBytes(totalUncompressedSize),
   };
 }
 
@@ -139,6 +142,12 @@ function printPackageReport(report) {
   }
   console.log(`Size: ${report.package_size_human}`);
   console.log(`Entries: ${report.entry_count}`);
+  if ((report.largest_entries ?? []).length > 0) {
+    console.log('Largest entries:');
+    for (const entry of report.largest_entries) {
+      console.log(`  ${entry.name} (uncompressed ${entry.uncompressed_size_human}, compressed ${entry.compressed_size_human})`);
+    }
+  }
   console.log(`Root entries: ${report.root_entries.join(', ') || '(none)'}`);
   if (report.root_directories.length > 0) {
     console.log(`Root directories: ${report.root_directories.join(', ')}`);
@@ -266,6 +275,24 @@ function findAnyNestedCoreClawEntry(report) {
 function firstPathSegment(name) {
   const segments = name.split('/').filter(Boolean);
   return segments.length > 1 ? segments[0] : null;
+}
+
+function largestEntries(entries, limit = LARGEST_ENTRY_COUNT) {
+  return entries
+    .filter((entry) => !entry.name.endsWith('/'))
+    .slice()
+    .sort((left, right) => {
+      const sizeDiff = right.uncompressed_size - left.uncompressed_size;
+      return sizeDiff === 0 ? left.name.localeCompare(right.name) : sizeDiff;
+    })
+    .slice(0, limit)
+    .map((entry) => ({
+      name: entry.name,
+      compressed_size: entry.compressed_size,
+      compressed_size_human: formatBytes(entry.compressed_size),
+      uncompressed_size: entry.uncompressed_size,
+      uncompressed_size_human: formatBytes(entry.uncompressed_size),
+    }));
 }
 
 function readCentralDirectory(data) {

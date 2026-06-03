@@ -195,7 +195,7 @@ node ./bin/coreclaw.js inspect-package ./dist/go-worker.zip --language go --stri
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language node --max-package-size 25MB
 ```
 
-Package inspection also reports ZIP size. By default the CLI uses a local advisory threshold of `50MB` to catch accidental bundled dependencies, old archives, caches, or generated assets. This threshold is not a documented CoreClaw platform hard limit. Adjust it with `--max-package-size`, or set `--max-package-size 0` to disable the advisory warning.
+Package inspection also reports ZIP size and the largest compressed/uncompressed entries. By default the CLI uses a local advisory threshold of `50MB` to catch accidental bundled dependencies, old archives, caches, or generated assets. This threshold is not a documented CoreClaw platform hard limit. Adjust it with `--max-package-size`, or set `--max-package-size 0` to disable the advisory warning.
 
 ## Input Schema
 
@@ -577,11 +577,11 @@ node ./bin/coreclaw.js pack ./worker --print-files
 node ./bin/coreclaw.js pack ./go-worker --output ./dist/go-worker.zip --go go --strict
 ```
 
-`pack` validates the project, stages uploadable files, builds Go upload binaries when needed, writes a ZIP with root entry files, and runs package inspection. Use `--print-files` to preview the exact files that would be packaged without writing a ZIP. Use `--max-package-size` to warn on unusually large upload packages, and use `--strict` when missing recommended metadata, package size warnings, or compatibility warnings should fail.
+`pack` validates the project, stages uploadable files, builds Go upload binaries when needed, writes a ZIP with root entry files, and runs package inspection. Use `--print-files` to preview the exact files that would be packaged without writing a ZIP. Package inspection reports the largest ZIP entries so oversized packages are actionable. Use `--max-package-size` to warn on unusually large upload packages, and use `--strict` when missing recommended metadata, package size warnings, or compatibility warnings should fail.
 
 ### `inspect-package`
 
-Validates an existing upload ZIP.
+Validates an existing upload ZIP and prints the largest compressed/uncompressed entries.
 
 ```bash
 node ./bin/coreclaw.js inspect-package ./dist/worker.zip --language python

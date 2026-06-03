@@ -108,7 +108,7 @@ export const COMMANDS = {
     ],
   },
   'inspect-package': {
-    summary: 'Validate upload ZIP root entries, package size, nested packaging mistakes, and Go executable mode',
+    summary: 'Validate upload ZIP layout and show the largest packaged entries',
     usage: [
       'coreclaw inspect-package worker.zip [--language python|node|go] [--max-package-size 50MB] [--strict]',
     ],

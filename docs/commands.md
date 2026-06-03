@@ -20,7 +20,7 @@ Use this page when you need exact command syntax. For workflow guidance, start w
 ### Inspection and parity
 
 - `inspect-run` - Validate a local .coreclaw/runs/<run-id> artifact directory
-- `inspect-package` - Validate upload ZIP root entries, package size, nested packaging mistakes, and Go executable mode
+- `inspect-package` - Validate upload ZIP layout and show the largest packaged entries
 - `compare` - Compare CoreClaw cloud JSON/CSV output with local run output
 
 ### Workspace and tools
@@ -156,7 +156,7 @@ coreclaw inspect-run ./worker/.coreclaw/runs/<run-id> --json-output
 
 ### `inspect-package`
 
-Validate upload ZIP root entries, package size, nested packaging mistakes, and Go executable mode
+Validate upload ZIP layout and show the largest packaged entries
 
 Usage:
 

@@ -20,6 +20,24 @@ test('inspectPackage reads ZIP entries and Unix modes', () => {
   assert.equal(report.root_entries.includes('main'), true);
 });
 
+test('inspectPackage reports largest entries by uncompressed size', () => {
+  const report = inspectPackage(writeZip([
+    { name: 'main.js', data: 'console.log("ok")', mode: 0o100644 },
+    { name: 'package.json', data: '{"dependencies":{}}', mode: 0o100644 },
+    { name: 'input_schema.json', data: '{}', mode: 0o100644 },
+    { name: 'sdk.js', data: '', mode: 0o100644 },
+    { name: 'sdk_pb.js', data: '', mode: 0o100644 },
+    { name: 'sdk_grpc_pb.js', data: '', mode: 0o100644 },
+    { name: 'assets/runtime-large.bin', data: 'x'.repeat(256), mode: 0o100644 },
+    { name: 'assets/runtime-medium.bin', data: 'y'.repeat(128), mode: 0o100644 },
+  ]));
+
+  assert.equal(report.largest_entries[0].name, 'assets/runtime-large.bin');
+  assert.equal(report.largest_entries[0].uncompressed_size, 256);
+  assert.match(report.largest_entries[0].uncompressed_size_human, /B$/);
+  assert.equal(report.largest_entries[1].name, 'assets/runtime-medium.bin');
+});
+
 test('inspectPackageCommand validates Go root main executable mode', async () => {
   const zipPath = writeZip([
     { name: 'main', data: 'binary', mode: 0o100755 },
@@ -29,6 +47,25 @@ test('inspectPackageCommand validates Go root main executable mode', async () =>
   const report = await inspectPackageCommand(zipPath, { language: 'go' });
 
   assert.equal(report.ok, true);
+});
+
+test('inspectPackageCommand prints largest entries', async () => {
+  const zipPath = writeZip([
+    { name: 'main.js', data: 'console.log("ok")', mode: 0o100644 },
+    { name: 'package.json', data: '{"dependencies":{}}', mode: 0o100644 },
+    { name: 'README.md', data: '# Test\n', mode: 0o100644 },
+    { name: 'input_schema.json', data: '{}', mode: 0o100644 },
+    { name: 'output_schema.json', data: '[]', mode: 0o100644 },
+    { name: 'sdk.js', data: '', mode: 0o100644 },
+    { name: 'sdk_pb.js', data: '', mode: 0o100644 },
+    { name: 'sdk_grpc_pb.js', data: '', mode: 0o100644 },
+    { name: 'large-runtime-asset.bin', data: 'x'.repeat(256), mode: 0o100644 },
+  ]);
+
+  const output = await captureConsole(() => inspectPackageCommand(zipPath, { language: 'node' }));
+
+  assert.match(output, /Largest entries:/);
+  assert.match(output, /large-runtime-asset\.bin/);
 });
 
 test('inspectPackageCommand validates Node and Python root entry files', async () => {
@@ -187,4 +224,16 @@ function writeZip(entries) {
   const zipPath = path.join(dir, 'worker.zip');
   fs.writeFileSync(zipPath, buildZipArchive(entries));
   return zipPath;
+}
+
+async function captureConsole(fn) {
+  const originalLog = console.log;
+  const stdout = [];
+  console.log = (...args) => stdout.push(args.join(' '));
+  try {
+    await fn();
+  } finally {
+    console.log = originalLog;
+  }
+  return stdout.join('\n');
 }
