@@ -418,6 +418,17 @@ node ./bin/coreclaw.js run --help
 
 同一份命令元数据也会生成 [docs/commands.md](./docs/commands.md)，便于离线阅读和发布前校验。
 
+### `examples`
+
+列出仓库内置示例 Worker，并给出每个契约推荐使用的 `verify` 命令。
+
+```bash
+node ./bin/coreclaw.js examples
+node ./bin/coreclaw.js examples --json-output
+```
+
+创建新 Worker 前，可以先用它找到 SDK 基础、代理、Lightpanda CDP 等契约的可运行参考。
+
 ### `doctor`
 
 检查本地工具和浏览器端点。

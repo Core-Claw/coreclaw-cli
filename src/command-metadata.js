@@ -3,7 +3,7 @@ export const CLI_VERSION = '0.1.0';
 export const COMMAND_GROUPS = [
   {
     title: 'Worker development',
-    commands: ['init', 'validate', 'env', 'run'],
+    commands: ['init', 'examples', 'validate', 'env', 'run'],
   },
   {
     title: 'Upload preflight',
@@ -29,6 +29,17 @@ export const COMMANDS = {
       'coreclaw init ./my-worker --language node --name my-worker',
       'coreclaw init ./my-go-worker --language go',
       'coreclaw init ./my-worker --language python --no-input-example',
+    ],
+  },
+  examples: {
+    summary: 'List built-in example Workers and their recommended verify commands',
+    usage: [
+      'coreclaw examples [--json-output]',
+    ],
+    examples: [
+      'coreclaw examples',
+      'coreclaw examples --json-output',
+      'coreclaw verify ./examples/node-http-proxy --local-proxy --require-proxy-usage --min-results 1',
     ],
   },
   validate: {

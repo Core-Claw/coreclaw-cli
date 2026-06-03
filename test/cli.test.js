@@ -40,6 +40,32 @@ test('runCli prints env command help', async () => {
   assert.match(output, /Print CoreClaw runtime environment variables without running a Worker/);
 });
 
+test('runCli prints built-in example workers', async () => {
+  const output = await captureStdout(() => runCli(['node', 'coreclaw', 'examples']));
+
+  assert.match(output, /CoreClaw example Workers/);
+  assert.match(output, /node-http-proxy/);
+  assert.match(output, /node-lightpanda-cdp/);
+  assert.match(output, /coreclaw verify \.\/examples\/node-lightpanda-cdp --lightpanda-shim/);
+});
+
+test('runCli prints example workers as JSON', async () => {
+  const output = await captureStdout(() => runCli(['node', 'coreclaw', 'examples', '--json-output']));
+  const report = JSON.parse(output);
+
+  assert.equal(report.count, 4);
+  assert.equal(report.examples.some((example) => example.name === 'node-http-proxy'), true);
+  assert.equal(report.examples.some((example) => example.verify.includes('--require-lightpanda-shim')), true);
+});
+
+test('runCli rejects unsupported options for examples command', async () => {
+  await assert.rejects(
+    () => runCli(['node', 'coreclaw', 'examples', '--strict']),
+    (error) => error instanceof CliError
+      && /Option "--strict" is not supported by "coreclaw examples"/.test(error.message),
+  );
+});
+
 test('runCli suggests close command names', async () => {
   await assert.rejects(
     () => runCli(['node', 'coreclaw', 'verfy']),

@@ -9,6 +9,7 @@ import { inspectRunCommand } from './commands/inspect-run.js';
 import { inspectPackageCommand } from './commands/inspect-package.js';
 import { verifyCommand } from './commands/verify.js';
 import { compareCommand } from './commands/compare.js';
+import { examplesCommand } from './commands/examples.js';
 import { CLI_VERSION, COMMAND_GROUPS, COMMANDS } from './command-metadata.js';
 import { CliError } from './utils/errors.js';
 
@@ -57,6 +58,9 @@ export async function runCli(argv) {
       return;
     case 'env':
       await envCommand(parsed.positionals[0] ?? '.', parsed.options);
+      return;
+    case 'examples':
+      await examplesCommand(parsed.options);
       return;
     case 'run':
       await runCommand(parsed.positionals[0] ?? '.', withDefaults(parsed.options, { python: 'python', node: 'node', go: 'go' }));
@@ -277,6 +281,8 @@ function commandAllowedOptions(command) {
         'proxyDomain',
         'runtimeTmpDir',
       ]);
+    case 'examples':
+      return new Set(['jsonOutput']);
     case 'run':
       return runtime;
     case 'verify':

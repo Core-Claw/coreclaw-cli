@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { EXAMPLE_WORKERS } from '../src/examples/catalog.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -38,3 +39,21 @@ test('npm package manifest includes examples without runtime artifacts', () => {
   assert.equal([...files].some((entry) => entry.includes('node_modules')), false);
   assert.equal([...files].some((entry) => entry.includes('.coreclaw')), false);
 });
+
+test('example catalog points at existing example worker directories', () => {
+  const exampleDirs = fs.readdirSync(path.join(ROOT, 'examples'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `examples/${entry.name}`)
+    .sort();
+  const catalogDirs = EXAMPLE_WORKERS.map((example) => example.path).sort();
+
+  assert.deepEqual(catalogDirs, exampleDirs);
+  for (const example of EXAMPLE_WORKERS) {
+    assert.match(example.verify, new RegExp(escapeRegExp(example.path)));
+    assert.equal(fs.existsSync(path.join(ROOT, example.path, 'README.md')), true);
+  }
+});
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

@@ -450,6 +450,17 @@ Use command-specific help when you know the workflow but need the exact flags or
 
 The same command metadata is published as [docs/commands.md](./docs/commands.md) for offline reading and release checks.
 
+### `examples`
+
+Lists the built-in example Workers and the exact `verify` command recommended for each contract.
+
+```bash
+node ./bin/coreclaw.js examples
+node ./bin/coreclaw.js examples --json-output
+```
+
+Use this before creating a new Worker when you want a known-good reference for SDK basics, proxy usage, or Lightpanda CDP wiring.
+
 ### `doctor`
 
 Checks local tool availability and browser endpoint discovery.

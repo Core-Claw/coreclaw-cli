@@ -9,6 +9,7 @@ Use this page when you need exact command syntax. For workflow guidance, start w
 ### Worker development
 
 - `init` - Create an upload-ready Worker with SDK files and schemas
+- `examples` - List built-in example Workers and their recommended verify commands
 - `validate` - Check Worker root files, dependencies, SDK files, and schemas
 - `env` - Print CoreClaw runtime environment variables without running a Worker
 - `run` - Run a Worker locally with the CoreClaw SDK runtime emulator
@@ -48,6 +49,24 @@ Examples:
 coreclaw init ./my-worker --language node --name my-worker
 coreclaw init ./my-go-worker --language go
 coreclaw init ./my-worker --language python --no-input-example
+```
+
+### `examples`
+
+List built-in example Workers and their recommended verify commands
+
+Usage:
+
+```bash
+coreclaw examples [--json-output]
+```
+
+Examples:
+
+```bash
+coreclaw examples
+coreclaw examples --json-output
+coreclaw verify ./examples/node-http-proxy --local-proxy --require-proxy-usage --min-results 1
 ```
 
 ### `validate`

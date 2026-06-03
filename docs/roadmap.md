@@ -32,11 +32,12 @@ Completed:
 - Top-level help is grouped by workflow, and `coreclaw help <command>` shows command-specific examples.
 - `docs/commands.md` is generated from the same command metadata as CLI help.
 - `coreclaw init` writes `input.example.json` from `input_schema.json` defaults for immediate local smoke tests, with `--no-input-example` available when the extra local file is not wanted.
+- `coreclaw examples` lists built-in example Workers and the recommended `verify` command for each platform contract.
 
 Solvable gaps:
 
 - Add a guided `create` alias or wizard-style flow for users who do not know which language to pick.
-- Add `coreclaw examples` or `coreclaw init --template <name>` once there are more CoreClaw-specific templates.
+- Add `coreclaw init --template <name>` once example Workers are ready to become generated templates.
 
 Currently out of local scope:
 
@@ -200,6 +201,7 @@ Currently out of local scope:
 - Added `inspect-run` remediation hints for common run artifact failures.
 - Added a dependency-free Node.js HTTP proxy contract example with local SOCKS5 proxy verification.
 - Added a dependency-light Node.js Lightpanda CDP contract example with local CDP shim verification.
+- Added `coreclaw examples` to make built-in contract examples discoverable from the CLI.
 
 ## Next Milestones
 
