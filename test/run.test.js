@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { initCommand } from '../src/commands/init.js';
 import { verifyCommand } from '../src/commands/verify.js';
@@ -751,6 +753,71 @@ test('generated Node worker passes upload preflight and package inspection', asy
     } else {
       process.env.NODE_PATH = previousNodePath;
     }
+  }
+});
+
+test('node HTTP proxy example passes local proxy upload preflight', async () => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(204, { 'Content-Type': 'text/plain' });
+    response.end('');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+
+  const targetUrl = `http://127.0.0.1:${server.address().port}/proxy-check`;
+  const projectDir = path.join(repoRoot, 'examples', 'node-http-proxy');
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+
+  try {
+    const result = await verifyCommand(projectDir, {
+      node: process.execPath,
+      install: false,
+      json: JSON.stringify({
+        targets: [{ url: targetUrl }],
+        timeoutMs: 5000,
+      }),
+      localProxy: true,
+      requireProxyUsage: true,
+      minResults: '1',
+      requireTableHeader: true,
+      requireOutputSchemaMatch: true,
+      requireStatusOk: true,
+      output: path.join(os.tmpdir(), `coreclaw-node-http-proxy-${Date.now()}.zip`),
+      timeoutMs: '30s',
+      idleTimeoutMs: '10s',
+      tmpHook: false,
+    });
+
+    const summary = JSON.parse(fs.readFileSync(path.join(result.run_dir, 'summary.json'), 'utf8'));
+    const exportedRows = readNdjson(path.join(result.run_dir, 'export.ndjson'));
+    const logs = readNdjson(path.join(result.run_dir, 'logs.ndjson'));
+    const uploadManifest = JSON.parse(fs.readFileSync(path.join(result.run_dir, 'upload_manifest.json'), 'utf8'));
+
+    assert.equal(result.ok, true);
+    assert.equal(result.language, 'node');
+    assert.equal(result.result_count, 1);
+    assert.equal(summary.status, 'SUCCEEDED');
+    assert.equal(summary.output_schema_issue_count, 0);
+    assert.deepEqual(exportedRows[0].value, {
+      url: targetUrl,
+      status: 'success',
+      http_status: 204,
+      proxy_used: true,
+      error: '',
+    });
+    assert.equal(logs.some((row) => row.message.includes('Local SOCKS5 proxy connecting to 127.0.0.1')), true);
+    assert.equal(uploadManifest.includes('input.example.json'), false);
+    for (const entry of ['main.js', 'package.json', 'sdk.js', 'sdk_pb.js', 'sdk_grpc_pb.js', 'output_schema.json']) {
+      assert.equal(uploadManifest.includes(entry), true);
+    }
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 

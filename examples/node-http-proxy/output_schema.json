@@ -1,0 +1,27 @@
+[
+  {
+    "name": "url",
+    "type": "string",
+    "description": "Target URL"
+  },
+  {
+    "name": "status",
+    "type": "string",
+    "description": "Check status"
+  },
+  {
+    "name": "http_status",
+    "type": "integer",
+    "description": "HTTP status returned by the target"
+  },
+  {
+    "name": "proxy_used",
+    "type": "boolean",
+    "description": "Whether the request used the CoreClaw proxy"
+  },
+  {
+    "name": "error",
+    "type": "string",
+    "description": "Failure details"
+  }
+]

@@ -100,6 +100,17 @@ node ./bin/coreclaw.js verify ./examples/node-hello \
   --output ./tmp/node-hello.zip
 ```
 
+Run the built-in HTTP proxy contract example:
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-http-proxy \
+  --local-proxy \
+  --require-proxy-usage \
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
+```
+
 Run the full release verification for this CLI repository:
 
 ```bash
@@ -753,6 +764,12 @@ node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage --min
 ```
 
 `--local-proxy` starts a local authenticated SOCKS5 proxy and injects matching env variables. `--require-proxy-usage` fails if the Worker never opens a SOCKS5 connection.
+
+The repository includes `examples/node-http-proxy`, a dependency-free Node.js Worker that reads `PROXY_AUTH` and `PROXY_DOMAIN`, performs a SOCKS5 CONNECT, sends an HTTP request through that socket, and emits `proxy_used=true`. Use it as the smallest runnable proof that a Worker is honoring the CoreClaw proxy contract:
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-http-proxy --local-proxy --require-proxy-usage --min-results 1
+```
 
 Use `--cloud-proxy` only to inject placeholder cloud-style variables without starting a real proxy:
 

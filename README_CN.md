@@ -82,6 +82,17 @@ node ./bin/coreclaw.js verify ./examples/node-hello \
   --output ./tmp/node-hello.zip
 ```
 
+验证内置 HTTP 代理契约示例：
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-http-proxy \
+  --local-proxy \
+  --require-proxy-usage \
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
+```
+
 本仓库发布前校验：
 
 ```bash
@@ -730,6 +741,12 @@ node ./bin/coreclaw.js verify ./worker --local-proxy --require-proxy-usage --min
 ```
 
 `--local-proxy` 会启动本地带认证 SOCKS5 代理并注入 env；`--require-proxy-usage` 会在 Worker 没有发起 SOCKS5 CONNECT 时失败。
+
+仓库内置了 `examples/node-http-proxy`，这是一个不依赖第三方包的 Node.js 示例。它会读取 `PROXY_AUTH` 和 `PROXY_DOMAIN`，执行 SOCKS5 CONNECT，通过该 socket 发送 HTTP 请求，并输出 `proxy_used=true`。可以用它作为 Worker 是否遵守 CoreClaw 代理契约的最小可运行证明：
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-http-proxy --local-proxy --require-proxy-usage --min-results 1
+```
 
 如果只想注入云端风格占位变量，不启动真实代理：
 
