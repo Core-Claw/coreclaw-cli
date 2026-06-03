@@ -716,8 +716,7 @@ test('generated Python worker passes upload preflight and package inspection', a
   });
 
   const result = await verifyCommand(projectDir, {
-    python: 'py -3',
-    install: false,
+    python: defaultPythonCommand(),
     minResults: '1',
     requireTableHeader: true,
     requireOutputSchemaMatch: true,
@@ -733,6 +732,10 @@ test('generated Python worker passes upload preflight and package inspection', a
     requiredRootEntries: ['main.py', 'requirements.txt', 'sdk_pb2_grpc.py'],
   });
 });
+
+function defaultPythonCommand() {
+  return process.platform === 'win32' ? 'py -3' : 'python3';
+}
 
 test('generated Go worker passes upload preflight and package inspection', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-generated-worker-'));
