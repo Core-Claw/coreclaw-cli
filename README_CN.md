@@ -93,6 +93,17 @@ node ./bin/coreclaw.js verify ./examples/node-http-proxy \
   --require-output-schema-match
 ```
 
+验证内置 Lightpanda CDP 契约示例：
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-lightpanda-cdp \
+  --lightpanda-shim \
+  --require-lightpanda-shim \
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
+```
+
 本仓库发布前校验：
 
 ```bash
@@ -824,6 +835,12 @@ node ./bin/coreclaw.js verify ./lightpanda-worker \
 ```
 
 本地 shim 校验 endpoint 形状和 Basic auth。真实页面导航和渲染仍需要在 CoreClaw 平台或真实上游 CDP endpoint 上验证。
+
+仓库内置了 `examples/node-lightpanda-cdp`，这是一个最小 Node.js Worker。它会连接 `LightpandaDomain`，使用 `PROXY_AUTH` 生成 Basic auth，调用 `Browser.getVersion`，并记录返回的 browser product metadata：
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-lightpanda-cdp --lightpanda-shim --require-lightpanda-shim --min-results 1
+```
 
 ### CAPTCHA
 

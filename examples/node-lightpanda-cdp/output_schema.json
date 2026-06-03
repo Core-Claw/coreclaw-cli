@@ -1,0 +1,27 @@
+[
+  {
+    "name": "check_name",
+    "type": "string",
+    "description": "Contract check name"
+  },
+  {
+    "name": "status",
+    "type": "string",
+    "description": "Check status"
+  },
+  {
+    "name": "endpoint",
+    "type": "string",
+    "description": "Resolved CDP endpoint"
+  },
+  {
+    "name": "product",
+    "type": "string",
+    "description": "Browser product metadata returned by CDP"
+  },
+  {
+    "name": "error",
+    "type": "string",
+    "description": "Failure details"
+  }
+]

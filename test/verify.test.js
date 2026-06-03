@@ -353,7 +353,12 @@ test('stageVerifyProject creates an isolated Python venv for upload-like install
 
   try {
     assert.equal(staged.staged, true);
+    const runOptions = buildVerifyRunOptions({
+      install: staged.install,
+      python: staged.python,
+    });
     assert.equal(staged.install, undefined);
+    assert.equal(runOptions.install, true);
     assert.match(staged.python, process.platform === 'win32' ? /Scripts\\python\.exe$/ : /bin\/python$/);
     assert.deepEqual(calls.map((call) => [call.command, call.args.slice(0, -1)]), [
       ['py', ['-3', '-m', 'venv']],

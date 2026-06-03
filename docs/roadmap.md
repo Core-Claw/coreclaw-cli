@@ -106,11 +106,12 @@ Completed:
 - `--captcha-solver` validates `Captchas.automaticSolver` command shape and params.
 - `coreclaw env` prints the runtime environment variables and normalized endpoint shape without executing a Worker.
 - `examples/node-http-proxy` provides a runnable Node.js HTTP proxy contract Worker that uses `PROXY_AUTH` and `PROXY_DOMAIN` through a SOCKS5 CONNECT.
+- `examples/node-lightpanda-cdp` provides a runnable Node.js Lightpanda CDP contract Worker that connects to `LightpandaDomain` with Basic auth from `PROXY_AUTH`.
 
 Solvable gaps:
 
 - Add more visible run summaries for observed proxy connections, CDP connections, and CAPTCHA calls.
-- Add example Workers for browser CDP, Lightpanda, and CAPTCHA contracts.
+- Add example Workers for browser CDP and CAPTCHA contracts.
 
 Currently out of local scope:
 
@@ -198,10 +199,11 @@ Currently out of local scope:
 - Added `coreclaw env` to inspect injected runtime environment variables before running a Worker.
 - Added `inspect-run` remediation hints for common run artifact failures.
 - Added a dependency-free Node.js HTTP proxy contract example with local SOCKS5 proxy verification.
+- Added a dependency-light Node.js Lightpanda CDP contract example with local CDP shim verification.
 
 ## Next Milestones
 
-1. Add richer examples for browser CDP, Lightpanda, and CAPTCHA Workers.
+1. Add richer examples for browser CDP and CAPTCHA Workers.
 2. Add more precise remediation hints for validation and runtime failures.
 3. Stabilize and document a versioned JSON summary schema for CI integrations.
 4. Add more Worker templates and example payloads.

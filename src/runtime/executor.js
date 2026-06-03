@@ -55,7 +55,35 @@ export function installCommandForProject(project, options = {}) {
   return null;
 }
 
-export async function runProcess({ command, args, cwd, env, store, label = command, timeoutMs = 0, idleTimeoutMs = 0 }) {
+export async function runProcess({ command, args, cwd, env, store, label = command, timeoutMs = 0, idleTimeoutMs = 0, spawnImpl = spawn }) {
+  const attempts = spawnRetryAttempts(command, args);
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await runProcessAttempt({
+        command,
+        args,
+        cwd,
+        env,
+        store,
+        label,
+        timeoutMs,
+        idleTimeoutMs,
+        spawnImpl,
+      });
+    } catch (error) {
+      if (!isRetryableSpawnError(error) || attempt === attempts) {
+        throw error;
+      }
+      lastError = error;
+      store?.recordLog('WARN', `Retrying process start after ${error.code}: ${command}`, 'coreclaw-cli');
+      await delay(250 * attempt);
+    }
+  }
+  throw lastError;
+}
+
+async function runProcessAttempt({ command, args, cwd, env, store, label = command, timeoutMs = 0, idleTimeoutMs = 0, spawnImpl = spawn }) {
   return await new Promise((resolve, reject) => {
     let settled = false;
     let timeoutTimer = null;
@@ -64,7 +92,7 @@ export async function runProcess({ command, args, cwd, env, store, label = comma
     let timedOut = false;
     let idleTimedOut = false;
 
-    const child = spawn(command, args, {
+    const child = spawnImpl(command, args, {
       cwd,
       env,
       shell: false,
@@ -181,6 +209,26 @@ function splitLines(text) {
 
 function platformExe(filePath) {
   return process.platform === 'win32' ? `${filePath}.exe` : filePath;
+}
+
+function spawnRetryAttempts(command, args = []) {
+  if (process.platform !== 'win32') {
+    return 1;
+  }
+  if (args.length > 0 || !/\.exe$/i.test(String(command))) {
+    return 1;
+  }
+  return 3;
+}
+
+function isRetryableSpawnError(error) {
+  return process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(error?.code);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function killProcessTree(pid) {

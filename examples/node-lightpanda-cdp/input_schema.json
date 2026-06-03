@@ -1,0 +1,29 @@
+{
+  "description": "Node.js Lightpanda CDP contract Worker",
+  "b": "checks",
+  "properties": [
+    {
+      "title": "Checks",
+      "name": "checks",
+      "type": "array",
+      "editor": "stringList",
+      "description": "Contract checks to run. Keep one item for local preflight.",
+      "default": [
+        {
+          "string": "lightpanda-cdp"
+        }
+      ],
+      "required": true
+    },
+    {
+      "title": "Timeout (ms)",
+      "name": "timeoutMs",
+      "type": "integer",
+      "editor": "number",
+      "description": "WebSocket timeout for the CDP command.",
+      "default": 10000,
+      "minimum": 1000,
+      "maximum": 60000
+    }
+  ]
+}

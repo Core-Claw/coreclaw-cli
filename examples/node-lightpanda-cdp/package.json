@@ -1,0 +1,15 @@
+{
+  "name": "coreclaw-node-lightpanda-cdp-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "google-protobuf": "^4.0.2",
+    "ws": "^8.21.0"
+  }
+}

@@ -821,6 +821,62 @@ test('node HTTP proxy example passes local proxy upload preflight', async () => 
   }
 });
 
+test('node Lightpanda CDP example passes local shim upload preflight', async () => {
+  const projectDir = path.join(repoRoot, 'examples', 'node-lightpanda-cdp');
+  const previousNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = path.join(repoRoot, 'node_modules');
+
+  try {
+    const result = await verifyCommand(projectDir, {
+      node: process.execPath,
+      install: false,
+      json: JSON.stringify({
+        checks: [{ string: 'lightpanda-cdp' }],
+        timeoutMs: 5000,
+      }),
+      lightpandaShim: true,
+      requireLightpandaShim: true,
+      minResults: '1',
+      requireTableHeader: true,
+      requireOutputSchemaMatch: true,
+      requireStatusOk: true,
+      output: path.join(os.tmpdir(), `coreclaw-node-lightpanda-cdp-${Date.now()}.zip`),
+      timeoutMs: '30s',
+      idleTimeoutMs: '10s',
+      tmpHook: false,
+    });
+
+    const summary = JSON.parse(fs.readFileSync(path.join(result.run_dir, 'summary.json'), 'utf8'));
+    const exportedRows = readNdjson(path.join(result.run_dir, 'export.ndjson'));
+    const env = JSON.parse(fs.readFileSync(path.join(result.run_dir, 'env.json'), 'utf8'));
+    const uploadManifest = JSON.parse(fs.readFileSync(path.join(result.run_dir, 'upload_manifest.json'), 'utf8'));
+
+    assert.equal(result.ok, true);
+    assert.equal(result.language, 'node');
+    assert.equal(result.result_count, 1);
+    assert.equal(summary.status, 'SUCCEEDED');
+    assert.equal(summary.output_schema_issue_count, 0);
+    assert.deepEqual(exportedRows[0].value, {
+      check_name: 'lightpanda-cdp',
+      status: 'success',
+      endpoint: `ws://${env.LightpandaDomain}/devtools/browser/new`,
+      product: 'CoreClaw local Lightpanda CDP shim',
+      error: '',
+    });
+    assert.match(env.LightpandaDomain, /^127\.0\.0\.1:\d+$/);
+    assert.equal(uploadManifest.includes('input.example.json'), false);
+    for (const entry of ['main.js', 'package.json', 'sdk.js', 'sdk_pb.js', 'sdk_grpc_pb.js', 'output_schema.json']) {
+      assert.equal(uploadManifest.includes(entry), true);
+    }
+  } finally {
+    if (previousNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = previousNodePath;
+    }
+  }
+});
+
 test('verifyCommand json-output prints one preflight report on stdout', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-verify-json-output-'));
   const projectDir = path.join(root, 'worker');

@@ -111,6 +111,17 @@ node ./bin/coreclaw.js verify ./examples/node-http-proxy \
   --require-output-schema-match
 ```
 
+Run the built-in Lightpanda CDP contract example:
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-lightpanda-cdp \
+  --lightpanda-shim \
+  --require-lightpanda-shim \
+  --min-results 1 \
+  --require-table-header \
+  --require-output-schema-match
+```
+
 Run the full release verification for this CLI repository:
 
 ```bash
@@ -847,6 +858,12 @@ node ./bin/coreclaw.js verify ./lightpanda-worker \
 ```
 
 The shim validates the endpoint shape and Basic auth usage. Real navigation and rendering still require CoreClaw or a real upstream CDP endpoint.
+
+The repository includes `examples/node-lightpanda-cdp`, a minimal Node.js Worker that connects to `LightpandaDomain`, sends Basic auth from `PROXY_AUTH`, calls `Browser.getVersion`, and records the returned browser product metadata:
+
+```bash
+node ./bin/coreclaw.js verify ./examples/node-lightpanda-cdp --lightpanda-shim --require-lightpanda-shim --min-results 1
+```
 
 ### CAPTCHA Handling
 

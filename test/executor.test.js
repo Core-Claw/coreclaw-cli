@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { commandForProject, installCommandForProject, runProcess } from '../src/runtime/executor.js';
 
 test('runProcess kills a process after idle timeout', async () => {
@@ -26,6 +27,48 @@ test('runProcess kills a process after idle timeout', async () => {
   assert.equal(result.timedOut, true);
   assert.equal(result.idleTimedOut, true);
   assert.equal(logs.some((row) => row.message.includes('idle timeout')), true);
+});
+
+test('runProcess retries transient Windows executable spawn failures', async () => {
+  if (process.platform !== 'win32') {
+    return;
+  }
+  const logs = [];
+  let calls = 0;
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = () => {};
+  const resultPromise = runProcess({
+    command: 'C:\\worker\\main.exe',
+    args: [],
+    cwd: process.cwd(),
+    env: process.env,
+    store: {
+      recordLog(level, message, source) {
+        logs.push({ level, message, source });
+      },
+    },
+    spawnImpl() {
+      calls += 1;
+      if (calls === 1) {
+        const failed = new EventEmitter();
+        failed.stdout = new EventEmitter();
+        failed.stderr = new EventEmitter();
+        failed.kill = () => {};
+        process.nextTick(() => failed.emit('error', Object.assign(new Error('operation not permitted'), { code: 'EPERM' })));
+        return failed;
+      }
+      process.nextTick(() => child.emit('close', 0, null));
+      return child;
+    },
+  });
+
+  const result = await resultPromise;
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(calls, 2);
+  assert.equal(logs.some((row) => row.level === 'WARN' && row.message.includes('Retrying process start')), true);
 });
 
 test('installCommandForProject uses Windows npm launcher when needed', () => {
