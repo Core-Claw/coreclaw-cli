@@ -38,6 +38,20 @@ CoreClaw CLI 用本地命令把这些问题提前暴露出来。
 
 当前开发目标、已完成内容、可解决不足和仅能在云端验证的限制记录在 [docs/roadmap.md](./docs/roadmap.md)。精确命令语法由 CLI 元数据生成，见 [docs/commands.md](./docs/commands.md)。
 
+## AI Agent Skill
+
+本仓库包含 [SKILL.md](./SKILL.md)，这是专门给 AI 编程 agent 使用的 CoreClaw CLI skill。需要让 AI 继续维护本仓库、审查 CoreClaw Worker、做上传前验证、对比平台结果、准备 release evidence 或迁移 Apify/Crawlee Actor 时，可以直接把这个文件交给 agent 使用。
+
+它覆盖：
+
+- CoreClaw CLI 的仓库定位和不可越界的职责。
+- CoreClaw Worker 的输入 schema、输出 schema、运行时、代理、浏览器、Lightpanda、CAPTCHA 和上传 ZIP 契约。
+- 各类命令的实现、测试、文档同步和验证流程。
+- Apify 迁移审计和 input schema 草稿生成流程。
+- 发布证据包与平台实测时需要向用户索取的日志、run slug、输入和导出结果。
+
+`SKILL.md` 已加入 package manifest，会随 CLI 源码包一起交付。
+
 ## 安装
 
 在仓库内：

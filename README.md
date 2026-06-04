@@ -26,6 +26,20 @@ Use CoreClaw CLI to:
 
 The current development goals, completed work, known solvable gaps, and known cloud-only limitations are tracked in [docs/roadmap.md](./docs/roadmap.md). Exact command syntax is generated from CLI metadata in [docs/commands.md](./docs/commands.md).
 
+## AI Agent Skill
+
+This repository includes [SKILL.md](./SKILL.md), a dedicated CoreClaw CLI skill for AI coding agents. Give that file to an agent when you want it to work on this repository or on CoreClaw Worker validation tasks. It defines the repository role, the CoreClaw Worker contract, command-specific workflows, verification commands, release dossier expectations, Apify migration handling, and the evidence to request from platform test runs.
+
+Use it for tasks such as:
+
+- Updating CoreClaw CLI commands, tests, and generated command docs.
+- Validating or packaging CoreClaw Workers before upload.
+- Comparing platform results with local runs.
+- Preparing release evidence for manual Console publication.
+- Migrating Apify/Crawlee Actors toward CoreClaw Workers.
+
+The skill is also included in the package manifest so it ships with the CLI source package.
+
 ## What The CLI Emulates
 
 The local runtime implements the CoreClaw SDK services used by Worker code:
