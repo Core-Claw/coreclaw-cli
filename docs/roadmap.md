@@ -190,7 +190,7 @@ CLI 必须持续对齐 `E:\worker\knowledge-files\docs\developer-guide` 中的 C
 - 为每个子命令增加更丰富的 flag 说明。
 - 稳定并版本化 CI 友好的 JSON 输出 schema。
 - 增加更多 Worker 模板和示例输入。
-- 在 `migrate apify` 审计基础上增加可选转换器或模板生成器，减少手动迁移输入 schema、输出和 SDK 生命周期的工作量。
+- 在 `migrate apify` 审计和 input schema 草稿基础上增加代码片段或模板生成器，减少手动迁移输出和 SDK 生命周期的工作量。
 - 为常见 validation/runtime 失败增加更好的修复提示。
 - 当 CLI 行为足够稳定后增加版本化文档。
 
@@ -235,12 +235,12 @@ CLI 必须持续对齐 `E:\worker\knowledge-files\docs\developer-guide` 中的 C
 - 增加 `coreclaw runs collect`，把 run 详情、日志、结果、导出、诊断和成本线索打成 JSON/Markdown 证据包，可直接交给 release dossier 或团队复盘使用。
 - 增强 `coreclaw tasks run`，让已保存 Task 模板启动后也能等待云端 run、保存结果并生成 run evidence bundle。
 - 增加 `coreclaw compare --json-summary`，输出版本化精简对比摘要，便于 CI 和 dashboard 读取。
-- 增加 `coreclaw migrate apify`，可静态审计 Apify/Crawlee Actor 的 schema、Dataset、KeyValueStore、RequestQueue、proxy、browser 和 SDK 生命周期迁移工作量，并写出 JSON/Markdown 报告。
+- 增强 `coreclaw migrate apify`，可静态审计 Apify/Crawlee Actor 的 schema、Dataset、KeyValueStore、RequestQueue、proxy、browser 和 SDK 生命周期迁移工作量，并写出 JSON/Markdown 报告；也可通过 `--schema-output` 从 Apify input schema 生成 CoreClaw `input_schema.json` 草稿。
 - 增加 `coreclaw release dossier`，在平台公开上传/发布 API 前，把本地包、云端测试、结果对比、诊断、成本和 Console 发布步骤整理成发布候选交付报告，并支持直接引用 `coreclaw runs collect` 的 run evidence bundle。
 - 增加 `docs/platform-backlog.md`，将平台 API/产品缺口与 CLI 本地实现工作分开记录。
 
 ## 下一批里程碑
 
 1. 增加更丰富的浏览器 CDP 和 CAPTCHA Worker 示例。
-2. 在 Apify 迁移审计报告基础上增加转换模板或代码片段建议。
+2. 在 Apify 迁移审计和 schema 草稿基础上增加输出/SDK 生命周期代码片段建议。
 3. 文档化 `compare --json-summary` schema，并补充常见 CI 示例。

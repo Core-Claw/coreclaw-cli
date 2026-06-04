@@ -177,10 +177,10 @@ CLI 可在每次云端操作后打印这些链接，降低用户跳转成本。
 
 - `coreclaw migrate apify [project]` 可静态识别 Apify/Crawlee 项目特征，并输出 JSON/Markdown 迁移审计报告。
 - 报告已覆盖 input schema、Dataset 输出、KeyValueStore、RequestQueue、proxy configuration、browser crawler 和 CoreClaw SDK 生命周期适配。
+- `coreclaw migrate apify --schema-output input_schema.json` 可从 Apify input schema 生成 CoreClaw `input_schema.json` 草稿，覆盖常见字段类型、required/default、select options 和 URL list 拆分键。
 
 仍需补足：
 
-- 从 Apify input schema 到 CoreClaw `input_schema.json` 的安全转换器。
 - 常见 Crawlee HTTP/browser Actor 的迁移模板或代码片段。
 - 平台文档中的 Apify 迁移专页。
 

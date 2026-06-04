@@ -15,6 +15,51 @@ test('apify migration audit reports CoreClaw adaptation work for Crawlee actors'
   assert.equal(report.detected.crawlee, true);
   assert.equal(report.detected.browser_crawler, true);
   assert.equal(report.detected.input_schema_path, path.join(projectDir, '.actor', 'input_schema.json'));
+  assert.deepEqual(report.coreclaw_input_schema, {
+    description: 'Legacy Apify Actor input',
+    b: 'startUrls',
+    properties: [
+      {
+        name: 'startUrls',
+        title: 'Start URLs',
+        type: 'array',
+        editor: 'requestList',
+        default: [{ url: 'https://example.com' }],
+        required: true,
+        description: 'URLs to crawl',
+      },
+      {
+        name: 'maxItems',
+        title: 'Max items',
+        type: 'integer',
+        editor: 'number',
+        default: 10,
+        required: false,
+        minimum: 1,
+        maximum: 100,
+      },
+      {
+        name: 'proxyCountryCode',
+        title: 'Proxy country',
+        type: 'string',
+        editor: 'select',
+        default: 'US',
+        required: false,
+        options: [
+          { label: 'United States', value: 'US' },
+          { label: 'Japan', value: 'JP' },
+        ],
+      },
+      {
+        name: 'debug',
+        title: 'Debug',
+        type: 'boolean',
+        editor: 'switch',
+        default: false,
+        required: false,
+      },
+    ],
+  });
   assert.equal(report.totals.blockers, 4);
   assert.equal(report.totals.warnings, 3);
   assert.equal(codes.includes('apify_input_schema_convert'), true);
@@ -47,6 +92,20 @@ test('apify migration command writes JSON and Markdown reports', async () => {
   assert.match(markdownText, /CoreClaw `input_schema\.json`/);
 });
 
+test('apify migration command can write a CoreClaw input schema draft', async () => {
+  const { migrateCommand } = await import('../src/commands/migrate.js');
+  const projectDir = makeApifyActorProject();
+  const schemaOutput = path.join(projectDir, 'coreclaw-input-schema.json');
+
+  const report = await migrateCommand(['apify', projectDir], { schemaOutput });
+
+  const schema = JSON.parse(fs.readFileSync(schemaOutput, 'utf8'));
+  assert.deepEqual(schema, report.coreclaw_input_schema);
+  assert.equal(schema.b, 'startUrls');
+  assert.equal(schema.properties[0].editor, 'requestList');
+  assert.equal(schema.properties[1].type, 'integer');
+});
+
 function makeApifyActorProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-apify-actor-'));
   fs.mkdirSync(path.join(dir, '.actor'), { recursive: true });
@@ -62,13 +121,37 @@ function makeApifyActorProject() {
     name: 'legacy-apify-actor',
   }, null, 2));
   fs.writeFileSync(path.join(dir, '.actor', 'input_schema.json'), JSON.stringify({
-    title: 'Input',
+    title: 'Legacy Apify Actor input',
     type: 'object',
+    required: ['startUrls'],
     properties: {
       startUrls: {
         title: 'Start URLs',
         type: 'array',
         editor: 'requestListSources',
+        description: 'URLs to crawl',
+        prefill: [{ url: 'https://example.com' }],
+      },
+      maxItems: {
+        title: 'Max items',
+        type: 'number',
+        editor: 'number',
+        default: 10,
+        minimum: 1,
+        maximum: 100,
+      },
+      proxyCountryCode: {
+        title: 'Proxy country',
+        type: 'string',
+        editor: 'select',
+        default: 'US',
+        enum: ['US', 'JP'],
+        enumTitles: ['United States', 'Japan'],
+      },
+      debug: {
+        title: 'Debug',
+        type: 'boolean',
+        default: false,
       },
     },
   }, null, 2));

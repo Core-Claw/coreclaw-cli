@@ -219,12 +219,13 @@ export const COMMANDS = {
     ],
   },
   migrate: {
-    summary: '审计 Apify Actor 到 CoreClaw Worker 的迁移工作量',
+    summary: '审计 Apify Actor 到 CoreClaw Worker 的迁移工作量并生成 schema 草稿',
     usage: [
-      'coreclaw migrate apify [project] [--output migration.json] [--markdown migration.md] [--json-output]',
+      'coreclaw migrate apify [project] [--output migration.json] [--markdown migration.md] [--schema-output input_schema.json] [--json-output]',
     ],
     examples: [
       'coreclaw migrate apify ./apify-actor --output migration.json --markdown migration.md',
+      'coreclaw migrate apify ./apify-actor --schema-output ./coreclaw-worker/input_schema.json',
       'coreclaw migrate apify ./apify-actor --json-output',
     ],
   },

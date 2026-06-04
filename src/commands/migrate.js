@@ -27,6 +27,15 @@ export async function migrateCommand(positionals = [], options = {}) {
   const projectDir = resolveProjectPath(positionals[1] ?? '.');
   const report = inspectApifyMigration(projectDir);
 
+  if (options.schemaOutput) {
+    if (!report.coreclaw_input_schema) {
+      throw new CliError('Cannot write --schema-output because no Apify input schema was found.');
+    }
+    const outFile = path.resolve(process.cwd(), options.schemaOutput);
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    fs.writeFileSync(outFile, `${JSON.stringify(report.coreclaw_input_schema, null, 2)}\n`, 'utf8');
+  }
+
   if (options.output) {
     const outFile = path.resolve(process.cwd(), options.output);
     fs.mkdirSync(path.dirname(outFile), { recursive: true });
@@ -80,15 +89,115 @@ export function inspectApifyMigration(projectPath = '.') {
 
   const findings = buildApifyFindings({ projectDir, detected, sourceMatches, inputSchemaPath });
   const totals = summarizeFindings(findings);
+  const coreclawInputSchema = inputSchemaPath
+    ? convertApifyInputSchema(readOptionalJson(inputSchemaPath))
+    : null;
 
   return {
     project_dir: projectDir,
     generated_at: new Date().toISOString(),
     detected,
+    coreclaw_input_schema: coreclawInputSchema,
     totals,
     findings,
     next_commands: nextCommands(projectDir),
   };
+}
+
+export function convertApifyInputSchema(apifySchema = {}) {
+  const propertiesObject = apifySchema?.properties && typeof apifySchema.properties === 'object' && !Array.isArray(apifySchema.properties)
+    ? apifySchema.properties
+    : {};
+  const required = new Set(Array.isArray(apifySchema.required) ? apifySchema.required : []);
+  const properties = Object.entries(propertiesObject).map(([name, property]) => convertApifyProperty(name, property, required));
+  return {
+    description: apifySchema.description ?? apifySchema.title ?? 'Converted Apify Actor input',
+    b: chooseSplitKey(properties),
+    properties,
+  };
+}
+
+function convertApifyProperty(name, property = {}, required = new Set()) {
+  const type = normalizeApifyType(property.type);
+  const converted = {
+    name,
+    title: property.title ?? name,
+    type,
+    editor: normalizeApifyEditor(property.editor, type),
+  };
+  const defaultValue = property.default ?? property.prefill;
+  if (defaultValue !== undefined) {
+    converted.default = defaultValue;
+  }
+  converted.required = required.has(name) || property.required === true;
+  if (property.description) {
+    converted.description = property.description;
+  }
+  if (property.minimum !== undefined) {
+    converted.minimum = property.minimum;
+  }
+  if (property.maximum !== undefined) {
+    converted.maximum = property.maximum;
+  }
+  const options = convertApifyOptions(property);
+  if (options.length > 0) {
+    converted.options = options;
+  }
+  return converted;
+}
+
+function normalizeApifyType(type) {
+  if (type === 'number') {
+    return 'integer';
+  }
+  if (['string', 'integer', 'boolean', 'array', 'object'].includes(type)) {
+    return type;
+  }
+  return 'string';
+}
+
+function normalizeApifyEditor(editor, type) {
+  const known = {
+    requestListSources: 'requestList',
+    requestListSource: 'requestListSource',
+    requestList: 'requestList',
+    textarea: 'textarea',
+    number: 'number',
+    select: 'select',
+    radio: 'radio',
+    checkbox: 'checkbox',
+    stringList: 'stringList',
+    datepicker: 'datepicker',
+  }[editor];
+  if (known) {
+    return known;
+  }
+  if (type === 'boolean') {
+    return 'switch';
+  }
+  if (type === 'integer') {
+    return 'number';
+  }
+  if (type === 'array') {
+    return 'stringList';
+  }
+  return 'input';
+}
+
+function convertApifyOptions(property = {}) {
+  if (!Array.isArray(property.enum)) {
+    return [];
+  }
+  return property.enum.map((value, index) => ({
+    label: property.enumTitles?.[index] ?? String(value),
+    value,
+  }));
+}
+
+function chooseSplitKey(properties) {
+  return properties.find((property) => property.type === 'array')?.name
+    ?? properties[0]?.name
+    ?? 'input';
 }
 
 function buildApifyFindings({ detected, sourceMatches, inputSchemaPath }) {

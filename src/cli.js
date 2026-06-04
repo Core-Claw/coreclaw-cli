@@ -359,7 +359,7 @@ function commandAllowedOptions(command) {
         'waitTimeout',
       ]);
     case 'migrate':
-      return new Set(['jsonOutput', 'markdown', 'output']);
+      return new Set(['jsonOutput', 'markdown', 'output', 'schemaOutput']);
     case 'release':
       return new Set(['cloudRun', 'compareReport', 'costReport', 'diagnosis', 'jsonOutput', 'markdown', 'output', 'package', 'runEvidence']);
     case 'run':
@@ -468,6 +468,7 @@ function isKnownOption(name) {
     'runEvidenceOutput',
     'runEvidence',
     'scraperSlug',
+    'schemaOutput',
     'search',
     'split',
     'status',

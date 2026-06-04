@@ -37,7 +37,7 @@
 ### 工作区与工具
 
 - `audit` - 批量校验多个 worker-* 项目并写出 JSON/Markdown 报告
-- `migrate` - 审计 Apify Actor 到 CoreClaw Worker 的迁移工作量
+- `migrate` - 审计 Apify Actor 到 CoreClaw Worker 的迁移工作量并生成 schema 草稿
 - `doctor` - 检查本地工具、浏览器端点和可选 CoreClaw 云端连通性
 - `help` - 显示总帮助或指定命令帮助
 
@@ -402,18 +402,19 @@ coreclaw audit E:/worker --audit-profile ./examples/coreclaw-audit-profile.json 
 
 ### `migrate`
 
-审计 Apify Actor 到 CoreClaw Worker 的迁移工作量
+审计 Apify Actor 到 CoreClaw Worker 的迁移工作量并生成 schema 草稿
 
 用法：
 
 ```bash
-coreclaw migrate apify [project] [--output migration.json] [--markdown migration.md] [--json-output]
+coreclaw migrate apify [project] [--output migration.json] [--markdown migration.md] [--schema-output input_schema.json] [--json-output]
 ```
 
 示例：
 
 ```bash
 coreclaw migrate apify ./apify-actor --output migration.json --markdown migration.md
+coreclaw migrate apify ./apify-actor --schema-output ./coreclaw-worker/input_schema.json
 coreclaw migrate apify ./apify-actor --json-output
 ```
 

@@ -304,12 +304,13 @@ test('parseArgs accepts compare json summary option', () => {
 
 test('parseArgs accepts migrate apify report output options', () => {
   assert.deepEqual(
-    parseArgs(['migrate', 'apify', './actor', '--output', 'migration.json', '--markdown', 'migration.md', '--json-output']),
+    parseArgs(['migrate', 'apify', './actor', '--output', 'migration.json', '--markdown', 'migration.md', '--schema-output', 'input_schema.json', '--json-output']),
     {
       positionals: ['migrate', 'apify', './actor'],
       options: {
         output: 'migration.json',
         markdown: 'migration.md',
+        schemaOutput: 'input_schema.json',
         jsonOutput: true,
       },
     },
