@@ -10,6 +10,13 @@ import { inspectPackageCommand } from './commands/inspect-package.js';
 import { verifyCommand } from './commands/verify.js';
 import { compareCommand } from './commands/compare.js';
 import { examplesCommand } from './commands/examples.js';
+import { accountCommand } from './commands/account.js';
+import { workersCommand } from './commands/workers.js';
+import { tasksCommand } from './commands/tasks.js';
+import { runsCommand } from './commands/runs.js';
+import { proveCommand } from './commands/prove.js';
+import { migrateCommand } from './commands/migrate.js';
+import { releaseCommand } from './commands/release.js';
 import { CLI_VERSION, COMMAND_GROUPS, COMMANDS } from './command-metadata.js';
 import { CliError } from './utils/errors.js';
 
@@ -61,6 +68,27 @@ export async function runCli(argv) {
       return;
     case 'examples':
       await examplesCommand(parsed.options);
+      return;
+    case 'account':
+      await accountCommand(parsed.positionals, parsed.options);
+      return;
+    case 'workers':
+      await workersCommand(parsed.positionals, parsed.options);
+      return;
+    case 'tasks':
+      await tasksCommand(parsed.positionals, parsed.options);
+      return;
+    case 'runs':
+      await runsCommand(parsed.positionals, parsed.options);
+      return;
+    case 'prove':
+      await proveCommand(parsed.positionals[0] ?? '.', parsed.options);
+      return;
+    case 'migrate':
+      await migrateCommand(parsed.positionals, parsed.options);
+      return;
+    case 'release':
+      await releaseCommand(parsed.positionals, parsed.options);
       return;
     case 'run':
       await runCommand(parsed.positionals[0] ?? '.', withDefaults(parsed.options, { python: 'python', node: 'node', go: 'go' }));
@@ -248,6 +276,7 @@ function commandAllowedOptions(command) {
     'ignoreFields',
     'ignoreKeys',
     'ignoreKeysFile',
+    'jsonSummary',
     'keyFields',
     'maxDiff',
     'maxOnlyCloud',
@@ -260,6 +289,12 @@ function commandAllowedOptions(command) {
     'requireUniqueKeys',
     'resultFailValues',
     'resultStatusFields',
+  ]);
+  const cloud = new Set([
+    'apiBaseUrl',
+    'apiKey',
+    'callbackUrl',
+    'jsonOutput',
   ]);
 
   switch (command) {
@@ -283,6 +318,50 @@ function commandAllowedOptions(command) {
       ]);
     case 'examples':
       return new Set(['jsonOutput']);
+    case 'account':
+      return cloud;
+    case 'workers':
+      return new Set([...cloud, 'downloadOutput', 'filterKeys', 'format', 'input', 'limit', 'markdown', 'pageIndex', 'pageSize', 'pollInterval', 'resultsOutput', 'runEvidenceOutput', 'search', 'sync', 'version', 'wait', 'waitTimeout']);
+    case 'tasks':
+      return new Set([...cloud, 'downloadOutput', 'filterKeys', 'format', 'pageIndex', 'pageSize', 'pollInterval', 'resultsOutput', 'runEvidenceOutput', 'wait', 'waitTimeout']);
+    case 'runs':
+      return new Set([
+        ...cloud,
+        ...compare,
+        'downloadOutput',
+        'filterKeys',
+        'format',
+        'markdown',
+        'output',
+        'pageIndex',
+        'pageSize',
+        'scraperSlug',
+        'status',
+      ]);
+    case 'prove':
+      return new Set([
+        ...runtime,
+        ...compare,
+        ...cloud,
+        'cloudInput',
+        'cloudResultsOutput',
+        'compare',
+        'compareOutput',
+        'maxPackageSize',
+        'output',
+        'pack',
+        'pageIndex',
+        'pageSize',
+        'pollInterval',
+        'releaseOutput',
+        'runEvidenceOutput',
+        'scraperSlug',
+        'waitTimeout',
+      ]);
+    case 'migrate':
+      return new Set(['jsonOutput', 'markdown', 'output']);
+    case 'release':
+      return new Set(['cloudRun', 'compareReport', 'costReport', 'diagnosis', 'jsonOutput', 'markdown', 'output', 'package', 'runEvidence']);
     case 'run':
       return runtime;
     case 'verify':
@@ -308,7 +387,7 @@ function commandAllowedOptions(command) {
     case 'compare':
       return new Set([...compare, 'output']);
     case 'doctor':
-      return new Set(['go', 'localChromeHost', 'node', 'python', 'strict']);
+      return new Set([...cloud, 'cloud', 'cloudInput', 'downloadOutput', 'filterKeys', 'format', 'go', 'localChromeHost', 'markdown', 'node', 'pageIndex', 'pageSize', 'pollInterval', 'python', 'resultsOutput', 'runEvidenceOutput', 'scraperSlug', 'strict', 'version', 'wait', 'waitTimeout']);
     default:
       return null;
   }
@@ -325,14 +404,27 @@ function hasHelpFlag(args) {
 function isKnownOption(name) {
   return isBooleanOption(name) || new Set([
     'auditProfile',
+    'apiBaseUrl',
+    'apiKey',
     'browserTimeoutMs',
+    'callbackUrl',
     'chromeHttp',
     'chromeWs',
     'cloudOutput',
+    'cloudRun',
+    'cloudInput',
+    'cloudResultsOutput',
+    'cloud',
     'command',
     'compareOutput',
     'compareProfile',
+    'compareReport',
+    'costReport',
+    'diagnosis',
+    'downloadOutput',
     'go',
+    'filterKeys',
+    'format',
     'idleTimeoutMs',
     'ignoreFields',
     'ignoreIssueCodes',
@@ -348,6 +440,7 @@ function isKnownOption(name) {
     'language',
     'lightpandaDomain',
     'localChromeHost',
+    'limit',
     'markdown',
     'maxDiff',
     'maxOnlyCloud',
@@ -359,15 +452,28 @@ function isKnownOption(name) {
     'node',
     'output',
     'outputSchema',
+    'package',
+    'pageIndex',
+    'pageSize',
     'proxyAuth',
     'proxyDomain',
+    'pollInterval',
     'project',
     'python',
     'resultFailValues',
     'resultStatusFields',
+    'releaseOutput',
+    'resultsOutput',
     'runtimeTmpDir',
+    'runEvidenceOutput',
+    'runEvidence',
+    'scraperSlug',
+    'search',
     'split',
+    'status',
     'timeoutMs',
+    'version',
+    'waitTimeout',
   ]).has(name);
 }
 
@@ -378,10 +484,13 @@ function toKebab(value) {
 function isBooleanOption(name) {
   return new Set([
     'compare',
+    'cloud',
     'force',
     'inputExample',
+    'jsonSummary',
     'jsonOutput',
     'soft',
+    'sync',
     'strict',
     'install',
     'skipValidate',
@@ -410,6 +519,7 @@ function isBooleanOption(name) {
     'discoverChrome',
     'pack',
     'printFiles',
+    'wait',
   ]).has(name);
 }
 

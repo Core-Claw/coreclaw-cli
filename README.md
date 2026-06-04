@@ -693,7 +693,11 @@ Cloud output can be:
 - A CoreClaw result-list API wrapper with rows under `data.list`, `data.rows`, `data.items`, `data.results`, `data.records`, or similar result containers.
 - A CSV export file.
 
-If the API response only contains `data.download_url`, download the export first and pass the downloaded JSON or CSV file to `compare`.
+If the API response only contains `data.download_url`, use `coreclaw runs export --download-output` to download the real JSON or CSV file, then pass that file to `compare`:
+
+```bash
+node ./bin/coreclaw.js runs export <run_slug> --format json --download-output ./cloud-output.json
+```
 
 Useful options:
 
@@ -1048,7 +1052,11 @@ node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-
 
 ### "Cloud JSON contains only download_url"
 
-Download the file first, then compare the downloaded JSON or CSV. `compare` reads result rows, not metadata-only API responses.
+Download the real JSON or CSV file first, then compare it. `compare` reads result rows, not metadata-only API responses:
+
+```bash
+node ./bin/coreclaw.js runs export <run_slug> --format csv --download-output ./cloud-output.csv
+```
 
 ### "Inline JSON breaks on Windows"
 

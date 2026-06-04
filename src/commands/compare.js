@@ -23,6 +23,8 @@ export async function compareCommand(cloudPath, localPath, options = {}) {
     ignore_keys_file_path: compareOptions.ignoreKeysFile ? path.resolve(process.cwd(), compareOptions.ignoreKeysFile) : null,
     ...compareRows(cloudRows, localRows, { ...compareOptions, outputSchema, ignoreKeys }),
   };
+  report.summary_schema_version = 1;
+  report.summary = buildCompareSummary(report);
 
   if (compareOptions.output) {
     const outPath = path.resolve(process.cwd(), compareOptions.output);
@@ -30,7 +32,11 @@ export async function compareCommand(cloudPath, localPath, options = {}) {
     fs.writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   }
 
-  printCompareReport(report);
+  if (compareOptions.jsonSummary) {
+    console.log(JSON.stringify(report.summary));
+  } else {
+    printCompareReport(report);
+  }
   assertCompareThresholds(report, compareOptions);
   return report;
 }
@@ -203,4 +209,53 @@ function printCompareReport(report) {
   console.log(`Local status issues: ${report.local_result_status_issue_count}`);
   console.log(`Cloud output_schema issues: ${report.cloud_output_schema_issue_count}`);
   console.log(`Local output_schema issues: ${report.local_output_schema_issue_count}`);
+}
+
+function buildCompareSummary(report) {
+  const ok = [
+    report.only_cloud_count,
+    report.only_local_count,
+    report.value_diff_count,
+    report.cloud_duplicate_key_count,
+    report.local_duplicate_key_count,
+    report.cloud_result_status_issue_count,
+    report.local_result_status_issue_count,
+    report.cloud_output_schema_issue_count,
+    report.local_output_schema_issue_count,
+  ].every((count) => count === 0);
+
+  return {
+    schema_version: 1,
+    ok,
+    exit_code_hint: ok ? 0 : 1,
+    counts: {
+      cloud_rows: report.cloud_count,
+      local_rows: report.local_count,
+      ignored_cloud_rows: report.ignored_cloud_row_count,
+      ignored_local_rows: report.ignored_local_row_count,
+      shared: report.shared_count,
+      only_cloud: report.only_cloud_count,
+      only_local: report.only_local_count,
+      value_diffs: report.value_diff_count,
+      cloud_duplicate_keys: report.cloud_duplicate_key_count,
+      local_duplicate_keys: report.local_duplicate_key_count,
+      cloud_status_issues: report.cloud_result_status_issue_count,
+      local_status_issues: report.local_result_status_issue_count,
+      cloud_output_schema_issues: report.cloud_output_schema_issue_count,
+      local_output_schema_issues: report.local_output_schema_issue_count,
+    },
+    paths: {
+      cloud: report.cloud_path,
+      local: report.local_path,
+      compare_profile: report.compare_profile_path,
+      output_schema: report.output_schema_path,
+      ignore_keys_file: report.ignore_keys_file_path,
+    },
+    keys: {
+      key_fields: report.key_fields,
+      ignored_fields: report.ignored_fields,
+      ignored_keys: report.ignored_keys,
+    },
+    top_diff_fields: report.value_diff_fields_top_20 ?? [],
+  };
 }

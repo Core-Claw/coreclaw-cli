@@ -10,6 +10,11 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 test('generated command reference covers every command in help metadata', () => {
   const docs = fs.readFileSync(path.join(ROOT, 'docs', 'commands.md'), 'utf8');
 
+  assert.match(docs, /^# CoreClaw CLI 命令参考/m);
+  assert.match(docs, /## 命令总览/);
+  assert.match(docs, /用法：/);
+  assert.match(docs, /示例：/);
+
   for (const group of COMMAND_GROUPS) {
     assert.match(docs, new RegExp(`### ${escapeRegExp(group.title)}`));
     for (const name of group.commands) {

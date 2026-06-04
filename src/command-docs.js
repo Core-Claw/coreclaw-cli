@@ -6,13 +6,13 @@ export function renderCommandDocs({
   commands = COMMANDS,
 } = {}) {
   const lines = [
-    '# CoreClaw CLI Command Reference',
+    '# CoreClaw CLI 命令参考',
     '',
-    `Generated from CLI command metadata for CoreClaw CLI ${version}.`,
+    `本文档由 CoreClaw CLI ${version} 的命令元数据生成。`,
     '',
-    'Use this page when you need exact command syntax. For workflow guidance, start with the main README.',
+    '需要确认精确命令语法时请查阅本文档。工作流说明请先阅读主 README。',
     '',
-    '## Commands',
+    '## 命令总览',
     '',
   ];
 
@@ -29,11 +29,11 @@ export function renderCommandDocs({
     lines.push(`## ${group.title}`, '');
     for (const name of group.commands) {
       const command = commands[name];
-      lines.push(`### \`${name}\``, '', command.summary, '', 'Usage:', '', '```bash');
+      lines.push(`### \`${name}\``, '', command.summary, '', '用法：', '', '```bash');
       lines.push(...command.usage);
       lines.push('```', '');
       if (command.examples?.length) {
-        lines.push('Examples:', '', '```bash');
+        lines.push('示例：', '', '```bash');
         lines.push(...command.examples);
         lines.push('```', '');
       }

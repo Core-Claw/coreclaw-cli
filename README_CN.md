@@ -666,7 +666,11 @@ node ./bin/coreclaw.js compare \
 - CoreClaw result-list API 包装结果，例如 `data.list`、`data.rows`、`data.items`、`data.results`、`data.records` 等。
 - CSV 导出文件。
 
-如果 API 响应里只有 `data.download_url`，请先下载真实 JSON/CSV 文件，再交给 `compare`。
+如果 API 响应里只有 `data.download_url`，请用 `coreclaw runs export --download-output` 下载真实 JSON/CSV 文件，再交给 `compare`：
+
+```bash
+node ./bin/coreclaw.js runs export <run_slug> --format json --download-output ./cloud-output.json
+```
 
 常用选项：
 
@@ -1022,7 +1026,11 @@ node ./bin/coreclaw.js verify ./worker --browser-cdp-shim --require-browser-cdp-
 
 ### 云端 JSON 只有 download_url
 
-先下载真实 JSON 或 CSV 文件，再传给 `compare`。`compare` 读取的是结果行，不是只有下载链接的元数据响应。
+先下载真实 JSON 或 CSV 文件，再传给 `compare`。`compare` 读取的是结果行，不是只有下载链接的元数据响应：
+
+```bash
+node ./bin/coreclaw.js runs export <run_slug> --format csv --download-output ./cloud-output.csv
+```
 
 ### Windows inline JSON 被转义影响
 

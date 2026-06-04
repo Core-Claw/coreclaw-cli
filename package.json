@@ -29,6 +29,7 @@
     "tools/generate-command-docs.js",
     "docs/commands.md",
     "docs/roadmap.md",
+    "docs/platform-backlog.md",
     "examples/coreclaw-audit-profile.json",
     "examples/node-hello-cloud-output.json",
     "examples/node-hello/input_schema.json",

@@ -281,6 +281,51 @@ test('compareCommand writes reports and enforces thresholds', async () => {
   );
 });
 
+test('compareCommand can print a stable JSON summary for CI and dashboards', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-compare-json-summary-'));
+  const cloudPath = path.join(dir, 'cloud.json');
+  const runDir = path.join(dir, 'run');
+  fs.mkdirSync(runDir);
+  fs.writeFileSync(cloudPath, JSON.stringify([
+    { id: 'shared', status: 'ok', value: 2 },
+    { id: 'cloud-only', status: 'ok', value: 3 },
+  ]));
+  fs.writeFileSync(path.join(runDir, 'export.ndjson'), [
+    JSON.stringify({ value: { id: 'shared', status: 'ok', value: 1 } }),
+    JSON.stringify({ value: { id: 'local-only', status: 'ok', value: 4 } }),
+    '',
+  ].join('\n'));
+
+  const originalLog = console.log;
+  const lines = [];
+  console.log = (line) => lines.push(line);
+  try {
+    const report = await compareCommand(cloudPath, runDir, {
+      keyFields: 'id',
+      jsonSummary: true,
+    });
+
+    assert.equal(report.summary_schema_version, 1);
+    assert.equal(report.summary.ok, false);
+    assert.equal(report.summary.exit_code_hint, 1);
+    assert.equal(report.summary.counts.shared, 1);
+    assert.equal(report.summary.counts.only_cloud, 1);
+    assert.equal(report.summary.counts.only_local, 1);
+    assert.equal(report.summary.counts.value_diffs, 1);
+    assert.deepEqual(report.summary.top_diff_fields, [{ field: 'value', count: 1 }]);
+    assert.equal(lines.length, 1);
+    const printed = JSON.parse(lines[0]);
+    assert.equal(printed.schema_version, 1);
+    assert.equal(printed.ok, false);
+    assert.equal(printed.counts.cloud_rows, 2);
+    assert.equal(printed.counts.local_rows, 2);
+    assert.equal(printed.paths.cloud, cloudPath);
+    assert.equal(printed.paths.local, path.join(runDir, 'export.ndjson'));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
 test('compareCommand can compare a CSV cloud export', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-compare-command-csv-'));
   const cloudPath = path.join(dir, 'cloud.csv');
