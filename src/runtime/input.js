@@ -81,8 +81,8 @@ export function inputSchemaInputIssues(input, schema) {
     }
 
     const propertyType = inferInputType(property);
-    if (!inputValueMatchesType(value, propertyType)) {
-      issues.push(`field "${property.name}" must be ${inputTypeLabel(propertyType)}`);
+    if (!inputValueMatchesType(value, propertyType, property)) {
+      issues.push(`field "${property.name}" must be ${inputTypeLabel(propertyType, property)}`);
       continue;
     }
 
@@ -139,7 +139,10 @@ function isEmptyInputValue(value) {
   return false;
 }
 
-function inputValueMatchesType(value, type) {
+function inputValueMatchesType(value, type, schemaItem = null) {
+  if (isMultipleSelect(schemaItem)) {
+    return Array.isArray(value);
+  }
   switch (normalizeInputType(type)) {
     case 'string':
       return typeof value === 'string';
@@ -158,7 +161,10 @@ function inputValueMatchesType(value, type) {
   }
 }
 
-function inputTypeLabel(type) {
+function inputTypeLabel(type, schemaItem = null) {
+  if (isMultipleSelect(schemaItem)) {
+    return 'an array';
+  }
   const normalized = normalizeInputType(type);
   if (normalized === 'integer') {
     return 'an integer';
@@ -177,6 +183,10 @@ function normalizeInputType(type) {
     return 'number';
   }
   return type;
+}
+
+function isMultipleSelect(schemaItem) {
+  return schemaItem?.editor === 'select' && schemaItem.multiple === true;
 }
 
 function inputEditorIssues(property, value) {
@@ -245,8 +255,8 @@ function requestListSourceParamIssues(itemName, item, param) {
     return [`required field "${itemName}.${name}" is missing or empty`];
   }
   const paramType = inferInputType(param);
-  if (!inputValueMatchesType(value, paramType)) {
-    return [`field "${itemName}.${name}" must be ${inputTypeLabel(paramType)}`];
+  if (!inputValueMatchesType(value, paramType, param)) {
+    return [`field "${itemName}.${name}" must be ${inputTypeLabel(paramType, param)}`];
   }
   const boundIssues = inputNumericBoundIssues(`${itemName}.${name}`, param, value);
   if (boundIssues.length > 0) {

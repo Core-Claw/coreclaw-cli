@@ -113,6 +113,21 @@ test('Python command and install use the configured interpreter command', () => 
   );
 });
 
+test('Python command accepts an existing interpreter path with spaces', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw python path '));
+  const interpreter = path.join(dir, process.platform === 'win32' ? 'python.exe' : 'python');
+  fs.writeFileSync(interpreter, '');
+
+  assert.deepEqual(
+    commandForProject({ language: 'python', projectDir: process.cwd() }, { python: interpreter }),
+    [interpreter, ['main.py']],
+  );
+  assert.deepEqual(
+    installCommandForProject({ language: 'python', projectDir: process.cwd() }, { python: interpreter }),
+    [interpreter, ['-m', 'pip', 'install', '-r', 'requirements.txt']],
+  );
+});
+
 test('Go install uses the configured Go command', () => {
   assert.deepEqual(
     installCommandForProject({ language: 'go', projectDir: process.cwd() }, { go: 'go1.24' }),

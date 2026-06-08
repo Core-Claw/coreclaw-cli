@@ -243,6 +243,9 @@ function outputSchemaColumn(outputSchema, name) {
 }
 
 function outputValueMatchesType(value, type) {
+  if (value === null || value === '') {
+    return true;
+  }
   switch (normalizeOutputType(type)) {
     case 'string':
       return typeof value === 'string';

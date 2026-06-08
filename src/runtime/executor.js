@@ -192,11 +192,24 @@ function splitCommand(command) {
 }
 
 export function splitCommandLine(command, optionName) {
-  const parts = splitCommandParts(command);
+  const text = String(command ?? '').trim();
+  if (isExistingFilePath(text)) {
+    return [text, []];
+  }
+
+  const parts = splitCommandParts(text);
   if (parts.length === 0) {
     throw new CliError(`${optionName} cannot be empty.`);
   }
   return [parts[0], parts.slice(1)];
+}
+
+function isExistingFilePath(value) {
+  try {
+    return fs.statSync(value).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function splitCommandParts(command) {

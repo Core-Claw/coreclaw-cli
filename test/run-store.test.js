@@ -39,6 +39,22 @@ test('validateOutputSchemaRow reports output field type drift', () => {
     meta: {},
     legacy: 2,
   }, 1), []);
+  assert.deepEqual(validateOutputSchemaRow(outputSchema, {
+    title: null,
+    count: null,
+    ok: null,
+    tags: null,
+    meta: null,
+    legacy: null,
+  }, 2), []);
+  assert.deepEqual(validateOutputSchemaRow(outputSchema, {
+    title: '',
+    count: '',
+    ok: '',
+    tags: '',
+    meta: '',
+    legacy: '',
+  }, 3), []);
 
   const issues = validateOutputSchemaRow(outputSchema, {
     title: 123,
@@ -47,7 +63,7 @@ test('validateOutputSchemaRow reports output field type drift', () => {
     tags: {},
     meta: [],
     legacy: '2',
-  }, 2);
+  }, 4);
 
   assert.deepEqual(issues.map((issue) => issue.code), [
     'result_field_type_mismatch',

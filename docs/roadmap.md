@@ -8,7 +8,7 @@ CoreClaw CLI 要帮助开发者更少猜测、更少踩坑地构建可上传的 
 
 CoreClaw CLI 也应逐步成为 CoreClaw API 的终端入口：账户信息、Worker 搜索/详情/运行、Task 运行、云端 run 历史、run 详情、日志、结果列表、导出 URL、rerun 和 abort 都应能从命令行完成。
 
-CLI 必须持续对齐 `E:\worker\knowledge-files\docs\developer-guide` 中的 CoreClaw Worker 定义。
+CLI 必须持续对齐 `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-guide` 中的 CoreClaw Worker 定义。
 
 ## 范围原则
 
@@ -58,14 +58,16 @@ CLI 必须持续对齐 `E:\worker\knowledge-files\docs\developer-guide` 中的 C
 - 校验 Python import 与 `requirements.txt` 的一致性。
 - 校验 Go SDK 依赖和 `go.sum` checksum。
 - 校验 input schema 根字段、editor/type 配对、默认值、选项、数值范围和 split key。
+- 校验 `select.multiple`、`sectionCaption`、`sectionDescription` 等官方 input schema 细节。
 - 校验 output schema 字段名和支持类型。
+- output schema runtime gate 兼容官方 Worker 的空值占位，并区分 `text`/`datetime` runtime header 与 `string` 输出列的关系。
 - 当 HTTP Worker 未读取 `PROXY_AUTH` 和 `PROXY_DOMAIN` 时给出警告。
 - 当浏览器 Worker 未读取 CoreClaw 浏览器端点变量时给出警告。
 - `coreclaw validate --json-output` 输出适合 CI 使用的机器可读校验报告。
 
 可在本仓库解决的缺口：
 
-- 增加 docs contract test，从本地 knowledge docs 快照支持的 input editors 和 output field types。
+- 增加 docs contract test，从官方 docs 快照自动抽取支持的 input editors、table header formats 和 output field types。
 - 为动态 import 和可选 Worker 插件目录增加更精确的依赖扫描。
 
 当前不属于本地可解决范围：

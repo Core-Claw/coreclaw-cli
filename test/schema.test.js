@@ -366,6 +366,70 @@ test('warns about selector option and default drift in input schema', () => {
   ]);
 });
 
+test('validates documented select multiple and section metadata', () => {
+  const schema = {
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      {
+        name: 'languages',
+        type: 'string',
+        editor: 'select',
+        multiple: true,
+        sectionCaption: 'Locale',
+        sectionDescription: 'Language filters',
+        default: ['en'],
+        options: [{ label: 'English', value: 'en' }, { label: 'Chinese', value: 'zh' }],
+      },
+    ],
+  };
+
+  const issues = validateInputSchema(schema);
+
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  assert.equal(issues.some((issue) => issue.code === 'input_default_type_mismatch'), false);
+  assert.deepEqual(inputSchemaInputIssues({ items: [{ string: 'query' }], languages: ['en', 'zh'] }, schema), []);
+  assert.deepEqual(inputSchemaInputIssues({ items: [{ string: 'query' }], languages: 'en' }, schema), [
+    'field "languages" must be an array',
+  ]);
+  assert.deepEqual(inputSchemaInputIssues({ items: [{ string: 'query' }], languages: ['de'] }, schema), [
+    'field "languages" value "de" is not declared in input_schema options',
+  ]);
+});
+
+test('warns about invalid select multiple and section metadata', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'language', type: 'string', editor: 'select', multiple: 'yes', options: [{ label: 'English', value: 'en' }] },
+      { name: 'mode', type: 'string', editor: 'radio', multiple: true, sectionCaption: false, sectionDescription: 12 },
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        param_list: [
+          { param: 'tags', type: 'string', editor: 'radio', multiple: true },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  assert.deepEqual(issues.filter((issue) => [
+    'input_select_multiple_invalid',
+    'input_select_multiple_editor_mismatch',
+    'input_param_select_multiple_editor_mismatch',
+    'input_section_metadata_invalid',
+  ].includes(issue.code)).map((issue) => issue.code), [
+    'input_select_multiple_invalid',
+    'input_select_multiple_editor_mismatch',
+    'input_section_metadata_invalid',
+    'input_section_metadata_invalid',
+    'input_param_select_multiple_editor_mismatch',
+  ]);
+});
+
 test('warns about invalid requestListSource param_list definitions', () => {
   const issues = validateInputSchema({
     b: 'items',

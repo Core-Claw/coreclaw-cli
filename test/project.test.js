@@ -369,6 +369,7 @@ test('validateProject warns about runtime table header drift', () => {
   }));
   fs.writeFileSync(path.join(dir, 'output_schema.json'), JSON.stringify([
     { name: 'title', type: 'string' },
+    { name: 'scraped_at', type: 'string' },
     { name: 'count', type: 'integer' },
     { name: 'enabled', type: 'boolean' },
   ]));
@@ -376,6 +377,7 @@ test('validateProject warns about runtime table header drift', () => {
   const result = validateProject(dir, {
     tableHeaders: [
       { label: 'Title', key: 'title', format: 'text' },
+      { label: 'Scraped At', key: 'scraped_at', format: 'datetime' },
       { label: 'Count', key: 'count', format: 'text' },
       { label: 'Missing key', key: '', format: 'text' },
       { label: 'Bad format', key: 'enabled', format: 'date' },

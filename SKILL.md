@@ -1,11 +1,11 @@
 ---
 name: coreclaw-cli
-description: Use this skill when developing, reviewing, testing, documenting, packaging, or operating the CoreClaw CLI repository. It guides an AI agent through CoreClaw Worker contract validation, local runtime verification, upload package checks, cloud result comparison, Apify migration support, release dossier generation, and safe GitHub push workflow.
+description: Use this skill when developing, reviewing, testing, documenting, packaging, or operating the CoreClaw CLI repository. It guides an AI agent through docs-first Worker contract validation, local runtime verification, upload package checks, cloud result comparison, SDK template sync, release dossier generation, and safe GitHub push workflow.
 ---
 
 # CoreClaw CLI Agent Skill
 
-Use this skill whenever the task touches the `coreclaw-cli` repository, CoreClaw Worker local validation, CoreClaw upload packages, Worker runtime emulation, platform output comparison, or migration from Apify/Crawlee Actors.
+Use this skill whenever the task touches the `coreclaw-cli` repository, CoreClaw Worker local validation, CoreClaw upload packages, Worker runtime emulation, platform output comparison, SDK template sync, or migration audit work.
 
 The goal is not to make a generic script runner. The goal is to keep CoreClaw CLI aligned with the CoreClaw Worker platform contract and make it a reliable pre-upload gate for real Worker products.
 
@@ -23,7 +23,7 @@ CoreClaw CLI is a local development, verification, and packaging tool for CoreCl
 - Inspect existing ZIP packages before upload.
 - Compare CoreClaw cloud output with local output.
 - Collect run evidence and produce release dossiers.
-- Audit Apify/Crawlee migration effort and generate CoreClaw input schema drafts.
+- Audit external Worker migration effort and generate CoreClaw input schema drafts.
 
 ## First Actions
 
@@ -47,17 +47,34 @@ docs/roadmap.md
 docs/platform-backlog.md
 ```
 
-3. Re-check the official CoreClaw docs when behavior depends on platform contracts:
+3. Re-check the official CoreClaw docs when behavior depends on platform contracts. The current docs source of truth is:
 
 ```text
-../knowledge-files/docs/developer-guide/worker-definition/input-schema.md
-../knowledge-files/docs/developer-guide/worker-definition/output-schema.md
-../knowledge-files/docs/developer-guide/deployment.md
-../knowledge-files/docs/developer-guide/builds-and-runs.md
-../knowledge-files/docs/developer-guide/worker-definition/platform-features/proxy-support.md
-../knowledge-files/docs/developer-guide/worker-definition/platform-features/browser-fingerprinting.md
-../knowledge-files/docs/developer-guide/worker-definition/platform-features/lightpanda.md
-../knowledge-files/docs/developer-guide/worker-definition/platform-features/captcha-handling.md
+E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs
+```
+
+For developer contract work, start with:
+
+```text
+developer-guide/worker-definition/project-structure.md
+developer-guide/worker-definition/sdk-modules.md
+developer-guide/worker-definition/input-schema.md
+developer-guide/worker-definition/output-schema.md
+developer-guide/deployment.md
+developer-guide/builds-and-runs.md
+developer-guide/test-your-worker.md
+developer-guide/worker-definition/platform-features/proxy-support.md
+developer-guide/worker-definition/platform-features/browser-fingerprinting.md
+developer-guide/worker-definition/platform-features/captcha-handling.md
+developer-guide/worker-definition/browser-automation/lightpanda.md
+```
+
+When SDK files or templates are in scope, also compare against the official demo repositories:
+
+```text
+E:\docs\docs-coreclaw\Python-Worker-Demo
+E:\docs\docs-coreclaw\Node-Worker-Demo
+E:\docs\docs-coreclaw\Go-Worker-Demo
 ```
 
 If a platform behavior is undocumented, do not invent a hard guarantee. Represent it as a local compatibility gate, a cloud-only limitation, or a backlog item.
@@ -127,7 +144,7 @@ output_schema.json
 README.md
 ```
 
-The Go upload entry is a compiled Linux amd64 executable named `main` at the ZIP root. Do not expect `main.go`, `go.mod`, `go.sum`, or `GoSdk/` to exist at runtime inside the uploaded artifact unless deliberately included for runtime use.
+The Go upload entry is a compiled Linux amd64 executable named `main` at the ZIP root. `coreclaw pack` stages uploadable project files and overwrites/adds the root `main` binary, so source files may be present in the ZIP, but Worker code must not rely on `main.go`, `go.mod`, `go.sum`, or `GoSdk/` being available at platform runtime unless those files are deliberately included for runtime use.
 
 ## Input Schema Contract
 
@@ -144,6 +161,7 @@ Supported property types:
 ```text
 string
 integer
+number
 boolean
 array
 object
@@ -172,6 +190,8 @@ Useful validation expectations:
 - `requestList` items must contain non-empty `url`.
 - `stringList` items must contain non-empty `string`.
 - `select`, `radio`, and `checkbox` values must match declared `options`.
+- `select` can use `multiple: true`; validate defaults and runtime values as arrays when that mode is used.
+- `sectionCaption` and `sectionDescription` are optional grouping metadata and should be strings when present.
 - Numeric inputs may declare `minimum` and `maximum`.
 
 ## Output Schema Contract
@@ -179,10 +199,10 @@ Useful validation expectations:
 `output_schema.json` is a JSON array. Each item has:
 
 - `name`: required output key.
-- `type`: required, one of `string`, `integer`, `boolean`, `array`, `object`.
+- `type`: required, one of `string`, `number`, `integer`, `boolean`, `array`, `object`.
 - `description`: optional table label.
 
-The `name` values must match keys pushed through SDK `PushData`. If runtime output contains fields not declared in `output_schema.json`, call that drift out. If a declared field is never pushed, call that out too.
+The `name` values must match keys pushed through SDK `PushData`. If runtime output contains fields not declared in `output_schema.json`, call that drift out. If a declared field is never pushed, call that out too. If a Worker uses upsert helpers, the unique key must be present both in every row and in `output_schema.json`.
 
 ## Runtime Contract
 
@@ -191,10 +211,21 @@ The CLI local runtime should emulate documented SDK behavior:
 - `Parameter/GetInputJSONString`
 - `Result/SetTableHeader`
 - `Result/PushData`
+- `Result/UpsertData` and language-specific upsert helpers
 - `Log/Debug`
 - `Log/Info`
 - `Log/Warn`
 - `Log/Error`
+
+Current SDK templates and official demo repositories use object/map inputs for result APIs:
+
+```text
+Python: CoreSDK.Result.push_data(dict) and CoreSDK.Result.upsert_data(dict, unique_key)
+Node.js: coresdk.result.pushData(object) and coresdk.result.upsertData(object, uniqueKey)
+Go: coresdk.Result.PushData(ctx, map[string]any) and coresdk.Result.UpsertData(ctx, map[string]any, uniqueKey)
+```
+
+Some official documentation snippets may still show JSON strings for older SDKs. For `coreclaw-cli`, keep generated templates and examples aligned with the current demo repositories and test the local runtime against object/map calls.
 
 Runtime variables and platform features to validate locally:
 
@@ -232,7 +263,7 @@ Important command families:
 - `account`, `workers`, `tasks`, `runs`: use documented CoreClaw cloud endpoints.
 - `prove`: combine local and cloud checks when explicit cloud input is available.
 - `release dossier`: summarize package, run evidence, comparisons, diagnostics, cost, and manual Console release steps.
-- `migrate apify`: audit Apify/Crawlee migration effort and optionally generate a CoreClaw `input_schema.json` draft.
+- `migrate apify`: audit an existing migration source and optionally generate a CoreClaw `input_schema.json` draft.
 - `audit`: audit multiple `worker-*` projects in a workspace.
 
 ## Development Workflow

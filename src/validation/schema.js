@@ -93,6 +93,8 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     }
 
     issues.push(...validatePropertyOptions(property, prefix));
+    issues.push(...validateSelectMultiple(property, prefix, 'input_select_multiple_invalid', 'input_select_multiple_editor_mismatch'));
+    issues.push(...validateSectionMetadata(property, prefix));
     issues.push(...validateNumericBounds(property, prefix, 'input_numeric_bound_invalid'));
     issues.push(...validatePropertyParamList(property, prefix));
     issues.push(...validatePropertyDefault(property, prefix));
@@ -222,6 +224,12 @@ function validatePropertyParamList(property, prefix) {
       missingCode: 'input_param_selector_missing_options',
       invalidCode: 'input_param_selector_option_invalid',
     }));
+    issues.push(...validateSelectMultiple(
+      param,
+      paramPrefix,
+      'input_param_select_multiple_invalid',
+      'input_param_select_multiple_editor_mismatch',
+    ));
   }
   return issues;
 }
@@ -249,6 +257,31 @@ function validateSelectorOptions(item, prefix, codes) {
   return issues;
 }
 
+function validateSelectMultiple(item, prefix, invalidCode, editorCode) {
+  if (!Object.prototype.hasOwnProperty.call(item, 'multiple')) {
+    return [];
+  }
+
+  const issues = [];
+  if (typeof item.multiple !== 'boolean') {
+    issues.push(warn(`${prefix}.multiple should be a boolean when present.`, invalidCode));
+  }
+  if (item.multiple === true && item.editor !== 'select') {
+    issues.push(warn(`${prefix}.multiple is documented for editor "select", but editor is "${item.editor ?? 'undefined'}".`, editorCode));
+  }
+  return issues;
+}
+
+function validateSectionMetadata(property, prefix) {
+  const issues = [];
+  for (const key of ['sectionCaption', 'sectionDescription']) {
+    if (Object.prototype.hasOwnProperty.call(property, key) && typeof property[key] !== 'string') {
+      issues.push(warn(`${prefix}.${key} should be a string when present.`, 'input_section_metadata_invalid'));
+    }
+  }
+  return issues;
+}
+
 function validatePropertyDefault(property, prefix) {
   if (!Object.prototype.hasOwnProperty.call(property, 'default')) {
     return [];
@@ -256,8 +289,8 @@ function validatePropertyDefault(property, prefix) {
 
   const issues = [];
   const propertyType = inferInputType(property);
-  const expectedType = inputTypeLabel(propertyType);
-  if (!valueMatchesInputType(property.default, propertyType)) {
+  const expectedType = inputTypeLabel(propertyType, property);
+  if (!valueMatchesInputType(property.default, propertyType, property)) {
     issues.push(warn(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}.`, 'input_default_type_mismatch'));
     return issues;
   }
@@ -331,8 +364,8 @@ function validateParamDefault(item, param, prefix) {
 
   const issues = [];
   const paramType = inferInputType(param);
-  if (!valueMatchesInputType(item[name], paramType)) {
-    issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(paramType)}", but got ${valueType(item[name])}.`, 'input_default_param_type_mismatch'));
+  if (!valueMatchesInputType(item[name], paramType, param)) {
+    issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(paramType, param)}", but got ${valueType(item[name])}.`, 'input_default_param_type_mismatch'));
   }
   issues.push(...defaultNumericBoundIssues(item[name], param, `${prefix}.${name}`, 'input_default_param_bound_mismatch'));
   if (SELECTOR_EDITORS.has(param.editor) && Array.isArray(param.options) && param.options.length > 0) {
@@ -398,7 +431,10 @@ function defaultNumericBoundIssues(value, item, prefix, code) {
   return [];
 }
 
-function valueMatchesInputType(value, type) {
+function valueMatchesInputType(value, type, item = null) {
+  if (isMultipleSelect(item)) {
+    return Array.isArray(value);
+  }
   switch (inputTypeLabel(type)) {
     case 'string':
       return typeof value === 'string';
@@ -417,11 +453,18 @@ function valueMatchesInputType(value, type) {
   }
 }
 
-function inputTypeLabel(type) {
+function inputTypeLabel(type, item = null) {
+  if (isMultipleSelect(item)) {
+    return 'array';
+  }
   if (type === 'number') {
     return 'number';
   }
   return normalizeType(type);
+}
+
+function isMultipleSelect(item) {
+  return item?.editor === 'select' && item.multiple === true;
 }
 
 export function inferInputType(item) {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { CliError } from '../utils/errors.js';
 import { validateInputSchema, validateOutputSchema } from './schema.js';
 
-const RUNTIME_HEADER_FORMATS = new Set(['text', 'integer', 'number', 'boolean', 'array', 'object']);
+const RUNTIME_HEADER_FORMATS = new Set(['text', 'datetime', 'integer', 'number', 'boolean', 'array', 'object']);
 const SOURCE_SCAN_EXTENSIONS = new Set(['.py', '.js', '.cjs', '.mjs', '.go']);
 const NODE_SOURCE_SCAN_EXTENSIONS = new Set(['.js', '.cjs', '.mjs']);
 const PYTHON_SOURCE_SCAN_EXTENSIONS = new Set(['.py']);
@@ -1046,7 +1046,7 @@ function validateRuntimeHeaders(outputSchema, tableHeaders) {
       issues.push({
         severity: 'warn',
         code: 'runtime_header_unsupported_format',
-        message: `Runtime table header "${header.key}" uses unsupported format "${header.format}". Use text, integer, number, boolean, array, or object.`,
+        message: `Runtime table header "${header.key}" uses unsupported format "${header.format}". Use text, datetime, integer, number, boolean, array, or object.`,
       });
       continue;
     }
@@ -1060,8 +1060,9 @@ function validateRuntimeHeaders(outputSchema, tableHeaders) {
       continue;
     }
 
+    const headerType = normalizeRuntimeHeaderFormat(header.format);
     const outputType = outputSchemaTypeToHeaderFormat(outputColumns.get(header.key).type);
-    if (header.format && outputType && header.format !== outputType) {
+    if (headerType && outputType && headerType !== outputType) {
       issues.push({
         severity: 'warn',
         code: 'runtime_header_format_mismatch',
@@ -1081,6 +1082,13 @@ function outputSchemaTypeToHeaderFormat(type) {
     return 'number';
   }
   return RUNTIME_HEADER_FORMATS.has(type) ? type : null;
+}
+
+function normalizeRuntimeHeaderFormat(format) {
+  if (format === 'string' || format === 'datetime') {
+    return 'text';
+  }
+  return RUNTIME_HEADER_FORMATS.has(format) ? format : null;
 }
 
 function collectSourceFiles(rootDir, currentDir = rootDir, extensions = SOURCE_SCAN_EXTENSIONS) {
