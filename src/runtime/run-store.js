@@ -26,6 +26,7 @@ export class RunStore {
     this.startedAt = new Date();
     this.status = 'RUNNING';
     this.exitCode = null;
+    this.tableHeaderSetBeforeFirstResult = false;
   }
 
   init() {
@@ -53,6 +54,9 @@ export class RunStore {
     this.tableHeaders = headers;
     this.writeJson('table_headers.json', headers);
     this.writeJson('summary.json', this.summary());
+    if (this.resultCount === 0) {
+      this.tableHeaderSetBeforeFirstResult = true;
+    }
     return { code: 0, message: 'ok' };
   }
 
@@ -244,6 +248,8 @@ function outputValueMatchesType(value, type) {
       return typeof value === 'string';
     case 'integer':
       return Number.isInteger(value);
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
     case 'boolean':
       return typeof value === 'boolean';
     case 'array':
@@ -256,9 +262,6 @@ function outputValueMatchesType(value, type) {
 }
 
 function normalizeOutputType(type) {
-  if (type === 'number') {
-    return 'integer';
-  }
   return type;
 }
 

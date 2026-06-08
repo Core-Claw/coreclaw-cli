@@ -290,6 +290,9 @@ export function enforceTableHeaderGate(store, options) {
   if (summary.table_header_count < 1) {
     throw new CliError(`Worker did not call set_table_header. CoreClaw SDK docs describe runtime table headers as required before upload. Artifacts are preserved in ${store.runDir}.`);
   }
+  if (!store.tableHeaderSetBeforeFirstResult) {
+    throw new CliError(`Worker called set_table_header after the first push_data. CoreClaw SDK docs require set_table_header before the first push_data. Artifacts are preserved in ${store.runDir}.`);
+  }
 }
 
 export function enforceOutputSchemaMatch(store, options) {

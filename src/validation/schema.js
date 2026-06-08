@@ -1,7 +1,5 @@
-const SUPPORTED_TYPES = new Set(['string', 'integer', 'boolean', 'array', 'object']);
-const LEGACY_COMPAT_TYPES = new Map([
-  ['number', 'integer'],
-]);
+const SUPPORTED_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'array', 'object']);
+const LEGACY_COMPAT_TYPES = new Map([]);
 const SUPPORTED_EDITORS = new Set([
   'input',
   'textarea',
@@ -16,7 +14,7 @@ const SUPPORTED_EDITORS = new Set([
   'stringList',
 ]);
 const EDITOR_EXPECTED_TYPES = new Map([
-  ['number', ['integer']],
+  ['number', ['integer', 'number']],
   ['switch', ['boolean']],
   ['checkbox', ['array']],
   ['requestList', ['array']],
@@ -98,6 +96,8 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     issues.push(...validatePropertyParamList(property, prefix));
     issues.push(...validatePropertyDefault(property, prefix));
   }
+
+  issues.push(...validateMaxResultsNaming(schema));
 
   if (schema.b && !splitProperty) {
     issues.push(error(`input_schema.json b="${schema.b}" does not match any property name.`, 'input_schema_b_missing_property'));
@@ -472,4 +472,28 @@ function formatTypeList(types) {
     return `"${types[0]}"`;
   }
   return types.map((type) => `"${type}"`).join(' or ');
+}
+
+function validateMaxResultsNaming(schema) {
+  const issues = [];
+  if (!Array.isArray(schema.properties)) {
+    return issues;
+  }
+  const maxResultLikeNames = ['max_results', 'maxResults', 'max-results', 'max_result', 'maxResult', 'limit', 'count', 'total', 'size'];
+  for (const property of schema.properties) {
+    if (!property || typeof property.name !== 'string') {
+      continue;
+    }
+    const name = property.name;
+    const lower = name.toLowerCase();
+    if (maxResultLikeNames.includes(name) || lower.includes('max') && (lower.includes('result') || lower.includes('item') || lower.includes('record') || lower.includes('count') || lower.includes('limit'))) {
+      if (name !== 'max_results') {
+        issues.push(warn(
+          `input_schema property "${name}" looks like a max-results limiter. CoreClaw convention requires this field to be named "max_results" when present.`,
+          'input_max_results_naming_convention',
+        ));
+      }
+    }
+  }
+  return issues;
 }

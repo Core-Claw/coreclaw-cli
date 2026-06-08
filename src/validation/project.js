@@ -4,7 +4,7 @@ import path from 'node:path';
 import { CliError } from '../utils/errors.js';
 import { validateInputSchema, validateOutputSchema } from './schema.js';
 
-const RUNTIME_HEADER_FORMATS = new Set(['text', 'integer', 'boolean', 'array', 'object']);
+const RUNTIME_HEADER_FORMATS = new Set(['text', 'integer', 'number', 'boolean', 'array', 'object']);
 const SOURCE_SCAN_EXTENSIONS = new Set(['.py', '.js', '.cjs', '.mjs', '.go']);
 const NODE_SOURCE_SCAN_EXTENSIONS = new Set(['.js', '.cjs', '.mjs']);
 const PYTHON_SOURCE_SCAN_EXTENSIONS = new Set(['.py']);
@@ -904,7 +904,7 @@ function validateRuntimeHeaders(outputSchema, tableHeaders) {
       issues.push({
         severity: 'warn',
         code: 'runtime_header_unsupported_format',
-        message: `Runtime table header "${header.key}" uses unsupported format "${header.format}". Use text, integer, boolean, array, or object.`,
+        message: `Runtime table header "${header.key}" uses unsupported format "${header.format}". Use text, integer, number, boolean, array, or object.`,
       });
       continue;
     }
@@ -936,7 +936,7 @@ function outputSchemaTypeToHeaderFormat(type) {
     return 'text';
   }
   if (type === 'number') {
-    return 'integer';
+    return 'number';
   }
   return RUNTIME_HEADER_FORMATS.has(type) ? type : null;
 }

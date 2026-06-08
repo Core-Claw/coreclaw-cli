@@ -242,7 +242,7 @@ test('validates output schema', () => {
   assert.equal(issues.length, 0);
 });
 
-test('accepts legacy number type as compatibility warning', () => {
+test('accepts number type as a first-class type', () => {
   const inputIssues = validateInputSchema({
     b: 'items',
     properties: [
@@ -256,8 +256,8 @@ test('accepts legacy number type as compatibility warning', () => {
 
   assert.equal(inputIssues.some((issue) => issue.severity === 'error'), false);
   assert.equal(outputIssues.some((issue) => issue.severity === 'error'), false);
-  assert.equal(inputIssues.some((issue) => issue.code === 'input_legacy_type_alias' && issue.message.includes('legacy compatibility')), true);
-  assert.equal(outputIssues.some((issue) => issue.code === 'output_legacy_type_alias' && issue.message.includes('legacy compatibility alias')), true);
+  assert.equal(inputIssues.some((issue) => issue.code === 'input_legacy_type_alias'), false);
+  assert.equal(outputIssues.some((issue) => issue.code === 'output_legacy_type_alias'), false);
 });
 
 test('schema validation issues always include stable codes', () => {
@@ -285,12 +285,11 @@ test('schema validation issues always include stable codes', () => {
     'input_property_unsupported_type',
     'input_property_unsupported_editor',
     'input_required_missing_default',
-    'input_legacy_type_alias',
+    'input_max_results_naming_convention',
     'input_schema_b_missing_property',
   ]);
   assert.deepEqual(outputIssues.map((issue) => issue.code), [
     'output_column_invalid',
-    'output_legacy_type_alias',
     'output_column_duplicate_name',
     'output_column_unsupported_type',
   ]);
@@ -311,7 +310,7 @@ test('warns when input editor does not match the documented type', () => {
 
   assert.equal(issues.some((issue) => issue.severity === 'error'), false);
   assert.deepEqual(issues.filter((issue) => issue.code === 'input_editor_type_mismatch').map((issue) => issue.message), [
-    'input_schema.properties[1].editor "number" is documented for type "integer", but property type is "string".',
+    'input_schema.properties[1].editor "number" is documented for type "integer" or "number", but property type is "string".',
     'input_schema.properties[2].editor "switch" is documented for type "boolean", but property type is "string".',
     'input_schema.properties[3].editor "checkbox" is documented for type "array", but property type is "string".',
     'input_schema.properties[4].editor "requestList" is documented for type "array", but property type is "string".',
@@ -348,6 +347,7 @@ test('warns about selector option and default drift in input schema', () => {
     'input_default_type_mismatch',
     'input_default_param_missing',
     'input_default_list_item_invalid',
+    'input_max_results_naming_convention',
   ]);
 });
 

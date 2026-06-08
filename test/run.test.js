@@ -73,7 +73,7 @@ test('enforceTableHeaderGate rejects runs that never set runtime table headers w
 });
 
 test('enforceTableHeaderGate allows runs with runtime table headers', () => {
-  const store = makeStore(1, { tableHeaderCount: 1 });
+  const store = makeStore(1, { tableHeaderCount: 1, tableHeaderSetBeforeFirstResult: true });
 
   assert.doesNotThrow(() => enforceTableHeaderGate(store, { requireTableHeader: true }));
 });
@@ -1180,6 +1180,7 @@ function makeStore(resultCount, options = {}) {
     outputSchema: options.outputSchema ?? [],
     finished: null,
     files: {},
+    tableHeaderSetBeforeFirstResult: options.tableHeaderSetBeforeFirstResult ?? false,
     writeJson(fileName, value) {
       this.files[fileName] = value;
     },
