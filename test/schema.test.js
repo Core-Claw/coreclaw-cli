@@ -260,6 +260,21 @@ test('accepts number type as a first-class type', () => {
   assert.equal(outputIssues.some((issue) => issue.code === 'output_legacy_type_alias'), false);
 });
 
+test('infers input property type when official worker schemas omit type but provide editor or default', () => {
+  const issues = validateInputSchema({
+    b: 'keyword',
+    properties: [
+      { name: 'keyword', type: 'array', editor: 'stringList', default: [{ string: 'pizza' }] },
+      { name: 'base_location', default: 'New York, USA', required: true },
+      { name: 'lang', editor: 'select', default: 'en', options: [{ label: 'English', value: 'en' }] },
+      { name: 'max_results', editor: 'number', default: 10, minimum: 1 },
+    ],
+  });
+
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  assert.equal(issues.some((issue) => issue.code === 'input_property_unsupported_type'), false);
+});
+
 test('schema validation issues always include stable codes', () => {
   const inputIssues = validateInputSchema({
     b: 'missing',

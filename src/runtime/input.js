@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CliError } from '../utils/errors.js';
 import { readJson } from '../validation/project.js';
+import { inferInputType } from '../validation/schema.js';
 
 export function buildInput({ projectDir, inputPath, inlineJson, useDefaults = true, splitIndex = null }) {
   let input;
@@ -79,8 +80,9 @@ export function inputSchemaInputIssues(input, schema) {
       continue;
     }
 
-    if (!inputValueMatchesType(value, property.type)) {
-      issues.push(`field "${property.name}" must be ${inputTypeLabel(property.type)}`);
+    const propertyType = inferInputType(property);
+    if (!inputValueMatchesType(value, propertyType)) {
+      issues.push(`field "${property.name}" must be ${inputTypeLabel(propertyType)}`);
       continue;
     }
 
@@ -242,8 +244,9 @@ function requestListSourceParamIssues(itemName, item, param) {
   if (param.required === true && isEmptyInputValue(value)) {
     return [`required field "${itemName}.${name}" is missing or empty`];
   }
-  if (!inputValueMatchesType(value, param.type)) {
-    return [`field "${itemName}.${name}" must be ${inputTypeLabel(param.type)}`];
+  const paramType = inferInputType(param);
+  if (!inputValueMatchesType(value, paramType)) {
+    return [`field "${itemName}.${name}" must be ${inputTypeLabel(paramType)}`];
   }
   const boundIssues = inputNumericBoundIssues(`${itemName}.${name}`, param, value);
   if (boundIssues.length > 0) {
@@ -271,7 +274,7 @@ function inputNumericBoundIssues(name, schemaItem, value) {
 }
 
 function isNumericSchemaItem(schemaItem) {
-  const type = normalizeInputType(schemaItem?.type);
+  const type = normalizeInputType(inferInputType(schemaItem));
   return type === 'integer' || type === 'number' || schemaItem?.editor === 'number';
 }
 

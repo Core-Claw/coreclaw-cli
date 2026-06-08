@@ -18,7 +18,7 @@ const _logClient = new services.LogClient(
     grpc.credentials.createInsecure()
 );
 
-// Shared gRPC response handler.
+// 通用 gRPC 响应处理函数
 function handleGrpcResponse(err, response, resolve, reject) {
   if (err) {
     console.error('gRPC call failed:', err);
@@ -73,20 +73,22 @@ exports.parameter = {
 exports.result = {
   setTableHeader: function (headers) {
     return new Promise((resolve, reject) => {
-      // Create the TableHeader message.
+      // 创建 TableHeader 消息对象
       const tableHeaders = new messages.TableHeader();
 
       const headersList = headers.map(header => {
-        // Create a TableHeaderItem for each displayed column.
-        const headerMessage = new messages.TableHeaderItem();
-        headerMessage.setLabel(header.label);
-        headerMessage.setKey(header.key);
-        headerMessage.setFormat(header.format);
-        return headerMessage;
+        // 使用 TableHeaderItem 来创建实例
+        const headerMessage = new messages.TableHeaderItem(); // 修改为 TableHeaderItem
+        headerMessage.setLabel(header.label);   // 设置 label
+        headerMessage.setKey(header.key);       // 设置 key
+        headerMessage.setFormat(header.format); // 设置 format
+        return headerMessage;  // 返回这个消息对象
       });
 
+      // 设置 headers list
       tableHeaders.setHeadersList(headersList);
 
+      // 调用 gRPC 方法
       _resultClient.setTableHeader(tableHeaders, (err, response) => {
         handleGrpcResponse(err, response, resolve, reject);
       });
@@ -110,6 +112,21 @@ exports.result = {
         handleGrpcResponse(err, response, resolve, reject);
       });
     });
+  },
+
+  upsertData: function (obj, uniqueKey) {
+    if (!uniqueKey) {
+      return Promise.reject(new Error("uniqueKey is required"));
+    }
+    if (!Object.prototype.hasOwnProperty.call(obj, uniqueKey)) {
+      return Promise.reject(new Error(`uniqueKey [${uniqueKey}] not found in data`));
+    }
+
+    const upsertObj = Object.assign({}, obj, {
+      __coreclaw_upsert_key__: uniqueKey,
+      __coreclaw_upsert_value__: String(obj[uniqueKey])
+    });
+    return this.pushData(upsertObj);
   }
 };
 

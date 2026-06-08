@@ -157,7 +157,7 @@ test('auditCommand merges profile and command-line ignored issue codes', async (
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-audit-profile-merge-'));
   const profileFile = path.join(root, 'audit-profile.json');
   makeNodeWorker(path.join(root, 'worker-missing-output'), { outputSchema: false });
-  makeNodeWorker(path.join(root, 'worker-legacy-output'), { outputType: 'number' });
+  makeNodeWorker(path.join(root, 'worker-package-main'), { packageMain: 'src/index.js' });
   fs.writeFileSync(profileFile, `${JSON.stringify({
     fail_on_warn: true,
     ignore_issue_codes: ['missing_output_schema_legacy'],
@@ -165,14 +165,14 @@ test('auditCommand merges profile and command-line ignored issue codes', async (
 
   const report = await auditCommand(root, {
     auditProfile: profileFile,
-    ignoreIssueCodes: 'output_legacy_type_alias',
+    ignoreIssueCodes: 'node_package_main_not_main_js',
   });
 
   assert.equal(report.totals.pass, 2);
   assert.equal(report.totals.warn, 0);
   assert.deepEqual(
     report.options.ignored_issue_codes,
-    ['missing_output_schema_legacy', 'output_legacy_type_alias'],
+    ['missing_output_schema_legacy', 'node_package_main_not_main_js'],
   );
   assert.equal(report.totals.ignored_issue_count, 2);
 });
@@ -193,6 +193,7 @@ function makeNodeWorker(dir, options = {}) {
     ]));
   }
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    main: options.packageMain,
     dependencies: {
       '@grpc/grpc-js': '^1.14.3',
       'google-protobuf': '^4.0.2',

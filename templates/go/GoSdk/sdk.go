@@ -2,6 +2,8 @@ package coresdk
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 
 	grpc "google.golang.org/grpc"
@@ -51,8 +53,30 @@ func (_Result) SetTableHeader(ctx context.Context, headers []*TableHeaderItem) (
 	return _resultClient.SetTableHeader(ctx, &TableHeader{Headers: headers})
 }
 
-func (_Result) PushData(ctx context.Context, jsonString string) (*Response, error) {
-	return _resultClient.PushData(ctx, &Data{JsonString: jsonString})
+func (_Result) PushData(ctx context.Context, data map[string]any) (*Response, error) {
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	return _resultClient.PushData(ctx, &Data{JsonString: string(jsonBytes)})
+}
+
+func (_Result) UpsertData(ctx context.Context, data map[string]any, uniqueKey string) (*Response, error) {
+	if uniqueKey == "" {
+		return nil, fmt.Errorf("uniqueKey is required")
+	}
+	uniqueValue, ok := data[uniqueKey]
+	if !ok {
+		return nil, fmt.Errorf("uniqueKey [%s] not found in data", uniqueKey)
+	}
+
+	upsertData := make(map[string]any, len(data)+2)
+	for key, value := range data {
+		upsertData[key] = value
+	}
+	upsertData["__coreclaw_upsert_key__"] = uniqueKey
+	upsertData["__coreclaw_upsert_value__"] = fmt.Sprint(uniqueValue)
+	return Result.PushData(ctx, upsertData)
 }
 
 func (_Log) Debug(ctx context.Context, text string) (*Response, error) {

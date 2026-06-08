@@ -40,6 +40,17 @@ class CoreSDK:
             data = sdk_pb2.Data(jsonString=json_str)
             return self.stub.PushData(data)
 
+        def upsert_data(self, dict_obj, unique_key: str):
+            if not unique_key:
+                raise ValueError("unique_key is required")
+            if unique_key not in dict_obj:
+                raise ValueError(f"unique_key [{unique_key}] not found in data")
+
+            upsert_obj = dict(dict_obj)
+            upsert_obj["__coreclaw_upsert_key__"] = unique_key
+            upsert_obj["__coreclaw_upsert_value__"] = str(dict_obj[unique_key])
+            return self.push_data(upsert_obj)
+
     class _LogService:
         def __init__(self, channel):
             self.stub = sdk_pb2_grpc.LogStub(channel)

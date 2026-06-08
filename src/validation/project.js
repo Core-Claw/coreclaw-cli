@@ -106,6 +106,7 @@ const PYTHON_STDLIB_MODULES = new Set([
   'types',
   'typing',
   'unittest',
+  'unicodedata',
   'urllib',
   'uuid',
   'warnings',
@@ -269,7 +270,23 @@ export function validateProject(projectDir, options = {}) {
   const issues = [];
 
   for (const requiredFile of project.spec.required) {
-    if (!fs.existsSync(path.join(projectDir, requiredFile))) {
+    const requiredPath = path.join(projectDir, requiredFile);
+    if (fs.existsSync(requiredPath) && !hasExactPathCase(projectDir, requiredFile)) {
+      issues.push({
+        severity: 'error',
+        code: 'required_file_case_mismatch',
+        message: `Required file "${requiredFile}" exists with different casing. CoreClaw project structure and upload checks use exact file names, so rename it to "${requiredFile}".`,
+        docs: ['worker-definition/project-structure.md', 'deployment.md'],
+        evidence: {
+          expected_path: requiredFile,
+          observed_path: findExistingPathCase(projectDir, requiredFile) ?? '(unknown)',
+        },
+        remediation: `Rename the file or directory to exactly "${requiredFile}" before packaging or uploading.`,
+      });
+      continue;
+    }
+
+    if (!fs.existsSync(requiredPath)) {
       issues.push({
         severity: 'error',
         code: 'missing_required_file',
@@ -278,7 +295,20 @@ export function validateProject(projectDir, options = {}) {
     }
   }
 
-  if (!fs.existsSync(path.join(projectDir, 'README.md'))) {
+  const readmePath = path.join(projectDir, 'README.md');
+  if (fs.existsSync(readmePath) && !hasExactPathCase(projectDir, 'README.md')) {
+    issues.push({
+      severity: 'info',
+      code: 'readme_file_case_mismatch',
+      message: 'README.md exists with different casing. CoreClaw project structure documents the upload-ready usage notes file as README.md.',
+      docs: ['worker-definition/project-structure.md'],
+      evidence: {
+        expected_path: 'README.md',
+        observed_path: findExistingPathCase(projectDir, 'README.md') ?? '(unknown)',
+      },
+      remediation: 'Rename the file to exactly README.md so the local project matches the documented upload structure on case-sensitive runtimes.',
+    });
+  } else if (!fs.existsSync(readmePath)) {
     issues.push({
       severity: 'warn',
       code: 'missing_readme',
@@ -654,7 +684,7 @@ export function validateDeclaredPythonSourceDependencies(project) {
 
 export function scanPythonImportModules(projectDir) {
   const imports = [];
-  for (const filePath of collectSourceFiles(projectDir, projectDir, PYTHON_SOURCE_SCAN_EXTENSIONS)) {
+  for (const filePath of collectRuntimePythonSourceFiles(projectDir)) {
     const fileName = path.basename(filePath);
     if (fileName === 'sdk.py' || fileName === 'sdk_pb2.py' || fileName === 'sdk_pb2_grpc.py') {
       continue;
@@ -683,6 +713,57 @@ export function scanPythonImportModules(projectDir) {
   return imports;
 }
 
+function collectRuntimePythonSourceFiles(projectDir) {
+  const entry = path.join(projectDir, 'main.py');
+  if (!fs.existsSync(entry)) {
+    return collectSourceFiles(projectDir, projectDir, PYTHON_SOURCE_SCAN_EXTENSIONS);
+  }
+
+  const visited = new Set();
+  const pending = [entry];
+  while (pending.length > 0) {
+    const filePath = pending.pop();
+    const realPath = path.resolve(filePath);
+    if (visited.has(realPath) || !fs.existsSync(realPath)) {
+      continue;
+    }
+    visited.add(realPath);
+    const text = fs.readFileSync(realPath, 'utf8');
+    for (const moduleName of parsePythonImportModules(text)) {
+      const localFile = resolveLocalPythonModule(projectDir, moduleName);
+      if (localFile && !visited.has(path.resolve(localFile))) {
+        pending.push(localFile);
+      }
+    }
+  }
+  return [...visited].sort((a, b) => a.localeCompare(b));
+}
+
+function parsePythonImportModules(text) {
+  const modules = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+    const importMatch = line.match(/^import\s+(.+)$/);
+    if (importMatch) {
+      for (const modulePart of importMatch[1].split(',')) {
+        const moduleName = modulePart.trim().split(/\s+as\s+|\s+/)[0];
+        if (moduleName) {
+          modules.push(moduleName);
+        }
+      }
+      continue;
+    }
+    const fromMatch = line.match(/^from\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+import\s+/);
+    if (fromMatch) {
+      modules.push(fromMatch[1]);
+    }
+  }
+  return modules;
+}
+
 function addPythonImport(imports, file, moduleName) {
   if (!moduleName || moduleName.startsWith('.')) {
     return;
@@ -704,8 +785,31 @@ function pythonPackageNameFromModule(projectDir, moduleName) {
 }
 
 function isLocalPythonModule(projectDir, moduleName) {
-  return fs.existsSync(path.join(projectDir, `${moduleName}.py`))
-    || fs.existsSync(path.join(projectDir, moduleName, '__init__.py'));
+  return Boolean(resolveLocalPythonModule(projectDir, moduleName));
+}
+
+function resolveLocalPythonModule(projectDir, moduleName) {
+  const parts = moduleName.split('.').filter(Boolean);
+  if (parts.length === 0) {
+    return null;
+  }
+  const directModule = path.join(projectDir, `${parts.join(path.sep)}.py`);
+  if (fs.existsSync(directModule)) {
+    return directModule;
+  }
+  const packageInit = path.join(projectDir, ...parts, '__init__.py');
+  if (fs.existsSync(packageInit)) {
+    return packageInit;
+  }
+  const topLevelModule = path.join(projectDir, `${parts[0]}.py`);
+  if (fs.existsSync(topLevelModule)) {
+    return topLevelModule;
+  }
+  const topLevelPackage = path.join(projectDir, parts[0], '__init__.py');
+  if (fs.existsSync(topLevelPackage)) {
+    return topLevelPackage;
+  }
+  return null;
 }
 
 function normalizePythonPackageName(name) {
@@ -798,6 +902,44 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+export function hasExactPathCase(rootDir, relativePath) {
+  let currentDir = rootDir;
+  for (const segment of relativePath.split(/[\\/]+/).filter(Boolean)) {
+    let entries;
+    try {
+      entries = fs.readdirSync(currentDir);
+    } catch {
+      return false;
+    }
+    if (!entries.includes(segment)) {
+      return false;
+    }
+    currentDir = path.join(currentDir, segment);
+  }
+  return true;
+}
+
+function findExistingPathCase(rootDir, relativePath) {
+  let currentDir = rootDir;
+  const observed = [];
+  for (const segment of relativePath.split(/[\\/]+/).filter(Boolean)) {
+    let entries;
+    try {
+      entries = fs.readdirSync(currentDir);
+    } catch {
+      return observed.length ? observed.join('/') : null;
+    }
+    const exact = entries.find((entry) => entry === segment);
+    const caseInsensitive = exact ?? entries.find((entry) => entry.toLowerCase() === segment.toLowerCase());
+    if (!caseInsensitive) {
+      return observed.length ? observed.join('/') : null;
+    }
+    observed.push(caseInsensitive);
+    currentDir = path.join(currentDir, caseInsensitive);
+  }
+  return observed.join('/');
+}
+
 export function readJson(filePath) {
   try {
     return JSON.parse(stripJsonBom(fs.readFileSync(filePath, 'utf8')));
@@ -815,7 +957,7 @@ export function formatIssues(issues) {
 }
 
 export function formatIssue(issue) {
-  const marker = issue.severity === 'error' ? 'ERROR' : 'WARN';
+  const marker = issue.severity === 'error' ? 'ERROR' : issue.severity === 'info' ? 'INFO' : 'WARN';
   const lines = [`[${marker}] ${issue.message}`];
   const details = formatIssueDetails(issue);
   if (details.length > 0) {

@@ -64,11 +64,12 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
       }
     }
 
-    if (!SUPPORTED_TYPES.has(property.type)) {
-      if (LEGACY_COMPAT_TYPES.has(property.type)) {
-        issues.push(warn(`${prefix}.type "${property.type}" is accepted for legacy compatibility, but CoreClaw documents "${LEGACY_COMPAT_TYPES.get(property.type)}"; prefer "${LEGACY_COMPAT_TYPES.get(property.type)}" for whole-number fields.`, 'input_legacy_type_alias'));
+    const propertyType = inferInputType(property);
+    if (!SUPPORTED_TYPES.has(propertyType)) {
+      if (LEGACY_COMPAT_TYPES.has(propertyType)) {
+        issues.push(warn(`${prefix}.type "${propertyType}" is accepted for legacy compatibility, but CoreClaw documents "${LEGACY_COMPAT_TYPES.get(propertyType)}"; prefer "${LEGACY_COMPAT_TYPES.get(propertyType)}" for whole-number fields.`, 'input_legacy_type_alias'));
       } else {
-        issues.push(error(`${prefix}.type "${property.type}" is not supported. Use ${[...SUPPORTED_TYPES].join(', ')}.`, 'input_property_unsupported_type'));
+        issues.push(error(`${prefix}.type "${propertyType}" is not supported. Use ${[...SUPPORTED_TYPES].join(', ')}.`, 'input_property_unsupported_type'));
       }
     }
 
@@ -78,7 +79,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
     if (property.editor && EDITOR_EXPECTED_TYPES.has(property.editor)) {
       const expectedTypes = EDITOR_EXPECTED_TYPES.get(property.editor);
-      const normalizedType = normalizeType(property.type);
+      const normalizedType = normalizeType(propertyType);
       if (!expectedTypes.includes(normalizedType)) {
         issues.push(warn(
           `${prefix}.editor "${property.editor}" is documented for type ${formatTypeList(expectedTypes)}, but property type is "${normalizedType}".`,
@@ -101,7 +102,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
   if (schema.b && !splitProperty) {
     issues.push(error(`input_schema.json b="${schema.b}" does not match any property name.`, 'input_schema_b_missing_property'));
-  } else if (splitProperty && splitProperty.type !== 'array') {
+  } else if (splitProperty && inferInputType(splitProperty) !== 'array') {
     issues.push(error(`input_schema.json b="${schema.b}" must point to a property with type "array".`, 'input_schema_b_not_array'));
   }
 
@@ -194,9 +195,10 @@ function validatePropertyParamList(property, prefix) {
       names.add(name);
     }
 
-    if (param.type && !SUPPORTED_TYPES.has(param.type)) {
-      if (!LEGACY_COMPAT_TYPES.has(param.type)) {
-        issues.push(warn(`${paramPrefix}.type "${param.type}" is not documented by CoreClaw. Use ${[...SUPPORTED_TYPES].join(', ')}.`, 'input_param_unsupported_type'));
+    const paramType = inferInputType(param);
+    if (param.type && !SUPPORTED_TYPES.has(paramType)) {
+      if (!LEGACY_COMPAT_TYPES.has(paramType)) {
+        issues.push(warn(`${paramPrefix}.type "${paramType}" is not documented by CoreClaw. Use ${[...SUPPORTED_TYPES].join(', ')}.`, 'input_param_unsupported_type'));
       }
     }
 
@@ -206,7 +208,7 @@ function validatePropertyParamList(property, prefix) {
 
     if (param.editor && EDITOR_EXPECTED_TYPES.has(param.editor)) {
       const expectedTypes = EDITOR_EXPECTED_TYPES.get(param.editor);
-      const normalizedType = normalizeType(param.type);
+      const normalizedType = normalizeType(paramType);
       if (!expectedTypes.includes(normalizedType)) {
         issues.push(warn(
           `${paramPrefix}.editor "${param.editor}" is documented for type ${formatTypeList(expectedTypes)}, but param type is "${normalizedType}".`,
@@ -253,8 +255,9 @@ function validatePropertyDefault(property, prefix) {
   }
 
   const issues = [];
-  const expectedType = inputTypeLabel(property.type);
-  if (!valueMatchesInputType(property.default, property.type)) {
+  const propertyType = inferInputType(property);
+  const expectedType = inputTypeLabel(propertyType);
+  if (!valueMatchesInputType(property.default, propertyType)) {
     issues.push(warn(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}.`, 'input_default_type_mismatch'));
     return issues;
   }
@@ -327,8 +330,9 @@ function validateParamDefault(item, param, prefix) {
   }
 
   const issues = [];
-  if (!valueMatchesInputType(item[name], param.type)) {
-    issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(param.type)}", but got ${valueType(item[name])}.`, 'input_default_param_type_mismatch'));
+  const paramType = inferInputType(param);
+  if (!valueMatchesInputType(item[name], paramType)) {
+    issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(paramType)}", but got ${valueType(item[name])}.`, 'input_default_param_type_mismatch'));
   }
   issues.push(...defaultNumericBoundIssues(item[name], param, `${prefix}.${name}`, 'input_default_param_bound_mismatch'));
   if (SELECTOR_EDITORS.has(param.editor) && Array.isArray(param.options) && param.options.length > 0) {
@@ -420,11 +424,34 @@ function inputTypeLabel(type) {
   return normalizeType(type);
 }
 
+export function inferInputType(item) {
+  if (!item || typeof item !== 'object') {
+    return undefined;
+  }
+  if (item.type !== undefined) {
+    return item.type;
+  }
+  if (item.editor && EDITOR_EXPECTED_TYPES.has(item.editor)) {
+    return EDITOR_EXPECTED_TYPES.get(item.editor)[0];
+  }
+  if (Object.prototype.hasOwnProperty.call(item, 'default')) {
+    const type = valueType(item.default);
+    return type === 'integer' ? 'integer' : type;
+  }
+  if (item.editor === 'input' || item.editor === 'textarea' || item.editor === 'datepicker') {
+    return 'string';
+  }
+  if (item.options && SELECTOR_EDITORS.has(item.editor)) {
+    return 'string';
+  }
+  return undefined;
+}
+
 function isNumericSchemaItem(item) {
   if (!item || typeof item !== 'object') {
     return false;
   }
-  const type = inputTypeLabel(item.type);
+  const type = inputTypeLabel(inferInputType(item));
   return type === 'integer' || type === 'number' || item.editor === 'number';
 }
 

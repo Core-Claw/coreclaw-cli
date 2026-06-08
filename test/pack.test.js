@@ -18,6 +18,8 @@ test('collectFiles excludes cloud-irrelevant local artifacts', () => {
   fs.writeFileSync(path.join(dir, 'node_modules', 'dep.js'), '');
   fs.mkdirSync(path.join(dir, 'tests'));
   fs.writeFileSync(path.join(dir, 'tests', 'worker.test.js'), '');
+  fs.mkdirSync(path.join(dir, 'test'));
+  fs.writeFileSync(path.join(dir, 'test', 'worker_test.py'), '');
   fs.mkdirSync(path.join(dir, '__tests__'));
   fs.writeFileSync(path.join(dir, '__tests__', 'worker.test.js'), '');
   fs.mkdirSync(path.join(dir, 'coverage'));

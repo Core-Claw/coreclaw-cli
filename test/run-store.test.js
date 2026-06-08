@@ -60,7 +60,7 @@ test('validateOutputSchemaRow reports output field type drift', () => {
   assert.equal(issues[0].field, 'title');
   assert.match(issues[0].message, /expected string/);
   assert.match(issues[1].message, /expected integer/);
-  assert.match(issues[5].message, /expected integer/);
+  assert.match(issues[5].message, /expected number/);
 });
 
 test('RunStore writes upload manifests for staged preflight runs', () => {

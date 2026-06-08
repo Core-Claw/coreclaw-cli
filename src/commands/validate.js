@@ -27,6 +27,7 @@ export async function validateCommand(projectPath = '.', options = {}) {
 function validationReport(projectDir, result) {
   const errors = result.issues.filter((issue) => issue.severity === 'error');
   const warnings = result.issues.filter((issue) => issue.severity === 'warn');
+  const infos = result.issues.filter((issue) => issue.severity === 'info');
   return {
     ok: result.ok,
     project_dir: projectDir,
@@ -35,6 +36,7 @@ function validationReport(projectDir, result) {
     issue_count: result.issues.length,
     error_count: errors.length,
     warning_count: warnings.length,
+    info_count: infos.length,
     issues: result.issues,
   };
 }

@@ -36,6 +36,7 @@ CLI 必须持续对齐 `E:\worker\knowledge-files\docs\developer-guide` 中的 C
 - `docs/commands.md` 由 CLI help 同源元数据生成。
 - `coreclaw init` 会根据 `input_schema.json` 默认值写入 `input.example.json`，方便首次本地冒烟测试；不需要该本地文件时可用 `--no-input-example`。
 - `coreclaw examples` 可列出内置示例 Worker 及各平台契约推荐的 `verify` 命令。
+- 内置 Python、Node.js、Go SDK 文件与官方 Demo 仓库同步，并让 `coreclaw init` 的依赖与示例代码匹配新版 SDK。
 
 可在本仓库解决的缺口：
 

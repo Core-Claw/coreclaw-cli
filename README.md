@@ -439,14 +439,46 @@ await coresdk.result.setTableHeader([
 
 ### Push Result Rows
 
+Python:
+
+```python
+CoreSDK.Result.push_data({
+    "url": "https://example.com",
+    "status": "ok",
+})
+CoreSDK.Result.upsert_data({
+    "url": "https://example.com",
+    "status": "ok",
+}, "url")
+```
+
+Node.js:
+
 ```javascript
 await coresdk.result.pushData({
   url: 'https://example.com',
   status: 'ok',
 })
+await coresdk.result.upsertData({
+  url: 'https://example.com',
+  status: 'ok',
+}, 'url')
 ```
 
-Rows should be JSON objects whose keys match `output_schema.json` and the runtime table header keys.
+Go:
+
+```go
+_, err := coresdk.Result.PushData(ctx, map[string]any{
+	"url": "https://example.com",
+	"status": "ok",
+})
+_, err = coresdk.Result.UpsertData(ctx, map[string]any{
+	"url": "https://example.com",
+	"status": "ok",
+}, "url")
+```
+
+Rows should be JSON objects whose keys match `output_schema.json` and the runtime table header keys. The upsert helpers use the provided unique key to mark rows for replacement by the platform/runtime.
 
 ## Command Reference
 

@@ -16,6 +16,7 @@ const EXCLUDED_DIRS = new Set([
   'coverage',
   'dist',
   'build',
+  'test',
   'tests',
 ]);
 
