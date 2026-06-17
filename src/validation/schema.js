@@ -105,7 +105,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
     // Catch string-only editors (input/textarea/datepicker) used with non-string types.
     if (property.editor && STRING_ONLY_EDITORS.has(property.editor) && normalizeType(propertyType) !== 'string') {
-      const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch');
+      const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch' && i.message.startsWith(prefix));
       if (!alreadyReported) {
         issues.push(error(
           `${prefix}.editor "${property.editor}" only renders string values, but type is "${normalizeType(propertyType)}". The platform will reject this as "Invalid custom parameters" (code 4000). Use editor "stringList" or "requestList" for array inputs.`,
@@ -118,7 +118,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     const isArrayWithNonArrayEditor = normalizeType(propertyType) === 'array' && property.editor && !ARRAY_ONLY_EDITORS.has(property.editor);
     const isSelectMultiple = property.editor === 'select' && property.multiple === true;
     if (isArrayWithNonArrayEditor && !isSelectMultiple) {
-      const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch');
+      const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch' && i.message.startsWith(prefix));
       if (!alreadyReported) {
         issues.push(error(
           `${prefix} has type "array" but editor "${property.editor}" does not support array rendering. The platform will reject this as "Invalid custom parameters" (code 4000). Use "stringList", "requestList", "requestListSource", or "checkbox" for array fields.`,

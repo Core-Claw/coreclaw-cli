@@ -843,3 +843,21 @@ test('accepts boolean required field values', () => {
   assert.equal(issues.filter((i) => i.code === 'input_property_required_invalid').length, 0);
 });
 
+test('reports editor-type mismatch for each property independently', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'a', type: 'array', editor: 'textarea' },
+      { name: 'b', type: 'integer', editor: 'input' },
+      { name: 'c', type: 'array', editor: 'input' },
+    ],
+  });
+
+  const errors = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error');
+  assert.ok(errors.length >= 3, 'each property with editor-type mismatch must get its own error');
+  assert.ok(errors.some((e) => e.message.includes('properties[1]')), 'textarea+array error for property 1');
+  assert.ok(errors.some((e) => e.message.includes('properties[2]')), 'input+integer error for property 2');
+  assert.ok(errors.some((e) => e.message.includes('properties[3]')), 'array+input error for property 3');
+});
+
