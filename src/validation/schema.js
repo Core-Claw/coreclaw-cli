@@ -325,7 +325,7 @@ function validatePropertyDefault(property, prefix) {
   const propertyType = inferInputType(property);
   const expectedType = inputTypeLabel(propertyType, property);
   if (!valueMatchesInputType(property.default, propertyType, property)) {
-    issues.push(warn(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}.`, 'input_default_type_mismatch'));
+    issues.push(error(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}. The platform will reject type-mismatched defaults (code 4000).`, 'input_default_type_mismatch'));
     return issues;
   }
 
@@ -399,7 +399,7 @@ function validateParamDefault(item, param, prefix) {
   const issues = [];
   const paramType = inferInputType(param);
   if (!valueMatchesInputType(item[name], paramType, param)) {
-    issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(paramType, param)}", but got ${valueType(item[name])}.`, 'input_default_param_type_mismatch'));
+    issues.push(error(`${prefix}.${name} should match declared type "${inputTypeLabel(paramType, param)}", but got ${valueType(item[name])}. The platform will reject type-mismatched defaults (code 4000).`, 'input_default_param_type_mismatch'));
   }
   issues.push(...defaultNumericBoundIssues(item[name], param, `${prefix}.${name}`, 'input_default_param_bound_mismatch'));
   if (SELECTOR_EDITORS.has(param.editor) && Array.isArray(param.options) && param.options.length > 0) {

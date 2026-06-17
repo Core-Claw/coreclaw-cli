@@ -660,3 +660,101 @@ test('output_schema accepts all documented column types', () => {
 
   assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
 });
+
+test('output_schema requires each column to have a type field', () => {
+  const issues = validateOutputSchema([
+    { name: 'title', type: 'string', description: 'Title' },
+    { name: 'missing_type', description: 'No type' },
+    { name: 'null_type', type: null, description: 'Null type' },
+  ]);
+
+  const typeErrors = issues.filter((i) => i.code === 'output_column_missing_type' && i.severity === 'error');
+  assert.equal(typeErrors.length, 2, 'both missing and null type should produce errors');
+  assert.match(typeErrors[0].message, /output_schema\[1\]/);
+  assert.match(typeErrors[1].message, /output_schema\[2\]/);
+});
+
+test('output_schema rejects unsupported column types', () => {
+  const issues = validateOutputSchema([
+    { name: 'bad', type: 'float' },
+  ]);
+
+  const errors = issues.filter((i) => i.code === 'output_column_unsupported_type' && i.severity === 'error');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /float/);
+});
+
+test('output_schema accepts all documented column types', () => {
+  const issues = validateOutputSchema([
+    { name: 'a', type: 'string' },
+    { name: 'b', type: 'number' },
+    { name: 'c', type: 'integer' },
+    { name: 'd', type: 'boolean' },
+    { name: 'e', type: 'array' },
+    { name: 'f', type: 'object' },
+  ]);
+
+  assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
+});
+
+test('catches default value type mismatch as error', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'limit', type: 'integer', editor: 'number', default: 'not-a-number' },
+      { name: 'enabled', type: 'boolean', editor: 'switch', default: 'yes' },
+    ],
+  });
+
+  const typeMismatchErrors = issues.filter((i) => i.code === 'input_default_type_mismatch' && i.severity === 'error');
+  assert.ok(typeMismatchErrors.length >= 2, 'default type mismatches must be errors');
+  assert.match(typeMismatchErrors[0].message, /code 4000/);
+});
+
+test('accepts type-matched defaults without error', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'limit', type: 'integer', editor: 'number', default: 10 },
+      { name: 'enabled', type: 'boolean', editor: 'switch', default: true },
+      { name: 'keyword', type: 'string', editor: 'input', default: 'test' },
+    ],
+  });
+
+  assert.equal(issues.filter((i) => i.code === 'input_default_type_mismatch').length, 0);
+});
+
+test('rejects Chinese characters in property name as error', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: '?????', type: 'string', editor: 'input' },
+    ],
+  });
+
+  const nameErrors = issues.filter((i) => i.code === 'input_property_name_invalid' && i.severity === 'error');
+  assert.ok(nameErrors.length >= 1, 'Chinese characters in name must be caught');
+  assert.match(nameErrors[0].message, /unsupported characters/);
+});
+
+test('catches requestListSource param default type mismatch as error', () => {
+  const issues = validateInputSchema({
+    b: 'sources',
+    properties: [
+      { name: 'sources', type: 'array', editor: 'requestListSource', default: [{ url: 'https://example.com', limit: 'not-a-number' }],
+        param_list: [
+          { param: 'url', type: 'string', required: true },
+          { param: 'limit', type: 'integer' },
+        ],
+      },
+    ],
+  });
+
+  const paramTypeErrors = issues.filter((i) => i.code === 'input_default_param_type_mismatch' && i.severity === 'error');
+  assert.ok(paramTypeErrors.length >= 1, 'param default type mismatch must be error');
+  assert.match(paramTypeErrors[0].message, /code 4000/);
+});
+
