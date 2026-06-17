@@ -1,4 +1,4 @@
-const SUPPORTED_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'array', 'object']);
+﻿const SUPPORTED_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'array', 'object']);
 const LEGACY_COMPAT_TYPES = new Map([]);
 const SUPPORTED_EDITORS = new Set([
   'input',
@@ -22,6 +22,8 @@ const EDITOR_EXPECTED_TYPES = new Map([
   ['stringList', ['array']],
 ]);
 const SELECTOR_EDITORS = new Set(['select', 'radio', 'checkbox']);
+const STRING_ONLY_EDITORS = new Set(['input', 'textarea', 'datepicker']);
+const ARRAY_ONLY_EDITORS = new Set(['requestList', 'requestListSource', 'stringList', 'checkbox']);
 
 export function validateInputSchema(schema, filePath = 'input_schema.json') {
   const issues = [];
@@ -37,6 +39,14 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
   if (!Array.isArray(schema.properties)) {
     issues.push(error('input_schema.json must define "properties" as an array.', 'input_schema_properties_invalid'));
     return issues;
+  }
+
+  // Warn about unknown root keys that the platform will ignore or reject.
+  const knownRootKeys = new Set(['description', 'b', 'properties']);
+  for (const key of Object.keys(schema)) {
+    if (!knownRootKeys.has(key)) {
+      issues.push(warn(`input_schema.json has unknown root key "${key}". Only "description", "b", and "properties" are documented.`, 'input_schema_unknown_root_key'));
+    }
   }
 
   const names = new Set();
@@ -81,8 +91,30 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
       const expectedTypes = EDITOR_EXPECTED_TYPES.get(property.editor);
       const normalizedType = normalizeType(propertyType);
       if (!expectedTypes.includes(normalizedType)) {
-        issues.push(warn(
-          `${prefix}.editor "${property.editor}" is documented for type ${formatTypeList(expectedTypes)}, but property type is "${normalizedType}".`,
+        issues.push(error(
+          `${prefix}.editor "${property.editor}" requires type ${formatTypeList(expectedTypes)}, but property type is "${normalizedType}". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.`,
+          'input_editor_type_mismatch',
+        ));
+      }
+    }
+
+    // Catch string-only editors (input/textarea/datepicker) used with non-string types.
+    if (property.editor && STRING_ONLY_EDITORS.has(property.editor) && normalizeType(propertyType) !== 'string') {
+      const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch');
+      if (!alreadyReported) {
+        issues.push(error(
+          `${prefix}.editor "${property.editor}" only renders string values, but type is "${normalizeType(propertyType)}". The platform will reject this as "Invalid custom parameters" (code 4000). Use editor "stringList" or "requestList" for array inputs.`,
+          'input_editor_type_mismatch',
+        ));
+      }
+    }
+
+    // Catch array-type properties without an array-compatible editor.
+    if (normalizeType(propertyType) === 'array' && property.editor && !ARRAY_ONLY_EDITORS.has(property.editor)) {
+      const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch');
+      if (!alreadyReported) {
+        issues.push(error(
+          `${prefix} has type "array" but editor "${property.editor}" does not support array rendering. The platform will reject this as "Invalid custom parameters" (code 4000). Use "stringList", "requestList", "requestListSource", or "checkbox" for array fields.`,
           'input_editor_type_mismatch',
         ));
       }
@@ -135,7 +167,9 @@ export function validateOutputSchema(schema, filePath = 'output_schema.json') {
       names.add(column.name);
     }
 
-    if (!SUPPORTED_TYPES.has(column.type)) {
+    if (column.type === undefined || column.type === null) {
+      issues.push(error(`${prefix}.type is required. Supported values: ${[...SUPPORTED_TYPES].join(', ')}.`, 'output_column_missing_type'));
+    } else if (!SUPPORTED_TYPES.has(column.type)) {
       if (LEGACY_COMPAT_TYPES.has(column.type)) {
         issues.push(warn(`${prefix}.type "${column.type}" is accepted as a legacy compatibility alias for "${LEGACY_COMPAT_TYPES.get(column.type)}"; prefer documented CoreClaw type "${LEGACY_COMPAT_TYPES.get(column.type)}".`, 'output_legacy_type_alias'));
       } else {
@@ -326,10 +360,10 @@ function validateRequestListDefault(property, prefix) {
   }
   return property.default.flatMap((item, index) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      return [warn(`${prefix}.default[${index}] should be an object with a url field.`, 'input_default_list_item_invalid')];
+      return [error(`${prefix}.default[${index}] must be an object with a url field. The platform requires {url: string} items for requestList defaults.`, 'input_default_list_item_invalid')];
     }
     if (typeof item.url !== 'string' || item.url.length === 0) {
-      return [warn(`${prefix}.default[${index}].url should be a non-empty string.`, 'input_default_list_item_invalid')];
+      return [error(`${prefix}.default[${index}].url must be a non-empty string.`, 'input_default_list_item_invalid')];
     }
     return [];
   });
@@ -388,10 +422,10 @@ function validateStringListDefault(property, prefix) {
   }
   return property.default.flatMap((item, index) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      return [warn(`${prefix}.default[${index}] should be an object with a string field.`, 'input_default_list_item_invalid')];
+      return [error(`${prefix}.default[${index}] must be an object with a "string" field. The platform requires {string: string} items for stringList defaults.`, 'input_default_list_item_invalid')];
     }
     if (typeof item.string !== 'string' || item.string.length === 0) {
-      return [warn(`${prefix}.default[${index}].string should be a non-empty string.`, 'input_default_list_item_invalid')];
+      return [error(`${prefix}.default[${index}].string must be a non-empty string.`, 'input_default_list_item_invalid')];
     }
     return [];
   });

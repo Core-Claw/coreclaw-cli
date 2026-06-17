@@ -150,7 +150,7 @@ function makeNodeWorker(dir) {
   fs.writeFileSync(path.join(dir, 'input_schema.json'), JSON.stringify({
     b: 'urls',
     properties: [
-      { name: 'urls', type: 'array', editor: 'stringList', default: ['https://example.com'] },
+      { name: 'urls', type: 'array', editor: 'stringList', default: [{ string: 'https://example.com' }] },
     ],
   }));
   fs.writeFileSync(path.join(dir, 'output_schema.json'), JSON.stringify([
