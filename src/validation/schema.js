@@ -375,7 +375,7 @@ function validateRequestListSourceDefault(property, prefix) {
   }
   return property.default.flatMap((item, index) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      return [warn(`${prefix}.default[${index}] should be an object.`, 'input_default_list_item_invalid')];
+      return [error(`${prefix}.default[${index}] must be an object. The platform requires object items for requestListSource defaults.`, 'input_default_list_item_invalid')];
     }
     if (!Array.isArray(property.param_list)) {
       return [];
@@ -391,7 +391,7 @@ function validateParamDefault(item, param, prefix) {
   }
   if (!Object.prototype.hasOwnProperty.call(item, name)) {
     if (param.required === true) {
-      return [warn(`${prefix}.${name} is required by param_list but missing from the default item.`, 'input_default_param_missing')];
+      return [error(`${prefix}.${name} is required by param_list but missing from the default item. The platform will reject defaults missing required params (code 4000).`, 'input_default_param_missing')];
     }
     return [];
   }

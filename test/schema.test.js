@@ -661,42 +661,6 @@ test('output_schema accepts all documented column types', () => {
   assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
 });
 
-test('output_schema requires each column to have a type field', () => {
-  const issues = validateOutputSchema([
-    { name: 'title', type: 'string', description: 'Title' },
-    { name: 'missing_type', description: 'No type' },
-    { name: 'null_type', type: null, description: 'Null type' },
-  ]);
-
-  const typeErrors = issues.filter((i) => i.code === 'output_column_missing_type' && i.severity === 'error');
-  assert.equal(typeErrors.length, 2, 'both missing and null type should produce errors');
-  assert.match(typeErrors[0].message, /output_schema\[1\]/);
-  assert.match(typeErrors[1].message, /output_schema\[2\]/);
-});
-
-test('output_schema rejects unsupported column types', () => {
-  const issues = validateOutputSchema([
-    { name: 'bad', type: 'float' },
-  ]);
-
-  const errors = issues.filter((i) => i.code === 'output_column_unsupported_type' && i.severity === 'error');
-  assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /float/);
-});
-
-test('output_schema accepts all documented column types', () => {
-  const issues = validateOutputSchema([
-    { name: 'a', type: 'string' },
-    { name: 'b', type: 'number' },
-    { name: 'c', type: 'integer' },
-    { name: 'd', type: 'boolean' },
-    { name: 'e', type: 'array' },
-    { name: 'f', type: 'object' },
-  ]);
-
-  assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
-});
-
 test('catches default value type mismatch as error', () => {
   const issues = validateInputSchema({
     b: 'items',
@@ -756,5 +720,59 @@ test('catches requestListSource param default type mismatch as error', () => {
   const paramTypeErrors = issues.filter((i) => i.code === 'input_default_param_type_mismatch' && i.severity === 'error');
   assert.ok(paramTypeErrors.length >= 1, 'param default type mismatch must be error');
   assert.match(paramTypeErrors[0].message, /code 4000/);
+});
+
+test('catches requestListSource non-object default items as error', () => {
+  const issues = validateInputSchema({
+    b: 'sources',
+    properties: [
+      { name: 'sources', type: 'array', editor: 'requestListSource', default: ['https://example.com', 123] },
+    ],
+  });
+
+  const errors = issues.filter((i) => i.code === 'input_default_list_item_invalid' && i.severity === 'error');
+  assert.ok(errors.length >= 2, 'non-object requestListSource defaults must be errors');
+});
+
+test('catches requestListSource missing required param in default as error', () => {
+  const issues = validateInputSchema({
+    b: 'sources',
+    properties: [
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        default: [{ num_of_posts: '10' }],
+        param_list: [
+          { param: 'url', title: 'URL', required: true },
+          { param: 'num_of_posts', title: 'Max Posts' },
+        ],
+      },
+    ],
+  });
+
+  const errors = issues.filter((i) => i.code === 'input_default_param_missing' && i.severity === 'error');
+  assert.ok(errors.length >= 1, 'missing required param in default must be error');
+  assert.match(errors[0].message, /code 4000/);
+});
+
+test('accepts valid requestListSource defaults without error', () => {
+  const issues = validateInputSchema({
+    b: 'sources',
+    properties: [
+      {
+        name: 'sources',
+        type: 'array',
+        editor: 'requestListSource',
+        default: [{ url: 'https://example.com', num_of_posts: '10' }],
+        param_list: [
+          { param: 'url', title: 'URL', required: true },
+          { param: 'num_of_posts', title: 'Max Posts' },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
 });
 
