@@ -1,4 +1,4 @@
-node_modules/
+﻿node_modules/
 tmp/
 dist/
 coverage/
@@ -8,3 +8,7 @@ coverage/
 
 test/
 examples/*/.coreclaw/
+skills/
+docs/
+tools/
+CONTRIBUTING.md
