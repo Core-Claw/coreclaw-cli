@@ -110,7 +110,9 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     }
 
     // Catch array-type properties without an array-compatible editor.
-    if (normalizeType(propertyType) === 'array' && property.editor && !ARRAY_ONLY_EDITORS.has(property.editor)) {
+    const isArrayWithNonArrayEditor = normalizeType(propertyType) === 'array' && property.editor && !ARRAY_ONLY_EDITORS.has(property.editor);
+    const isSelectMultiple = property.editor === 'select' && property.multiple === true;
+    if (isArrayWithNonArrayEditor && !isSelectMultiple) {
       const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch');
       if (!alreadyReported) {
         issues.push(error(
@@ -302,6 +304,9 @@ function validateSelectMultiple(item, prefix, invalidCode, editorCode) {
   }
   if (item.multiple === true && item.editor !== 'select') {
     issues.push(warn(`${prefix}.multiple is documented for editor "select", but editor is "${item.editor ?? 'undefined'}".`, editorCode));
+  }
+  if (item.multiple === true && item.editor === 'select' && item.type !== undefined && item.type !== 'array') {
+    issues.push(error(`${prefix} has "multiple": true but type is "${item.type}". When select allows multiple values, the type must be "array" so the platform receives a list. The platform will reject type mismatches (code 4000).`, 'input_select_multiple_type_mismatch'));
   }
   return issues;
 }

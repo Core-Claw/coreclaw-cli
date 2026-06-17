@@ -373,7 +373,7 @@ test('validates documented select multiple and section metadata', () => {
       { name: 'items', type: 'array', editor: 'stringList' },
       {
         name: 'languages',
-        type: 'string',
+        type: 'array',
         editor: 'select',
         multiple: true,
         sectionCaption: 'Locale',
@@ -770,6 +770,44 @@ test('accepts valid requestListSource defaults without error', () => {
           { param: 'num_of_posts', title: 'Max Posts' },
         ],
       },
+    ],
+  });
+
+  assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
+});
+
+test('catches select multiple with non-array type as error', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'languages', type: 'string', editor: 'select', multiple: true, options: [{ label: 'English', value: 'en' }] },
+    ],
+  });
+
+  const errors = issues.filter((i) => i.code === 'input_select_multiple_type_mismatch' && i.severity === 'error');
+  assert.ok(errors.length >= 1, 'select multiple with string type must be error');
+  assert.match(errors[0].message, /type must be "array"/);
+});
+
+test('accepts select multiple with array type', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'languages', type: 'array', editor: 'select', multiple: true, default: ['en'], options: [{ label: 'English', value: 'en' }] },
+    ],
+  });
+
+  assert.equal(issues.filter((i) => i.code === 'input_select_multiple_type_mismatch').length, 0);
+});
+
+test('accepts select without multiple and string type', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'language', type: 'string', editor: 'select', default: 'en', options: [{ label: 'English', value: 'en' }] },
     ],
   });
 
