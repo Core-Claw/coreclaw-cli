@@ -74,6 +74,11 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
       }
     }
 
+    // Validate required field is boolean when present
+    if (property.required !== undefined && typeof property.required !== 'boolean') {
+      issues.push(error(`${prefix}.required must be a boolean (true/false), but got ${typeof property.required}. The platform ignores non-boolean required values, so the field will be treated as optional.`, 'input_property_required_invalid'));
+    }
+
     const propertyType = inferInputType(property);
     if (!SUPPORTED_TYPES.has(propertyType)) {
       if (LEGACY_COMPAT_TYPES.has(propertyType)) {

@@ -814,3 +814,32 @@ test('accepts select without multiple and string type', () => {
   assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
 });
 
+test('catches non-boolean required field as error', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'keyword', type: 'string', editor: 'input', required: 'yes' },
+      { name: 'limit', type: 'integer', editor: 'number', required: 1 },
+    ],
+  });
+
+  const errors = issues.filter((i) => i.code === 'input_property_required_invalid' && i.severity === 'error');
+  assert.equal(errors.length, 2, 'both string and number required values must be errors');
+  assert.match(errors[0].message, /must be a boolean/);
+});
+
+test('accepts boolean required field values', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'keyword', type: 'string', editor: 'input', required: true },
+      { name: 'optional', type: 'string', editor: 'input', required: false },
+      { name: 'default', type: 'string', editor: 'input' },
+    ],
+  });
+
+  assert.equal(issues.filter((i) => i.code === 'input_property_required_invalid').length, 0);
+});
+

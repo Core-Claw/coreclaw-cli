@@ -521,16 +521,16 @@ function validatePackageCompatibility(project) {
   const issues = [];
   if (manifest.main !== undefined && manifest.main !== 'main.js') {
     issues.push({
-      severity: 'warn',
+      severity: 'error',
       code: 'node_package_main_not_main_js',
-      message: `package.json main is "${manifest.main}", but CoreClaw Node workers document "main.js" as the entry file.`,
+      message: `package.json main is "${manifest.main}", but CoreClaw Node workers require "main.js" as the entry file. The platform will fail to start the worker if main does not point to main.js.`,
     });
   }
   if (manifest.type !== undefined && manifest.type !== 'commonjs') {
     issues.push({
-      severity: 'warn',
+      severity: 'error',
       code: 'node_package_type_not_commonjs',
-      message: `package.json type is "${manifest.type}", but CoreClaw's Node SDK uses CommonJS require() and documents "type": "commonjs".`,
+      message: `package.json type is "${manifest.type}", but CoreClaw's Node SDK uses CommonJS require(). Setting "module" or other non-commonjs types will cause the SDK to fail at runtime. Use "type": "commonjs" or omit the field.`,
     });
   }
   return issues;

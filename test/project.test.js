@@ -119,7 +119,7 @@ test('validateProject rejects Node SDK runtime dependencies declared only as dev
   assert.equal(result.issues.filter((issue) => issue.code === 'missing_runtime_dependency').length, 2);
 });
 
-test('validateProject warns about Node package fields that diverge from CoreClaw docs', () => {
+test('validateProject errors on Node package fields that break CoreClaw SDK', () => {
   const dir = makeNodeProject();
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
     main: 'src/index.js',
@@ -132,9 +132,9 @@ test('validateProject warns about Node package fields that diverge from CoreClaw
 
   const result = validateProject(dir);
 
-  assert.equal(result.ok, true);
-  assert.equal(result.issues.some((issue) => issue.code === 'node_package_main_not_main_js'), true);
-  assert.equal(result.issues.some((issue) => issue.code === 'node_package_type_not_commonjs'), true);
+  assert.equal(result.ok, false);
+  assert.equal(result.issues.some((issue) => issue.code === 'node_package_main_not_main_js' && issue.severity === 'error'), true);
+  assert.equal(result.issues.some((issue) => issue.code === 'node_package_type_not_commonjs' && issue.severity === 'error'), true);
 });
 
 test('validateProject warns when Node source imports undeclared runtime dependencies', () => {
