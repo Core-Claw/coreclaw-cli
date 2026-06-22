@@ -4,6 +4,68 @@ Last Updated: 2026-06-17
 
 ## Resolved Issues
 
+### 2026-06-22: SOCKS proxy implicit dependency not detected
+
+**Issue**: Python workers using `requests` with `socks5://` proxy URLs fail in cloud with "Missing dependencies for SOCKS support" because `PySocks` is not declared. CLI had no detection for this cross-module implicit dependency.
+
+**Documentation**: proxy-support.md — all examples use socks5:// protocol.
+
+**Fix**:
+- Added `validateSocksProxyDependencies()` for Python: detects requests + socks5:// without PySocks → error
+- Added `validateNodeSocksProxyDependencies()` for Node.js: detects socks-proxy-agent usage → error
+- Added R130, R131 to contract checklist
+
+**Tests**: 3 new test cases (Python socks missing, Python socks declared, Node socks-agent missing)
+
+**Status**: ✅ Resolved
+
+### 2026-06-22: HTTP workers without proxy only warned
+
+**Issue**: Official docs (builds-and-runs.md) state "Network is sandboxed — HTTP request scripts must use the built-in SOCKS5 proxy". Without proxy, all outbound requests fail in cloud. CLI only warned.
+
+**Fix**: Upgraded `http_proxy_env_not_used` from `warn` to `error`. Updated message to emphasize cloud failure.
+
+**Tests**: Updated existing proxy test assertions
+
+**Status**: ✅ Resolved
+
+### 2026-06-22: Browser framework dependencies not checked
+
+**Issue**: Workers using Playwright/Selenium/Puppeteer/DrissionPage without declaring the framework package would fail at import time in cloud. CLI only checked browser endpoint env vars.
+
+**Fix**: Added `validateBrowserFrameworkDependencies()` with Python and Node.js framework pattern matching. Supports -core variants. Added R140, R141 to contract checklist.
+
+**Status**: ✅ Resolved
+
+### 2026-06-22: Protobuf version not pinned warning missing
+
+**Issue**: Python-example.md states "protobuf version must match the one used to generate sdk_pb2.py". Unpinned versions can cause deserialization errors.
+
+**Fix**: Added `validateProtobufVersionMatch()` — warns when protobuf is not pinned with ==. Added R160.
+
+**Tests**: 2 new test cases
+
+**Status**: ✅ Resolved
+
+### 2026-06-22: Hardcoded User-Agent not detected
+
+**Issue**: browser-fingerprinting.md says platform manages fingerprints. Hardcoded User-Agent may trigger anti-bot detection.
+
+**Fix**: Added `validateHardcodedUserAgent()` — warns on User-Agent strings. Added R170.
+
+**Tests**: 1 new test case
+
+**Status**: ✅ Resolved
+
+### 2026-06-22: Static push_data key analysis missing
+
+**Issue**: output-schema.md requires push_data keys to match output_schema.json. CLI only checked at runtime.
+
+**Fix**: Added `validateStaticPushDataKeys()` — bidirectional comparison of set_table_header keys with output_schema.json names. Added R180, R181.
+
+**Status**: ✅ Resolved
+
+
 ### 2026-06-17: Editor-type mismatches only warned, not errored
 
 **Issue**: Platform rejects workers with code 4000 "Invalid custom parameters" when editor type doesn't match property type (e.g., textarea+array, input+integer), but CLI only produced `warn` severity.

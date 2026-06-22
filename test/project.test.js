@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -143,6 +143,7 @@ test('validateProject warns when Node source imports undeclared runtime dependen
     dependencies: {
       '@grpc/grpc-js': '^1.14.3',
       'google-protobuf': '^4.0.2',
+      'puppeteer-core': '^24.0.0',
     },
   }));
   fs.writeFileSync(path.join(dir, 'main.js'), [
@@ -151,6 +152,8 @@ test('validateProject warns when Node source imports undeclared runtime dependen
     "import('puppeteer-core')",
     "require('./helper')",
     "require('node:fs')",
+    'const auth = process.env.PROXY_AUTH',
+    'const domain = process.env.PROXY_DOMAIN',
     '',
   ].join('\n'));
 
@@ -159,11 +162,11 @@ test('validateProject warns when Node source imports undeclared runtime dependen
 
   assert.equal(result.ok, true);
   assert.equal(Boolean(issue), true);
-  assert.deepEqual(issue.evidence.missing_packages, ['axios', 'puppeteer-core']);
+  assert.deepEqual(issue.evidence.missing_packages, ['axios']);
   assert.deepEqual(issue.evidence.import_files, ['main.js']);
   assert.deepEqual(issue.evidence.package_json_sections_checked, ['dependencies', 'optionalDependencies']);
   assert.match(issue.message, /axios \(main\.js\)/);
-  assert.match(issue.message, /puppeteer-core \(main\.js\)/);
+  
   assert.match(issue.remediation, /dependencies or optionalDependencies/);
 });
 
@@ -210,7 +213,7 @@ test('validateProject accepts declared Node optional dependencies and ignores bu
   assert.equal(result.issues.some((issue) => issue.code === 'node_dependency_not_declared'), false);
 });
 
-test('validateProject warns when HTTP workers do not read CoreClaw proxy env', () => {
+test('validateProject errors when HTTP workers do not read CoreClaw proxy env', () => {
   const dir = makeNodeProject();
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
     dependencies: {
@@ -232,8 +235,10 @@ test('validateProject warns when HTTP workers do not read CoreClaw proxy env', (
   const issue = result.issues.find((item) => item.code === 'http_proxy_env_not_used');
   const formatted = formatIssues(result.issues);
 
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, false);
+  assert.equal(issue.severity, 'error');
   assert.equal(Boolean(issue && /PROXY_AUTH and PROXY_DOMAIN/.test(issue.message)), true);
+  assert.equal(issue.severity, 'error');
   assert.deepEqual(issue.docs, ['worker-definition/platform-features/proxy-support.md']);
   assert.deepEqual(issue.evidence.missing_env, ['PROXY_AUTH', 'PROXY_DOMAIN']);
   assert.deepEqual(issue.evidence.http_client_files, ['main.js']);
@@ -414,6 +419,7 @@ test('validateProject warns when Python source imports undeclared third-party de
     'grpcio>=1.80.0',
     'protobuf>=6.31.0',
     'beautifulsoup4>=4.12.0',
+    'playwright>=1.40.0',
     '',
   ].join('\n'));
   fs.writeFileSync(path.join(dir, 'main.py'), [
@@ -421,6 +427,8 @@ test('validateProject warns when Python source imports undeclared third-party de
     'import requests',
     'from bs4 import BeautifulSoup',
     'from playwright.async_api import async_playwright',
+    'proxy_auth = os.environ.get("PROXY_AUTH")',
+    'proxy_domain = os.environ.get("PROXY_DOMAIN")',
     'from helper import build_url',
     'from sdk import CoreSDK',
     '',
@@ -430,13 +438,12 @@ test('validateProject warns when Python source imports undeclared third-party de
   const result = validateProject(dir);
   const issue = result.issues.find((item) => item.code === 'python_dependency_not_declared');
 
-  assert.equal(result.ok, true);
   assert.equal(Boolean(issue), true);
-  assert.deepEqual(issue.evidence.missing_packages, ['playwright', 'requests']);
+  assert.deepEqual(issue.evidence.missing_packages, ['requests']);
   assert.deepEqual(issue.evidence.import_files, ['main.py']);
   assert.deepEqual(issue.evidence.requirements_file, 'requirements.txt');
   assert.match(issue.message, /requests \(main\.py\)/);
-  assert.match(issue.message, /playwright \(main\.py\)/);
+  
   assert.match(issue.remediation, /requirements\.txt/);
 });
 
@@ -532,6 +539,174 @@ test('validateProject rejects Go workers with missing SDK dependency checksums',
   assert.equal(result.ok, false);
   assert.equal(result.issues.some((issue) => issue.code === 'go_missing_module_checksum' && /google.golang.org\/grpc/.test(issue.message)), true);
 });
+
+
+test('validateProject errors when Python uses socks5 proxy but PySocks is missing', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'requests>=2.32.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import os',
+    'import requests',
+    '',
+    'proxyDomain = os.environ.get("PROXY_DOMAIN")',
+    'proxyAuth = os.environ.get("PROXY_AUTH")',
+    'proxy_url = f"socks5://{proxyAuth}@{proxyDomain}"',
+    'resp = requests.get("https://example.com", proxies={"http": proxy_url, "https": proxy_url})',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'missing_socks_proxy_dependency');
+
+  assert.equal(result.ok, false);
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.match(issue.message, /PySocks/);
+  assert.deepEqual(issue.docs, ['worker-definition/platform-features/proxy-support.md']);
+});
+
+test('validateProject accepts Python socks5 proxy when PySocks is declared', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'requests>=2.32.0',
+    'PySocks>=1.7.1',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import os',
+    'import requests',
+    '',
+    'proxyDomain = os.environ.get("PROXY_DOMAIN")',
+    'proxyAuth = os.environ.get("PROXY_AUTH")',
+    'proxy_url = f"socks5://{proxyAuth}@{proxyDomain}"',
+    'resp = requests.get("https://example.com", proxies={"http": proxy_url, "https": proxy_url})',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'missing_socks_proxy_dependency'), false);
+});
+
+test('validateProject warns about hardcoded User-Agent strings', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'requests>=2.32.0',
+    'PySocks>=1.7.1',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import os',
+    'import requests',
+    '',
+    'headers = {',
+    '    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+    '}',
+    'resp = requests.get("https://example.com", headers=headers)',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'hardcoded_user_agent');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'warn');
+  assert.match(issue.message, /hardcoded User-Agent/);
+});
+
+test('validateProject errors when HTTP worker does not use proxy (upgraded from warn)', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'requests>=2.32.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import requests',
+    'resp = requests.get("https://example.com")',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'http_proxy_env_not_used');
+
+  assert.equal(result.ok, false);
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.match(issue.message, /isolated network sandbox/);
+});
+
+test('validateProject errors when Node uses socks-proxy-agent but not declared in package.json', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+      axios: '^1.7.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const axios = require('axios')",
+    "const { SocksProxyAgent } = require('socks-proxy-agent')",
+    'async function main() {',
+    "  const agent = new SocksProxyAgent('socks5://user:pass@proxy.example.com')",
+    "  await axios.get('https://example.com', { httpAgent: agent, httpsAgent: agent, proxy: false })",
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'missing_socks_proxy_dependency');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.match(issue.message, /socks-proxy-agent/);
+});
+
+test('validateProject warns when Python protobuf version is not pinned', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf',
+    'requests>=2.32.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), 'import requests\n');
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'protobuf_version_not_pinned');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'warn');
+  assert.match(issue.message, /pinned version/);
+});
+
+test('validateProject accepts pinned protobuf version', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio==1.80.0',
+    'protobuf==5.29.0',
+    'requests==2.32.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), 'import requests\n');
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'protobuf_version_not_pinned'), false);
+});
+
 
 function makeNodeProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-node-'));

@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+﻿import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
 import { CliError } from '../utils/errors.js';
@@ -219,6 +219,27 @@ const PYTHON_DEPENDENCY_DOCS = [
   'worker-definition/examples/python-example.md',
   'builds-and-runs.md',
 ];
+const BROWSER_FRAMEWORK_DEPENDENCY_DOCS = [
+  'worker-definition/browser-automation/overview.md',
+  'worker-definition/platform-features/browser-fingerprinting.md',
+];
+const PROTOBUF_VERSION_DOCS = [
+  'worker-definition/sdk-modules.md',
+  'worker-definition/examples/python-example.md',
+];
+const BROWSER_FRAMEWORK_PATTERNS = {
+  python: [
+    { pattern: /\b(?:from\s+playwright|import\s+playwright)\b/, packages: ['playwright'] },
+    { pattern: /\b(?:from\s+selenium|import\s+selenium)\b/, packages: ['selenium'] },
+    { pattern: /\b(?:from\s+DrissionPage|import\s+DrissionPage)\b/, packages: ['DrissionPage'] },
+    { pattern: /\bimport\s+pyppeteer\b/, packages: ['pyppeteer'] },
+  ],
+  node: [
+    { pattern: /\brequire\(['""]playwright(?:-core)?['""]\)|from\s+['""]playwright(?:-core)?['""]/, packages: ['playwright', 'playwright-core'] },
+    { pattern: /\brequire\(['""]puppeteer(?:-core)?['""]\)|from\s+['""]puppeteer(?:-core)?['""]/, packages: ['puppeteer', 'puppeteer-core'] },
+    { pattern: /\brequire\(['""]selenium-webdriver['""]\)|from\s+['""]selenium-webdriver['""]/, packages: ['selenium-webdriver'] },
+  ],
+};
 
 export const LANGUAGE_SPECS = {
   python: {
@@ -345,6 +366,13 @@ export function validateProject(projectDir, options = {}) {
     issues.push(...validateRuntimeHeaders(readJson(outputPath), options.tableHeaders));
   }
 
+  issues.push(...validateStaticPushDataKeys(project));
+  issues.push(...validateSocksProxyDependencies(project));
+  issues.push(...validateNodeSocksProxyDependencies(project));
+  issues.push(...validateHardcodedUserAgent(project));
+  issues.push(...validateBrowserFrameworkDependencies(project));
+  issues.push(...validateProtobufVersionMatch(project));
+
   return {
     ...project,
     issues,
@@ -448,9 +476,9 @@ export function validateProxyUsageContract(project) {
     scan.readsProxyDomain ? null : 'PROXY_DOMAIN',
   ].filter(Boolean);
   return [{
-    severity: 'warn',
+    severity: 'error',
     code: 'http_proxy_env_not_used',
-    message: `Project appears to make direct HTTP requests (${scan.evidence.join(', ')}) but does not read ${missing.join(' and ')}. CoreClaw runs HTTP request workers in an isolated network sandbox; build a SOCKS5 proxy URL from PROXY_AUTH and PROXY_DOMAIN or use a hosted browser endpoint for browser automation.`,
+    message: `Project makes direct HTTP requests (${scan.evidence.join(', ')}) but does not read ${missing.join(' and ')}. CoreClaw runs workers in an isolated network sandbox; without SOCKS5 proxy configuration, all outbound HTTP requests will fail in cloud runs.`,
     docs: [PROXY_SUPPORT_DOC],
     evidence: {
       http_client_files: scan.evidence,
@@ -940,6 +968,72 @@ function findExistingPathCase(rootDir, relativePath) {
   return observed.join('/');
 }
 
+export function validateStaticPushDataKeys(project) {
+  const outputPath = path.join(project.projectDir, 'output_schema.json');
+  if (!fs.existsSync(outputPath)) {
+    return [];
+  }
+
+  const outputSchema = readJson(outputPath);
+  if (!Array.isArray(outputSchema)) {
+    return [];
+  }
+
+  const outputNames = new Set(
+    outputSchema
+      .filter((col) => typeof col?.name === 'string')
+      .map((col) => col.name),
+  );
+
+  const sourceFiles = collectSourceFiles(project.projectDir);
+  const headerKeys = new Set();
+
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const headerCallMatch = text.match(/(?:set_table_header|setTableHeader)\s*\(([\s\S]*?)\)/);
+    if (!headerCallMatch) {
+      continue;
+    }
+
+    const headerBlock = headerCallMatch[1];
+    const keyMatches = headerBlock.matchAll(/["']key["']\s*:\s*["']([^"']+)["']/g);
+    for (const m of keyMatches) {
+      headerKeys.add(m[1]);
+    }
+  }
+
+  if (headerKeys.size === 0) {
+    return [];
+  }
+
+  const issues = [];
+
+  for (const key of headerKeys) {
+    if (!outputNames.has(key)) {
+      issues.push({
+        severity: 'warn',
+        code: 'runtime_header_not_in_output_schema_static',
+        message: `set_table_header defines key "${key}" which is not declared in output_schema.json. Data pushed with this key may not display correctly.`,
+        docs: ['worker-definition/output-schema.md', 'worker-definition/sdk-modules.md'],
+        remediation: `Add this field to output_schema.json or remove it from set_table_header.`,
+      });
+    }
+  }
+
+  for (const name of outputNames) {
+    if (!headerKeys.has(name)) {
+      issues.push({
+        severity: 'warn',
+        code: 'output_schema_field_not_in_header',
+        message: `output_schema.json declares column "${name}" but set_table_header does not define a matching key. This column will be empty in results.`,
+        docs: ['worker-definition/output-schema.md'],
+        remediation: `Add a header entry with key "${name}" to set_table_header, or remove the column from output_schema.json.`,
+      });
+    }
+  }
+
+  return issues;
+}
 export function readJson(filePath) {
   try {
     return JSON.parse(stripJsonBom(fs.readFileSync(filePath, 'utf8')));
@@ -1116,6 +1210,121 @@ function collectSourceFiles(rootDir, currentDir = rootDir, extensions = SOURCE_S
   return files;
 }
 
+export function validateSocksProxyDependencies(project) {
+  if (project.language !== 'python') return [];
+  const sourceFiles = collectSourceFiles(project.projectDir, project.projectDir, PYTHON_SOURCE_SCAN_EXTENSIONS);
+  let usesSocksUrl = false;
+  let usesRequests = false;
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    if (!usesSocksUrl && /socks[45]:\/\//.test(text)) usesSocksUrl = true;
+    if (!usesRequests && HTTP_CLIENT_PATTERNS.python.some((p) => p.test(text))) usesRequests = true;
+    if (usesSocksUrl && usesRequests) break;
+  }
+  if (!usesSocksUrl || !usesRequests) return [];
+  const depFile = path.join(project.projectDir, 'requirements.txt');
+  if (!fs.existsSync(depFile)) {
+    return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project builds SOCKS5 proxy URLs and uses requests, but requirements.txt does not exist. requests requires PySocks for SOCKS proxy support; cloud runs will fail with "Missing dependencies for SOCKS support".', docs: [PROXY_SUPPORT_DOC], remediation: 'Create requirements.txt with "PySocks>=1.7.1" or "requests[socks]".' }];
+  }
+  const declared = readDeclaredDependencies('python', depFile);
+  if (declared.has('pysocks') || declared.has('requests[socks]')) return [];
+  return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project builds SOCKS5 proxy URLs and uses requests, but requirements.txt does not declare "PySocks" or "requests[socks]". requests requires PySocks for SOCKS proxy support; cloud runs will fail with "Missing dependencies for SOCKS support".', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "PySocks>=1.7.1" to requirements.txt, or replace "requests" with "requests[socks]".' }];
+}
+
+export function validateNodeSocksProxyDependencies(project) {
+  if (project.language !== 'node') return [];
+  const sourceFiles = collectSourceFiles(project.projectDir, project.projectDir, NODE_SOURCE_SCAN_EXTENSIONS);
+  let usesSocksUrl = false;
+  let usesSocksAgent = false;
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    if (!usesSocksUrl && /socks[45]:\/\//.test(text)) usesSocksUrl = true;
+    if (!usesSocksAgent && /socks-proxy-agent/.test(text)) usesSocksAgent = true;
+    if (usesSocksUrl && usesSocksAgent) break;
+  }
+  if (!usesSocksUrl && !usesSocksAgent) return [];
+  if (usesSocksAgent) {
+    const packagePath = path.join(project.projectDir, 'package.json');
+    if (!fs.existsSync(packagePath)) {
+      return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project uses socks-proxy-agent, but package.json does not exist. Cloud runs will fail with a module not found error.', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "socks-proxy-agent" to package.json dependencies.' }];
+    }
+    const declared = readDeclaredDependencies('node', packagePath);
+    if (!declared.has('socks-proxy-agent')) {
+      return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project uses SOCKS5 proxy with socks-proxy-agent, but package.json does not declare "socks-proxy-agent". Cloud runs will fail with a module not found error.', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "socks-proxy-agent" to package.json dependencies.' }];
+    }
+  }
+  return [];
+}
+
+export function validateHardcodedUserAgent(project) {
+  const sourceFiles = collectSourceFiles(project.projectDir);
+  const evidence = [];
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    if (/[\"']User-Agent[\"']\s*:\s*[\"'].*(?:Chrome|Mozilla|Firefox)/i.test(text)) {
+      evidence.push(relativePath);
+      if (evidence.length >= 5) break;
+    }
+  }
+  if (evidence.length === 0) return [];
+  return [{ severity: 'warn', code: 'hardcoded_user_agent', message: `Project contains hardcoded User-Agent strings (${evidence.join(', ')}). The platform provides browser fingerprinting; hardcoded User-Agent headers may trigger anti-bot detection.`, docs: ['worker-definition/platform-features/browser-fingerprinting.md'], evidence: { files: evidence }, remediation: 'Remove hardcoded User-Agent headers and rely on the platform browser fingerprint environment instead.' }];
+}
+
+export function validateBrowserFrameworkDependencies(project) {
+  const sourceFiles = collectSourceFiles(project.projectDir);
+  const frameworks = BROWSER_FRAMEWORK_PATTERNS[project.language] ?? [];
+  if (frameworks.length === 0) return [];
+  const detected = new Map();
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    for (const { pattern, packages } of frameworks) {
+      if (pattern.test(text)) {
+        for (const pkg of packages) {
+          if (!detected.has(pkg)) detected.set(pkg, relativePath);
+        }
+      }
+    }
+  }
+  if (detected.size === 0) return [];
+  const depFile = project.spec.dependencyFile;
+  const depPath = path.join(project.projectDir, depFile);
+  if (!fs.existsSync(depPath)) {
+    return [...detected.entries()].map(([pkg, file]) => ({ severity: 'error', code: 'missing_browser_framework_dependency', message: `Project uses ${pkg} (${file}) but ${depFile} does not exist. Cloud runs will fail with a module not found error.`, docs: BROWSER_FRAMEWORK_DEPENDENCY_DOCS, remediation: `Create ${depFile} and add "${pkg}" as a dependency.` }));
+  }
+  const declared = readDeclaredDependencies(project.language, depPath);
+  const issues = [];
+  for (const [pkg, file] of detected) {
+    const allVariants = frameworks.filter((f) => f.packages.includes(pkg)).flatMap((f) => f.packages);
+    const hasAny = allVariants.some((v) => declared.has(v));
+    if (!hasAny) {
+      issues.push({ severity: 'error', code: 'missing_browser_framework_dependency', message: `Project uses ${pkg} (${file}) but ${depFile} does not declare "${pkg}". Cloud runs will fail with ModuleNotFoundError.`, docs: BROWSER_FRAMEWORK_DEPENDENCY_DOCS, remediation: `Add "${pkg}" to ${depFile}.` });
+    }
+  }
+  return issues;
+}
+
+export function validateProtobufVersionMatch(project) {
+  if (project.language !== 'python') return [];
+  const depPath = path.join(project.projectDir, 'requirements.txt');
+  if (!fs.existsSync(depPath)) return [];
+  const text = fs.readFileSync(depPath, 'utf8');
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const match = line.match(/^(protobuf(?:\[.*\])?)\s*(?:(==|>=|<=|~=|!=)\s*(.+))?$/i);
+    if (match) {
+      const operator = match[2];
+      if (operator === '==' || operator === '~=') return [];
+      return [{ severity: 'warn', code: 'protobuf_version_not_pinned', message: 'requirements.txt declares protobuf without a pinned version (e.g., protobuf==5.29.0). The protobuf version must match the one used to generate sdk_pb2.py; unpinned versions may cause deserialization errors in cloud runs.', docs: PROTOBUF_VERSION_DOCS, remediation: 'Check the version comment in sdk_pb2.py and pin protobuf to that exact version in requirements.txt (e.g., protobuf==5.29.0).' }];
+    }
+  }
+  return [];
+}
+
 function stripJsonBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
+
+

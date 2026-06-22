@@ -113,6 +113,35 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 
 - [x] R120: CDP-based CAPTCHA handling via Captchas.automaticSolver — documentation reference
 
+## Priority 7: Cross-module dependency detection
+
+### proxy-support.md (implicit dependencies)
+
+- [x] R130: Python workers using requests + socks5:// must declare PySocks — **error**
+- [x] R131: Node.js workers using socks-proxy-agent must declare it in package.json — **error**
+
+### browser-automation/ (framework dependencies)
+
+- [x] R140: Python workers using Playwright/Selenium/DrissionPage must declare framework in requirements.txt — **error**
+- [x] R141: Node.js workers using Playwright/Puppeteer/Selenium must declare framework in package.json — **error**
+
+### builds-and-runs.md (network sandbox)
+
+- [x] R150: HTTP workers not reading PROXY_AUTH/PROXY_DOMAIN — **error** (upgraded from warn; cloud network is sandboxed)
+
+### sdk-modules.md (version pinning)
+
+- [x] R160: Python workers should pin protobuf version in requirements.txt — **warn**
+
+### browser-fingerprinting.md (best practices)
+
+- [x] R170: Hardcoded User-Agent strings detected — **warn**
+
+### output-schema.md (static header analysis)
+
+- [x] R180: set_table_header key not in output_schema.json — **warn** (static)
+- [x] R181: output_schema.json column not in set_table_header — **warn** (static)
+
 ## Audit History
 
 ### 2026-06-17: Sixth audit round
