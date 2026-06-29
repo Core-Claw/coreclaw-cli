@@ -130,8 +130,8 @@ const PYTHON_IMPORT_PACKAGE_MAP = new Map([
 ]);
 const HTTP_CLIENT_PATTERNS = {
   python: [
-    /\bimport\s+requests\b/,
-    /\bfrom\s+requests\b/,
+    /^\s*import\s+requests\b/m,
+    /^\s*from\s+requests\b/m,
     /\brequests\.(get|post|put|patch|delete|head|request|Session)\b/,
     /\bimport\s+httpx\b/,
     /\bfrom\s+httpx\b/,
@@ -1326,5 +1326,4 @@ export function validateProtobufVersionMatch(project) {
 function stripJsonBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
-
 

@@ -595,6 +595,39 @@ test('validateProject accepts Python socks5 proxy when PySocks is declared', () 
   assert.equal(result.issues.some((issue) => issue.code === 'missing_socks_proxy_dependency'), false);
 });
 
+test('validateProject does not require PySocks for curl_cffi requests aliases', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'curl_cffi==0.13.0',
+    'requests>=2.32.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'proxy_utils.py'), [
+    'import os',
+    '',
+    'def get_runtime_proxies():',
+    '    proxy_domain = os.environ.get("PROXY_DOMAIN")',
+    '    proxy_auth = os.environ.get("PROXY_AUTH")',
+    '    proxy_url = f"socks5://{proxy_auth}@{proxy_domain}"',
+    '    return {"http": proxy_url, "https": proxy_url}',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'from curl_cffi import requests as curl_requests',
+    'from proxy_utils import get_runtime_proxies',
+    '',
+    'session = curl_requests.Session()',
+    'resp = session.get("https://example.com", proxies=get_runtime_proxies())',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'missing_socks_proxy_dependency'), false);
+});
+
 test('validateProject warns about hardcoded User-Agent strings', () => {
   const dir = makePythonProject();
   fs.writeFileSync(path.join(dir, 'requirements.txt'), [

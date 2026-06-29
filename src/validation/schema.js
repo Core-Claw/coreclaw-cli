@@ -476,6 +476,9 @@ function defaultNumericBoundIssues(value, item, prefix, code) {
 }
 
 function valueMatchesInputType(value, type, item = null) {
+  if (value === null && isOptionalNullableNumericDefault(item)) {
+    return true;
+  }
   if (isMultipleSelect(item)) {
     return Array.isArray(value);
   }
@@ -495,6 +498,14 @@ function valueMatchesInputType(value, type, item = null) {
     default:
       return true;
   }
+}
+
+function isOptionalNullableNumericDefault(item) {
+  if (!item || typeof item !== 'object' || item.required === true) {
+    return false;
+  }
+  const type = inputTypeLabel(inferInputType(item), item);
+  return type === 'integer' || type === 'number';
 }
 
 function inputTypeLabel(type, item = null) {

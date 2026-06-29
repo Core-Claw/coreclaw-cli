@@ -676,6 +676,19 @@ test('catches default value type mismatch as error', () => {
   assert.match(typeMismatchErrors[0].message, /code 4000/);
 });
 
+test('allows null defaults on optional numeric fields as platform-compatible empty values', () => {
+  const issues = validateInputSchema({
+    b: 'items',
+    properties: [
+      { name: 'items', type: 'array', editor: 'stringList' },
+      { name: 'max_comments', type: 'integer', editor: 'number', default: null, required: false },
+      { name: 'min_score', type: 'number', editor: 'number', default: null },
+    ],
+  });
+
+  assert.equal(issues.filter((i) => i.code === 'input_default_type_mismatch').length, 0);
+});
+
 test('accepts type-matched defaults without error', () => {
   const issues = validateInputSchema({
     b: 'items',
@@ -860,4 +873,3 @@ test('reports editor-type mismatch for each property independently', () => {
   assert.ok(errors.some((e) => e.message.includes('properties[2]')), 'input+integer error for property 2');
   assert.ok(errors.some((e) => e.message.includes('properties[3]')), 'array+input error for property 3');
 });
-
