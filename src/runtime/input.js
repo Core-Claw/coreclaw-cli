@@ -63,6 +63,7 @@ export function inputSchemaInputIssues(input, schema) {
   }
 
   const issues = [];
+  const splitFields = new Set(activeSchemaSplitFields(schema));
   for (const property of schema.properties) {
     if (!property || typeof property.name !== 'string') {
       continue;
@@ -87,20 +88,33 @@ export function inputSchemaInputIssues(input, schema) {
     }
 
     issues.push(...inputNumericBoundIssues(property.name, property, value));
-    issues.push(...inputEditorIssues(property, value));
+    if (!splitFields.has(property.name)) {
+      issues.push(...inputEditorIssues(property, value));
+    }
   }
   return issues;
 }
 
 export function expandSplitInput(input, schema, splitIndex) {
-  if (!schema?.b) {
-    throw new CliError('--split requires input_schema.json with root field "b".');
+  const concurrencyFields = normalizedConcurrencyFields(schema);
+  if (concurrencyFields.length > 0) {
+    return expandConcurrencyInput(input, schema, splitIndex, concurrencyFields);
   }
 
-  const splitKey = schema.b;
+  const splitKey = normalizedLegacySplitKey(schema);
+  if (!splitKey) {
+    throw new CliError('--split requires input_schema.json with concurrency.fields or root field "b".');
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(input ?? {}, splitKey)) {
+    throw new CliError(`missing concurrency field [${splitKey}]`);
+  }
   const list = input?.[splitKey];
   if (!Array.isArray(list)) {
-    throw new CliError(`--split requires input["${splitKey}"] to be an array.`);
+    throw new CliError(`field [${splitKey}] must be an array`);
+  }
+  if (list.length === 0) {
+    throw new CliError(`concurrency field [${splitKey}] is empty`);
   }
 
   const index = Number.parseInt(splitIndex, 10);
@@ -116,7 +130,7 @@ export function expandSplitInput(input, schema, splitIndex) {
     return { ...expanded, ...item };
   }
 
-  return { ...expanded, [singularize(splitKey)]: item };
+  return { ...expanded, [splitKey]: [item] };
 }
 
 function clone(value) {
@@ -203,6 +217,131 @@ function inputEditorIssues(property, value) {
     return optionValueIssues(property, value);
   }
   return [];
+}
+
+function expandConcurrencyInput(input, schema, splitIndex, fields) {
+  const removeFields = normalizedConcurrencyRemoveFields(schema);
+  const removeFieldSet = new Set(removeFields);
+  const preferredFields = fields.filter((field) => !removeFieldSet.has(field));
+  const preferredHasValues = preferredFields.length > 0
+    && preferredFields.some((field) => meaningfulConcurrencyItems(input?.[field], field).length > 0);
+  const activeFields = preferredHasValues ? preferredFields : fields;
+  const removedFields = preferredHasValues ? removeFieldSet : new Set();
+  const chunks = [];
+
+  for (const field of activeFields) {
+    const items = meaningfulConcurrencyItems(input?.[field], field);
+    for (const item of items) {
+      chunks.push({ field, item });
+    }
+  }
+
+  if (chunks.length === 0) {
+    throw new CliError('concurrency fields have no non-empty fields');
+  }
+
+  const index = Number.parseInt(splitIndex, 10);
+  if (!Number.isInteger(index) || index < 0 || index >= chunks.length) {
+    throw new CliError(`--split index ${splitIndex} is out of range for concurrency fields length ${chunks.length}.`);
+  }
+
+  const selected = chunks[index];
+  const expanded = { ...input };
+  for (const field of fields) {
+    if (removedFields.has(field)) {
+      delete expanded[field];
+    } else {
+      expanded[field] = [''];
+    }
+  }
+
+  if (selected.item && typeof selected.item === 'object' && !Array.isArray(selected.item)) {
+    delete expanded[selected.field];
+    return { ...expanded, ...selected.item };
+  }
+
+  expanded[selected.field] = [selected.item];
+  return expanded;
+}
+
+function meaningfulConcurrencyItems(value, fieldName) {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new CliError(`field [${fieldName}] must be an array`);
+  }
+
+  let sawObject = false;
+  let sawPrimitive = false;
+  const items = [];
+
+  value.forEach((item, index) => {
+    if (Array.isArray(item)) {
+      throw new CliError(`item at index ${index} in [${fieldName}] must be an object or primitive value`);
+    }
+    if (item && typeof item === 'object') {
+      sawObject = true;
+    } else if (item !== null) {
+      sawPrimitive = true;
+    }
+    if (sawObject && sawPrimitive) {
+      throw new CliError(`field [${fieldName}] must not mix object and primitive items`);
+    }
+    if (!isEmptyConcurrencyItem(item)) {
+      items.push(item);
+    }
+  });
+
+  return items;
+}
+
+function isEmptyConcurrencyItem(value) {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.trim().length === 0;
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+  if (typeof value === 'object') {
+    const values = Object.values(value);
+    return values.length === 0 || values.every(isEmptyConcurrencyItem);
+  }
+  return false;
+}
+
+function activeSchemaSplitFields(schema) {
+  const concurrencyFields = normalizedConcurrencyFields(schema);
+  if (concurrencyFields.length > 0) {
+    return concurrencyFields;
+  }
+  const legacyField = normalizedLegacySplitKey(schema);
+  return legacyField ? [legacyField] : [];
+}
+
+function normalizedConcurrencyFields(schema) {
+  return normalizeStringList(schema?.concurrency?.fields);
+}
+
+function normalizedConcurrencyRemoveFields(schema) {
+  return normalizeStringList(schema?.concurrency?.remove_fields);
+}
+
+function normalizedLegacySplitKey(schema) {
+  return typeof schema?.b === 'string' ? schema.b.trim() : '';
+}
+
+function normalizeStringList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function requestListIssues(name, value) {
@@ -344,14 +483,4 @@ function stableJson(value) {
 function formatInputValue(value) {
   const json = JSON.stringify(value);
   return json === undefined ? String(value) : json;
-}
-
-function singularize(key) {
-  if (key.endsWith('ies')) {
-    return `${key.slice(0, -3)}y`;
-  }
-  if (key.endsWith('s')) {
-    return key.slice(0, -1);
-  }
-  return 'item';
 }

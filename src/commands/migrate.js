@@ -110,9 +110,13 @@ export function convertApifyInputSchema(apifySchema = {}) {
     : {};
   const required = new Set(Array.isArray(apifySchema.required) ? apifySchema.required : []);
   const properties = Object.entries(propertiesObject).map(([name, property]) => convertApifyProperty(name, property, required));
+  const splitKey = chooseSplitKey(properties);
   return {
     description: apifySchema.description ?? apifySchema.title ?? 'Converted Apify Actor input',
-    b: chooseSplitKey(properties),
+    b: splitKey,
+    concurrency: {
+      fields: [splitKey],
+    },
     properties,
   };
 }

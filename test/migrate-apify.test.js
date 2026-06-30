@@ -18,6 +18,9 @@ test('apify migration audit reports CoreClaw adaptation work for Crawlee actors'
   assert.deepEqual(report.coreclaw_input_schema, {
     description: 'Legacy Apify Actor input',
     b: 'startUrls',
+    concurrency: {
+      fields: ['startUrls'],
+    },
     properties: [
       {
         name: 'startUrls',
@@ -102,6 +105,7 @@ test('apify migration command can write a CoreClaw input schema draft', async ()
   const schema = JSON.parse(fs.readFileSync(schemaOutput, 'utf8'));
   assert.deepEqual(schema, report.coreclaw_input_schema);
   assert.equal(schema.b, 'startUrls');
+  assert.deepEqual(schema.concurrency, { fields: ['startUrls'] });
   assert.equal(schema.properties[0].editor, 'requestList');
   assert.equal(schema.properties[1].type, 'integer');
 });

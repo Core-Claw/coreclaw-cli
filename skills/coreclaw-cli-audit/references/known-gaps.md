@@ -1,8 +1,26 @@
 ﻿# Known Gaps and Historical Fixes
 
-Last Updated: 2026-06-17
+Last Updated: 2026-06-30
 
 ## Resolved Issues
+
+### 2026-06-30: New concurrency fields contract not supported
+
+**Issue**: CLI validation treated legacy `b` as required and local `--split` only supported single-field `b` splitting. The platform now prefers `concurrency.fields` with optional `remove_fields`, while keeping `b` only as legacy fallback.
+
+**Documentation**: `C:/Users/user/Desktop/concurrency_rules.html`
+
+**Fix**:
+- Added schema validation for `concurrency`, `fields`, and `remove_fields`
+- Removed the missing-`b` error when `concurrency.fields` is used or no split key is configured
+- Updated local split expansion for preferred fields, `remove_fields` deletion, empty item filtering, primitive wrapping, object merging, and union splitting
+- Kept legacy `b` fallback with trim support and empty-array errors
+- Updated Apify migration schema drafts to emit both `concurrency.fields` and legacy `b`
+- Added `references/concurrency-rules.md` and R190-R202 in the contract checklist
+
+**Tests**: Added focused schema/runtime split tests and migration draft assertions.
+
+**Status**: ✅ Resolved
 
 ### 2026-06-22: SOCKS proxy implicit dependency not detected
 

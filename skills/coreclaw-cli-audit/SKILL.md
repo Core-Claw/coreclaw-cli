@@ -28,6 +28,10 @@ description: >
 - API 调用：`api/worker/run.mdx`、`api/integration.md`
 - 平台特性：`developer-guide/worker-definition/platform-features/*.md`
 
+**并发规则补充来源：**
+- 当前规则 HTML：`C:/Users/user/Desktop/concurrency_rules.html`
+- 本仓库摘录：`skills/coreclaw-cli-audit/references/concurrency-rules.md`
+
 ## 审计流程
 
 ### Phase 1: 规则提取
@@ -39,14 +43,18 @@ description: >
 - "error" / "reject" / "400" / "Invalid" → 平台拒绝条件
 - JSON 示例中的结构 → schema shape 约束
 - 表格中的字段定义 → 必填/可选/类型/枚举
+- 并发拆分示例 → `concurrency.fields`、`remove_fields`、旧版 `b` 回退、空值过滤和 split 结果形状约束
 
 ### Phase 2: 代码比对
 
 对每条提取的规则，检查：
 1. `src/validation/schema.js` 是否有对应的校验函数
-2. 校验的 severity 是否正确（平台拒绝 = `error`，不只是 `warn`）
-3. 错误消息是否包含修复建议（建议提及 code 4000）
-4. `test/schema.test.js` 是否有对应的测试用例
+2. `src/runtime/input.js` 是否正确模拟本地 `--split` 运行时行为
+3. 校验的 severity 是否正确（平台拒绝 = `error`，不只是 `warn`）
+4. 错误消息是否包含修复建议（建议提及 code 4000）
+5. `test/schema.test.js` 是否有对应的测试用例
+
+特别注意：`b` 已不是必填字段。新规则优先 `concurrency.fields`，没有有效新规则时才回退旧版 `b`。审计时不要把缺少 `b` 当作错误。
 
 ### Phase 3: 缺口报告
 

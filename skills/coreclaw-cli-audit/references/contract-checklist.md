@@ -1,6 +1,6 @@
 ﻿# Contract Checklist
 
-Last Updated: 2026-06-17
+Last Updated: 2026-06-30
 
 ## Priority 1: input-schema.md
 
@@ -8,12 +8,15 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 
 ### Root Fields
 
-- [x] R001: `b` field required as task splitting key — validated with error if missing
-- [x] R002: `b` must match a property name — validated with error
-- [x] R003: `b` property type must be `array` — validated with error
+- [x] R001: `concurrency.fields` is the preferred task splitting config; `b` is optional legacy compatibility — validated without missing-`b` error
+- [x] R002: Active legacy `b` must match a property name — validated with error when no `concurrency.fields`
+- [x] R003: Active legacy `b` property type must be `array` — validated with error when no `concurrency.fields`
 - [x] R004: `properties` must be array — validated with error
-- [x] R005: Unknown root keys produce warning — validated with warn
+- [x] R005: Unknown root keys produce warning; `concurrency` is documented and not warned — validated with warn
 - [x] R006: `description` is optional — correctly not enforced
+- [x] R007: `concurrency` must be an object when present — validated with error
+- [x] R008: `concurrency.fields` and `concurrency.remove_fields` must be arrays when present — validated with error
+- [x] R009: `concurrency.remove_fields` entries must be a subset of `fields` — validated with error
 
 ### Property Fields
 
@@ -142,7 +145,37 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 - [x] R180: set_table_header key not in output_schema.json — **warn** (static)
 - [x] R181: output_schema.json column not in set_table_header — **warn** (static)
 
+## Priority 8: concurrency-rules.html
+
+Source: `C:/Users/user/Desktop/concurrency_rules.html`
+
+- [x] R190: New runtime split uses `concurrency.fields` before legacy `b` — validated in `expandSplitInput`
+- [x] R191: Legacy `b` is trimmed and remains compatible when `concurrency.fields` is absent — tested
+- [x] R192: `remove_fields` disables and deletes fields only when preferred fields have values — tested
+- [x] R193: If preferred fields are empty after filtering, runtime falls back to all `fields` — tested
+- [x] R194: Blank strings, `null`, empty objects, and all-empty objects are filtered before split decisions — tested
+- [x] R195: Multiple populated fields produce a union of per-field tasks — tested
+- [x] R196: Primitive split items are wrapped under the original field as `[item]` — tested for legacy and new modes
+- [x] R197: Object split items merge into task custom and remove the split field key — legacy behavior preserved
+- [x] R198: Nested array split items error — tested
+- [x] R199: Mixed object and primitive split items error — tested
+- [x] R200: New `concurrency.fields` mode errors when all fields have no non-empty items — tested
+- [x] R201: Apify migration schema drafts include `concurrency.fields` while retaining legacy `b` — tested
+- [x] R202: `stringList` defaults accept primitive strings used in concurrency examples — tested
+
 ## Audit History
+
+### 2026-06-30: Concurrency rules audit
+
+**Changes committed**: current change set
+
+1. Added support for `concurrency.fields` and `concurrency.remove_fields` as the preferred split contract.
+2. Kept legacy `b` compatibility and removed the old missing-`b` error for new schemas.
+3. Updated local `--split` expansion to match new runtime semantics: preferred fields, `remove_fields` deletion, empty item filtering, primitive wrapping, union splitting, nested-array and mixed-type errors.
+4. Updated Apify migration drafts to emit both `concurrency.fields` and `b`.
+5. Added `references/concurrency-rules.md` with the HTML rule set.
+
+**Results**: `npm test` passed on 2026-06-30 with 347 passing tests, 1 skipped test, and 0 failures.
 
 ### 2026-06-17: Sixth audit round
 

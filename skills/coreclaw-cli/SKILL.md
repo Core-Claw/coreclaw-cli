@@ -151,10 +151,22 @@ The Go upload entry is a compiled Linux amd64 executable named `main` at the ZIP
 `input_schema.json` has:
 
 - `description`: optional summary shown to users.
-- `b`: required task-splitting key.
+- `concurrency`: optional new task-splitting config with `fields` and `remove_fields`.
+- `b`: optional legacy task-splitting key, used only when `concurrency.fields` is absent or empty.
 - `properties`: required array of field definitions.
 
-The `b` value must match the `name` of a property whose `type` is `array`.
+New Worker schemas should use `concurrency.fields`. Legacy schemas may keep `b` unchanged. When both are present and `concurrency.fields` is non-empty, `concurrency.fields` wins and `b` is ignored. Each split field must match the `name` of a property whose `type` is `array`.
+
+Concurrency splitting rules:
+
+- `concurrency.fields` is the ordered candidate split field list.
+- `concurrency.remove_fields` is optional and must be a subset of `fields`.
+- Runtime computes `preferred = fields - remove_fields`.
+- If any preferred field has non-empty custom values after filtering, split only preferred fields and delete every `remove_fields` key from each generated task.
+- Otherwise split all `fields`; fields not selected for the current task are kept as `[""]`.
+- Empty concurrency items are filtered: `null`, blank strings, `{}`, and objects whose values are all empty.
+- Array items may be objects, strings, numbers, or booleans. Nested arrays are invalid. A single split field must not mix object items with primitive items.
+- Legacy `b` mode trims the `b` value, requires the field to exist as an array, errors on an empty array, and wraps primitive split items as `[item]` under the original split field name.
 
 Supported property types:
 

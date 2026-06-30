@@ -16,6 +16,44 @@ test('validates documented input schema b field', () => {
   assert.equal(issues.filter((issue) => issue.severity === 'error').length, 0);
 });
 
+test('accepts concurrency fields without legacy b', () => {
+  const issues = validateInputSchema({
+    description: 'demo',
+    concurrency: {
+      fields: ['keywords', 'google_maps_urls', 'place_ids'],
+      remove_fields: ['keywords'],
+    },
+    properties: [
+      { name: 'keywords', type: 'array', editor: 'stringList', required: false },
+      { name: 'google_maps_urls', type: 'array', editor: 'requestList', required: false },
+      { name: 'place_ids', type: 'array', editor: 'stringList', required: false },
+    ],
+  });
+
+  assert.equal(issues.filter((issue) => issue.severity === 'error').length, 0);
+  assert.equal(issues.filter((issue) => issue.code === 'input_schema_unknown_root_key').length, 0);
+  assert.equal(issues.filter((issue) => issue.code === 'input_schema_missing_b').length, 0);
+});
+
+test('validates concurrency fields against properties and remove_fields subset', () => {
+  const issues = validateInputSchema({
+    concurrency: {
+      fields: ['keywords', 'limit', 'missing'],
+      remove_fields: ['keywords', 'not_in_fields'],
+    },
+    properties: [
+      { name: 'keywords', type: 'array', editor: 'stringList' },
+      { name: 'limit', type: 'integer', editor: 'number' },
+    ],
+  });
+
+  assert.deepEqual(issues.filter((issue) => issue.code.startsWith('input_schema_concurrency')).map((issue) => issue.code), [
+    'input_schema_concurrency_field_not_array',
+    'input_schema_concurrency_field_missing_property',
+    'input_schema_concurrency_remove_field_not_in_fields',
+  ]);
+});
+
 test('rejects b that does not point to an array property', () => {
   const issues = validateInputSchema({
     b: 'keyword',
@@ -49,6 +87,186 @@ test('expands split requestList item into single task shape', () => {
     url: 'https://b.example',
     limit: 2,
   });
+});
+
+test('expands legacy b primitive items by preserving the split field as a one-item array', () => {
+  const input = {
+    keywords: ['pizza', 'iphone'],
+    base_location: 'New York, USA',
+  };
+  const schema = { b: ' keywords ' };
+
+  assert.deepEqual(expandSplitInput(input, schema, 1), {
+    keywords: ['iphone'],
+    base_location: 'New York, USA',
+  });
+});
+
+test('expands concurrency fields and removes disabled remove_fields when preferred fields have values', () => {
+  const input = {
+    keywords: ['pizza', 'iphone'],
+    google_maps_urls: ['urlA', 'urlB'],
+    place_ids: [],
+    base_location: 'New York, USA',
+  };
+  const schema = {
+    b: 'keywords',
+    concurrency: {
+      fields: ['keywords', 'google_maps_urls', 'place_ids'],
+      remove_fields: ['keywords'],
+    },
+  };
+
+  assert.deepEqual(expandSplitInput(input, schema, 0), {
+    google_maps_urls: ['urlA'],
+    place_ids: [''],
+    base_location: 'New York, USA',
+  });
+  assert.deepEqual(expandSplitInput(input, schema, 1), {
+    google_maps_urls: ['urlB'],
+    place_ids: [''],
+    base_location: 'New York, USA',
+  });
+  assert.throws(
+    () => expandSplitInput(input, schema, 2),
+    (error) => error instanceof CliError && /out of range/.test(error.message),
+  );
+});
+
+test('concurrency fields fall back to remove_fields when preferred fields are empty after filtering', () => {
+  const input = {
+    keywords: ['pizza'],
+    google_maps_urls: [''],
+    place_ids: [{ place_id: '' }],
+    base_location: 'New York, USA',
+  };
+  const schema = {
+    concurrency: {
+      fields: ['keywords', 'google_maps_urls', 'place_ids'],
+      remove_fields: ['keywords'],
+    },
+  };
+
+  assert.deepEqual(expandSplitInput(input, schema, 0), {
+    keywords: ['pizza'],
+    google_maps_urls: [''],
+    place_ids: [''],
+    base_location: 'New York, USA',
+  });
+});
+
+test('concurrency fields split all populated fields as a union when remove_fields is absent', () => {
+  const input = {
+    keywords: ['pizza', 'iphone'],
+    google_maps_urls: ['urlA'],
+  };
+  const schema = {
+    concurrency: {
+      fields: ['keywords', 'google_maps_urls'],
+    },
+  };
+
+  assert.deepEqual(expandSplitInput(input, schema, 0), {
+    keywords: ['pizza'],
+    google_maps_urls: [''],
+  });
+  assert.deepEqual(expandSplitInput(input, schema, 1), {
+    keywords: ['iphone'],
+    google_maps_urls: [''],
+  });
+  assert.deepEqual(expandSplitInput(input, schema, 2), {
+    keywords: [''],
+    google_maps_urls: ['urlA'],
+  });
+});
+
+test('concurrency fields treat missing custom fields as empty', () => {
+  const input = {
+    keywords: ['pizza'],
+  };
+  const schema = {
+    concurrency: {
+      fields: ['keywords', 'google_maps_urls'],
+    },
+  };
+
+  assert.deepEqual(expandSplitInput(input, schema, 0), {
+    keywords: ['pizza'],
+    google_maps_urls: [''],
+  });
+  assert.throws(
+    () => expandSplitInput({}, schema, 0),
+    (error) => error instanceof CliError && /concurrency fields have no non-empty fields/.test(error.message),
+  );
+});
+
+test('legacy b reports missing field separately from non-array field', () => {
+  const schema = { b: 'startUrls' };
+
+  assert.throws(
+    () => expandSplitInput({}, schema, 0),
+    (error) => error instanceof CliError && /missing concurrency field \[startUrls\]/.test(error.message),
+  );
+  assert.throws(
+    () => expandSplitInput({ startUrls: 'https://example.com' }, schema, 0),
+    (error) => error instanceof CliError && /field \[startUrls\] must be an array/.test(error.message),
+  );
+});
+
+test('concurrency fields reject empty inputs, nested arrays, and mixed object primitive items', () => {
+  const schema = { concurrency: { fields: ['items'] } };
+
+  assert.throws(
+    () => expandSplitInput({ items: [] }, schema, 0),
+    (error) => error instanceof CliError && /concurrency fields have no non-empty fields/.test(error.message),
+  );
+  assert.throws(
+    () => expandSplitInput({ items: [['nested']] }, schema, 0),
+    (error) => error instanceof CliError && /item at index 0 in \[items\] must be an object or primitive value/.test(error.message),
+  );
+  assert.throws(
+    () => expandSplitInput({ items: [{ value: 'a' }, 'b'] }, schema, 0),
+    (error) => error instanceof CliError && /field \[items\] must not mix object and primitive items/.test(error.message),
+  );
+});
+
+test('runtime input validation allows primitive arrays for split fields', () => {
+  assert.deepEqual(inputSchemaInputIssues({
+    keywords: ['pizza'],
+    startUrls: [{ url: 'https://example.com' }],
+  }, {
+    concurrency: { fields: ['keywords'] },
+    b: 'startUrls',
+    properties: [
+      { name: 'keywords', type: 'array', editor: 'stringList', required: true },
+      { name: 'startUrls', type: 'array', editor: 'requestList', required: true },
+    ],
+  }), []);
+
+  assert.deepEqual(inputSchemaInputIssues({
+    startUrls: ['https://example.com'],
+  }, {
+    b: 'startUrls',
+    properties: [
+      { name: 'startUrls', type: 'array', editor: 'requestList', required: true },
+    ],
+  }), []);
+});
+
+test('runtime input validation keeps legacy b strictness ignored when concurrency is active', () => {
+  assert.deepEqual(inputSchemaInputIssues({
+    keywords: ['pizza'],
+    startUrls: ['https://example.com'],
+  }, {
+    concurrency: { fields: ['keywords'] },
+    b: 'startUrls',
+    properties: [
+      { name: 'keywords', type: 'array', editor: 'stringList', required: true },
+      { name: 'startUrls', type: 'array', editor: 'requestList', required: true },
+    ],
+  }), [
+    'field "startUrls[0]" must be an object with a "url" field',
+  ]);
 });
 
 test('validates actual run input against required schema fields', () => {
@@ -562,13 +780,24 @@ test('catches invalid stringList default shape as error', () => {
   const issues = validateInputSchema({
     b: 'terms',
     properties: [
-      { name: 'terms', type: 'array', editor: 'stringList', default: ['plain-string', 123] },
+      { name: 'terms', type: 'array', editor: 'stringList', default: [123, { value: 'missing-string' }] },
     ],
   });
 
   const errors = issues.filter((i) => i.code === 'input_default_list_item_invalid' && i.severity === 'error');
   assert.ok(errors.length >= 1, 'stringList defaults with wrong shape must be errors');
-  assert.match(errors[0].message, /must be an object with a "string" field/);
+  assert.match(errors[0].message, /must be a string or an object with a "string" field/);
+});
+
+test('accepts primitive stringList defaults used by concurrency examples', () => {
+  const issues = validateInputSchema({
+    concurrency: { fields: ['keywords'] },
+    properties: [
+      { name: 'keywords', type: 'array', editor: 'stringList', default: ['pizza', { string: 'iphone' }] },
+    ],
+  });
+
+  assert.equal(issues.filter((i) => i.code === 'input_default_list_item_invalid').length, 0);
 });
 
 test('catches invalid requestList default shape as error', () => {
@@ -618,7 +847,6 @@ test('schema validation issues always include stable codes after upgrade', () =>
     ],
   });
   assert.deepEqual(inputIssues.map((issue) => issue.code), [
-    'input_schema_missing_b',
     'input_property_invalid',
     'input_property_name_invalid',
     'input_property_unsupported_type',

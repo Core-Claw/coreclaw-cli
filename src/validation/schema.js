@@ -32,8 +32,8 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     return [error(`${filePath} must be a JSON object.`, 'input_schema_root_invalid')];
   }
 
-  if (!schema.b || typeof schema.b !== 'string') {
-    issues.push(error('input_schema.json must define root field "b" as the task splitting key.', 'input_schema_missing_b'));
+  if (schema.b !== undefined && typeof schema.b !== 'string') {
+    issues.push(error('input_schema.json root field "b" must be a string when present.', 'input_schema_b_invalid'));
   }
 
   if (!Array.isArray(schema.properties)) {
@@ -42,10 +42,10 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
   }
 
   // Warn about unknown root keys that the platform will ignore or reject.
-  const knownRootKeys = new Set(['description', 'b', 'properties']);
+  const knownRootKeys = new Set(['description', 'concurrency', 'b', 'properties']);
   for (const key of Object.keys(schema)) {
     if (!knownRootKeys.has(key)) {
-      issues.push(warn(`input_schema.json has unknown root key "${key}". Only "description", "b", and "properties" are documented.`, 'input_schema_unknown_root_key'));
+      issues.push(warn(`input_schema.json has unknown root key "${key}". Only "description", "concurrency", "b", and "properties" are documented.`, 'input_schema_unknown_root_key'));
     }
   }
 
@@ -69,7 +69,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
         issues.push(error(`${prefix}.name "${property.name}" is duplicated.`, 'input_property_duplicate_name'));
       }
       names.add(property.name);
-      if (property.name === schema.b) {
+      if (property.name === normalizedLegacySplitKey(schema)) {
         splitProperty = property;
       }
     }
@@ -140,11 +140,14 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
   }
 
   issues.push(...validateMaxResultsNaming(schema));
+  issues.push(...validateConcurrencySchema(schema));
 
-  if (schema.b && !splitProperty) {
-    issues.push(error(`input_schema.json b="${schema.b}" does not match any property name.`, 'input_schema_b_missing_property'));
-  } else if (splitProperty && inferInputType(splitProperty) !== 'array') {
-    issues.push(error(`input_schema.json b="${schema.b}" must point to a property with type "array".`, 'input_schema_b_not_array'));
+  const hasConcurrencyFields = normalizedConcurrencyFields(schema).length > 0;
+  const splitKey = normalizedLegacySplitKey(schema);
+  if (!hasConcurrencyFields && splitKey && !splitProperty) {
+    issues.push(error(`input_schema.json b="${splitKey}" does not match any property name.`, 'input_schema_b_missing_property'));
+  } else if (!hasConcurrencyFields && splitProperty && inferInputType(splitProperty) !== 'array') {
+    issues.push(error(`input_schema.json b="${splitKey}" must point to a property with type "array".`, 'input_schema_b_not_array'));
   }
 
   return issues;
@@ -431,8 +434,13 @@ function validateStringListDefault(property, prefix) {
     return [];
   }
   return property.default.flatMap((item, index) => {
+    if (typeof item === 'string') {
+      return item.length === 0
+        ? [error(`${prefix}.default[${index}] must be a non-empty string or an object with a non-empty "string" field.`, 'input_default_list_item_invalid')]
+        : [];
+    }
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      return [error(`${prefix}.default[${index}] must be an object with a "string" field. The platform requires {string: string} items for stringList defaults.`, 'input_default_list_item_invalid')];
+      return [error(`${prefix}.default[${index}] must be a string or an object with a "string" field. The platform accepts primitive stringList defaults and {string: string} items.`, 'input_default_list_item_invalid')];
     }
     if (typeof item.string !== 'string' || item.string.length === 0) {
       return [error(`${prefix}.default[${index}].string must be a non-empty string.`, 'input_default_list_item_invalid')];
@@ -621,4 +629,83 @@ function validateMaxResultsNaming(schema) {
     }
   }
   return issues;
+}
+
+function validateConcurrencySchema(schema) {
+  if (!Object.prototype.hasOwnProperty.call(schema, 'concurrency')) {
+    return [];
+  }
+
+  const concurrency = schema.concurrency;
+  if (!concurrency || typeof concurrency !== 'object' || Array.isArray(concurrency)) {
+    return [error('input_schema.json root field "concurrency" must be an object when present.', 'input_schema_concurrency_invalid')];
+  }
+
+  const issues = [];
+  if (Object.prototype.hasOwnProperty.call(concurrency, 'fields') && !Array.isArray(concurrency.fields)) {
+    issues.push(error('input_schema.json concurrency.fields must be an array of field names.', 'input_schema_concurrency_fields_invalid'));
+    return issues;
+  }
+  if (Object.prototype.hasOwnProperty.call(concurrency, 'remove_fields') && !Array.isArray(concurrency.remove_fields)) {
+    issues.push(error('input_schema.json concurrency.remove_fields must be an array of field names.', 'input_schema_concurrency_remove_fields_invalid'));
+    return issues;
+  }
+
+  const fields = normalizedConcurrencyFields(schema);
+  const removeFields = normalizedConcurrencyRemoveFields(schema);
+  const propertiesByName = new Map((schema.properties ?? [])
+    .filter((property) => property && typeof property.name === 'string')
+    .map((property) => [property.name, property]));
+
+  for (const rawField of concurrency.fields ?? []) {
+    if (typeof rawField !== 'string' || rawField.trim().length === 0) {
+      issues.push(error('input_schema.json concurrency.fields must contain non-empty string field names.', 'input_schema_concurrency_field_invalid'));
+    }
+  }
+
+  for (const field of fields) {
+    const property = propertiesByName.get(field);
+    if (!property) {
+      issues.push(error(`input_schema.json concurrency field "${field}" does not match any property name.`, 'input_schema_concurrency_field_missing_property'));
+    } else if (inferInputType(property) !== 'array') {
+      issues.push(error(`input_schema.json concurrency field "${field}" must point to a property with type "array".`, 'input_schema_concurrency_field_not_array'));
+    }
+  }
+
+  for (const rawField of concurrency.remove_fields ?? []) {
+    if (typeof rawField !== 'string' || rawField.trim().length === 0) {
+      issues.push(error('input_schema.json concurrency.remove_fields must contain non-empty string field names.', 'input_schema_concurrency_remove_field_invalid'));
+    }
+  }
+
+  const fieldSet = new Set(fields);
+  for (const field of removeFields) {
+    if (!fieldSet.has(field)) {
+      issues.push(error(`input_schema.json concurrency.remove_fields entry "${field}" must also appear in concurrency.fields.`, 'input_schema_concurrency_remove_field_not_in_fields'));
+    }
+  }
+
+  return issues;
+}
+
+function normalizedConcurrencyFields(schema) {
+  return normalizeStringList(schema.concurrency?.fields);
+}
+
+function normalizedConcurrencyRemoveFields(schema) {
+  return normalizeStringList(schema.concurrency?.remove_fields);
+}
+
+function normalizedLegacySplitKey(schema) {
+  return typeof schema.b === 'string' ? schema.b.trim() : '';
+}
+
+function normalizeStringList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
