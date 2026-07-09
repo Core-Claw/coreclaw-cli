@@ -126,6 +126,7 @@ const PYTHON_IMPORT_PACKAGE_MAP = new Map([
   ['playwright_stealth', 'playwright-stealth'],
   ['sklearn', 'scikit-learn'],
   ['socks', 'pysocks'],
+  ['x_client_transaction', 'xclienttransaction'],
   ['yaml', 'pyyaml'],
 ]);
 const HTTP_CLIENT_PATTERNS = {
@@ -1326,4 +1327,3 @@ export function validateProtobufVersionMatch(project) {
 function stripJsonBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
-

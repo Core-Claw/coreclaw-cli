@@ -479,6 +479,7 @@ test('validateProject accepts declared Python mapped packages and ignores local 
     'playwright-stealth>=1.0.6',
     'opencv-python>=4.10.0',
     'PySocks>=1.7.1',
+    'XClientTransaction==1.0.3',
     'python-jobspy>=1.1.80',
     '',
   ].join('\n'));
@@ -489,6 +490,7 @@ test('validateProject accepts declared Python mapped packages and ignores local 
     'from jobspy import scrape_jobs',
     'from bs4 import BeautifulSoup',
     'from playwright_stealth import stealth_async',
+    'from x_client_transaction import ClientTransaction',
     'from local_pkg import run',
     '',
   ].join('\n'));
