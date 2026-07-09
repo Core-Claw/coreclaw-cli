@@ -334,6 +334,57 @@ test('validateProject warns when browser automation does not read CoreClaw brows
   assert.match(formatted, /Docs: worker-definition\/browser-automation\/overview\.md/);
 });
 
+test('validateProject errors when a top-level Python browser framework dependency is missing', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'from playwright.async_api import async_playwright',
+    '',
+    'async def run():',
+    '    async with async_playwright() as playwright:',
+    '        browser = await playwright.chromium.launch(headless=True)',
+    '        await browser.close()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'missing_browser_framework_dependency');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.match(issue.message, /Cloud runs will fail/);
+});
+
+test('validateProject warns when only an optional Python browser framework code path is missing a dependency', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'def unused_browser_fallback():',
+    '    try:',
+    '        from playwright.async_api import async_playwright',
+    '    except Exception:',
+    '        return None',
+    '    return async_playwright',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'missing_browser_framework_dependency');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'warn');
+  assert.match(issue.message, /optional or dynamic use/);
+  assert.equal(result.issues.some((item) => item.code === 'missing_browser_framework_dependency' && item.severity === 'error'), false);
+});
+
 test('validateProject accepts Lightpanda workers using bracket env access', () => {
   const dir = makePythonProject();
   fs.writeFileSync(path.join(dir, 'requirements.txt'), [

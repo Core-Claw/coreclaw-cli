@@ -241,6 +241,12 @@ const BROWSER_FRAMEWORK_PATTERNS = {
     { pattern: /\brequire\(['""]selenium-webdriver['""]\)|from\s+['""]selenium-webdriver['""]/, packages: ['selenium-webdriver'] },
   ],
 };
+const PYTHON_BROWSER_IMPORT_ROOTS = new Map([
+  ['playwright', 'playwright'],
+  ['selenium', 'selenium'],
+  ['DrissionPage', 'DrissionPage'],
+  ['pyppeteer', 'pyppeteer'],
+]);
 
 export const LANGUAGE_SPECS = {
   python: {
@@ -1283,7 +1289,14 @@ export function validateBrowserFrameworkDependencies(project) {
     for (const { pattern, packages } of frameworks) {
       if (pattern.test(text)) {
         for (const pkg of packages) {
-          if (!detected.has(pkg)) detected.set(pkg, relativePath);
+          const usage = {
+            file: relativePath,
+            severity: browserFrameworkDependencySeverity(project.language, text, pkg),
+          };
+          const existing = detected.get(pkg);
+          if (!existing || severityRank(usage.severity) > severityRank(existing.severity)) {
+            detected.set(pkg, usage);
+          }
         }
       }
     }
@@ -1292,18 +1305,63 @@ export function validateBrowserFrameworkDependencies(project) {
   const depFile = project.spec.dependencyFile;
   const depPath = path.join(project.projectDir, depFile);
   if (!fs.existsSync(depPath)) {
-    return [...detected.entries()].map(([pkg, file]) => ({ severity: 'error', code: 'missing_browser_framework_dependency', message: `Project uses ${pkg} (${file}) but ${depFile} does not exist. Cloud runs will fail with a module not found error.`, docs: BROWSER_FRAMEWORK_DEPENDENCY_DOCS, remediation: `Create ${depFile} and add "${pkg}" as a dependency.` }));
+    return [...detected.entries()].map(([pkg, usage]) => missingBrowserFrameworkDependencyIssue(pkg, usage, depFile, false));
   }
   const declared = readDeclaredDependencies(project.language, depPath);
   const issues = [];
-  for (const [pkg, file] of detected) {
+  for (const [pkg, usage] of detected) {
     const allVariants = frameworks.filter((f) => f.packages.includes(pkg)).flatMap((f) => f.packages);
     const hasAny = allVariants.some((v) => declared.has(v));
     if (!hasAny) {
-      issues.push({ severity: 'error', code: 'missing_browser_framework_dependency', message: `Project uses ${pkg} (${file}) but ${depFile} does not declare "${pkg}". Cloud runs will fail with ModuleNotFoundError.`, docs: BROWSER_FRAMEWORK_DEPENDENCY_DOCS, remediation: `Add "${pkg}" to ${depFile}.` });
+      issues.push(missingBrowserFrameworkDependencyIssue(pkg, usage, depFile, true));
     }
   }
   return issues;
+}
+
+function browserFrameworkDependencySeverity(language, text, packageName) {
+  if (language !== 'python') {
+    return 'error';
+  }
+  const importRoot = PYTHON_BROWSER_IMPORT_ROOTS.get(packageName);
+  if (!importRoot) {
+    return 'error';
+  }
+  const root = escapeRegExp(importRoot);
+  const topLevelImport = new RegExp(`^(?:from\\s+${root}(?:\\.|\\s+import\\b)|import\\s+${root}\\b)`, 'm');
+  return topLevelImport.test(text) ? 'error' : 'warn';
+}
+
+function missingBrowserFrameworkDependencyIssue(pkg, usage, depFile, dependencyFileExists) {
+  if (usage.severity === 'warn') {
+    return {
+      severity: 'warn',
+      code: 'missing_browser_framework_dependency',
+      message: `Project has optional or dynamic use of ${pkg} (${usage.file}) but ${depFile} does not declare "${pkg}". The worker can start, but any code path that imports this browser framework will fail unless the dependency is declared.`,
+      docs: BROWSER_FRAMEWORK_DEPENDENCY_DOCS,
+      remediation: `Add "${pkg}" to ${depFile}, or remove the unused browser automation code path.`,
+    };
+  }
+  if (!dependencyFileExists) {
+    return {
+      severity: 'error',
+      code: 'missing_browser_framework_dependency',
+      message: `Project uses ${pkg} (${usage.file}) but ${depFile} does not exist. Cloud runs will fail with a module not found error.`,
+      docs: BROWSER_FRAMEWORK_DEPENDENCY_DOCS,
+      remediation: `Create ${depFile} and add "${pkg}" as a dependency.`,
+    };
+  }
+  return {
+    severity: 'error',
+    code: 'missing_browser_framework_dependency',
+    message: `Project uses ${pkg} (${usage.file}) but ${depFile} does not declare "${pkg}". Cloud runs will fail with ModuleNotFoundError.`,
+    docs: BROWSER_FRAMEWORK_DEPENDENCY_DOCS,
+    remediation: `Add "${pkg}" to ${depFile}.`,
+  };
+}
+
+function severityRank(severity) {
+  return severity === 'error' ? 2 : 1;
 }
 
 export function validateProtobufVersionMatch(project) {
