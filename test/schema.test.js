@@ -54,6 +54,48 @@ test('validates concurrency fields against properties and remove_fields subset',
   ]);
 });
 
+test('validates documented concurrency limits rules', () => {
+  const validIssues = validateInputSchema({
+    concurrency: {
+      fields: ['google_maps_urls', 'place_ids'],
+      limits: [
+        { field: 'google_maps_urls', regex: '/maps/place', max: 120 },
+        { field: 'place_ids', max: 1 },
+      ],
+    },
+    properties: [
+      { name: 'google_maps_urls', type: 'array', editor: 'requestList' },
+      { name: 'place_ids', type: 'array', editor: 'stringList' },
+    ],
+  });
+
+  assert.equal(validIssues.filter((issue) => issue.severity === 'error').length, 0);
+
+  const invalidIssues = validateInputSchema({
+    concurrency: {
+      fields: ['google_maps_urls'],
+      limits: [
+        null,
+        { max: 1 },
+        { field: 'max_results', max: 1 },
+        { field: 'google_maps_urls', max: 0 },
+        { field: 'google_maps_urls', regex: '[', max: 1 },
+      ],
+    },
+    properties: [
+      { name: 'google_maps_urls', type: 'array', editor: 'requestList' },
+    ],
+  });
+
+  assert.deepEqual(invalidIssues.filter((issue) => issue.code.startsWith('input_schema_concurrency_limit')).map((issue) => issue.code), [
+    'input_schema_concurrency_limit_invalid',
+    'input_schema_concurrency_limit_field_required',
+    'input_schema_concurrency_limit_field_not_in_fields',
+    'input_schema_concurrency_limit_max_invalid',
+    'input_schema_concurrency_limit_regex_invalid',
+  ]);
+});
+
 test('rejects b that does not point to an array property', () => {
   const issues = validateInputSchema({
     b: 'keyword',
@@ -63,6 +105,20 @@ test('rejects b that does not point to an array property', () => {
   });
 
   assert.match(issues.map((issue) => issue.message).join('\n'), /must point to a property with type "array"/);
+});
+
+test('reports batch array fields without split config as info only', () => {
+  const issues = validateInputSchema({
+    properties: [
+      { name: 'keywords', type: 'array', editor: 'stringList', default: ['pizza'] },
+      { name: 'max_results', type: 'integer', editor: 'number', default: 10 },
+    ],
+  });
+  const hint = issues.find((issue) => issue.code === 'input_batch_fields_without_split');
+
+  assert.equal(hint?.severity, 'info');
+  assert.match(hint.message, /whole submitted input as one task/);
+  assert.equal(issues.some((issue) => issue.severity === 'error' || issue.severity === 'warn'), false);
 });
 
 test('builds defaults from input schema', () => {
@@ -91,7 +147,7 @@ test('expands split requestList item into single task shape', () => {
 
 test('expands legacy b primitive items by preserving the split field as a one-item array', () => {
   const input = {
-    keywords: ['pizza', 'iphone'],
+    keywords: ['', 'pizza', 'iphone'],
     base_location: 'New York, USA',
   };
   const schema = { b: ' keywords ' };
@@ -100,6 +156,30 @@ test('expands legacy b primitive items by preserving the split field as a one-it
     keywords: ['iphone'],
     base_location: 'New York, USA',
   });
+});
+
+test('legacy b uses the documented concurrency item rules', () => {
+  const schema = { b: 'items' };
+
+  assert.deepEqual(expandSplitInput({ items: ['', 'pizza'] }, schema, 0), {
+    items: ['pizza'],
+  });
+  assert.throws(
+    () => expandSplitInput({ items: [null, '  '] }, schema, 0),
+    (error) => error instanceof CliError && /concurrency field \[items\] is empty/.test(error.message),
+  );
+  assert.throws(
+    () => expandSplitInput({ items: [['nested']] }, schema, 0),
+    (error) => error instanceof CliError && /item at index 0 in \[items\] must be an object or primitive value/.test(error.message),
+  );
+  assert.throws(
+    () => expandSplitInput({ items: [{ value: 'a' }, 'b'] }, schema, 0),
+    (error) => error instanceof CliError && /field \[items\] must not mix object and primitive items/.test(error.message),
+  );
+  assert.throws(
+    () => expandSplitInput({ items: [{ items: 'override' }] }, schema, 0),
+    (error) => error instanceof CliError && /item at index 0 in \[items\] must not override concurrency field/.test(error.message),
+  );
 });
 
 test('expands concurrency fields and removes disabled remove_fields when preferred fields have values', () => {
@@ -227,6 +307,10 @@ test('concurrency fields reject empty inputs, nested arrays, and mixed object pr
   assert.throws(
     () => expandSplitInput({ items: [{ value: 'a' }, 'b'] }, schema, 0),
     (error) => error instanceof CliError && /field \[items\] must not mix object and primitive items/.test(error.message),
+  );
+  assert.throws(
+    () => expandSplitInput({ items: [{ items: 'override' }] }, schema, 0),
+    (error) => error instanceof CliError && /item at index 0 in \[items\] must not override concurrency field/.test(error.message),
   );
 });
 
@@ -538,6 +622,9 @@ test('errors when input editor does not match the documented type', () => {
       { name: 'sections', type: 'string', editor: 'checkbox' },
       { name: 'urls', type: 'string', editor: 'requestList' },
       { name: 'terms', type: 'string', editor: 'stringList' },
+      { name: 'mode', type: 'boolean', editor: 'select' },
+      { name: 'category', type: 'object', editor: 'radio' },
+      { name: 'config', type: 'string', editor: 'json' },
     ],
   });
 
@@ -548,6 +635,9 @@ test('errors when input editor does not match the documented type', () => {
     'input_schema.properties[3].editor "checkbox" requires type "array", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
     'input_schema.properties[4].editor "requestList" requires type "array", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
     'input_schema.properties[5].editor "stringList" requires type "array", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
+    'input_schema.properties[6].editor "select" requires type "string" or "integer", but property type is "boolean". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
+    'input_schema.properties[7].editor "radio" requires type "string" or "integer", but property type is "object". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
+    'input_schema.properties[8].editor "json" requires type "object", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
   ]);
 });
 
@@ -683,6 +773,7 @@ test('warns about invalid requestListSource param_list definitions', () => {
     'input_param_editor_type_mismatch',
     'input_param_selector_missing_options',
     'input_param_unsupported_type',
+    'input_param_editor_type_mismatch',
     'input_param_unsupported_editor',
     'input_param_selector_option_invalid',
     'input_param_list_invalid',
@@ -750,17 +841,19 @@ test('accepts stringList with array type (correct tiktok-scraper fix)', () => {
   assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
 });
 
-test('catches input with integer type as error', () => {
+test('accepts documented input editor numeric types and json editor object type', () => {
   const issues = validateInputSchema({
     b: 'items',
     properties: [
       { name: 'items', type: 'array', editor: 'stringList' },
       { name: 'limit', type: 'integer', editor: 'input', default: 10 },
+      { name: 'delay', type: 'number', editor: 'input', default: 0.5 },
+      { name: 'config', type: 'object', editor: 'json', default: {} },
     ],
   });
 
-  const errors = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error');
-  assert.ok(errors.length >= 1, 'input + integer must be caught as error');
+  assert.equal(issues.filter((i) => i.code === 'input_editor_type_mismatch').length, 0);
+  assert.equal(issues.filter((i) => i.code === 'input_property_unsupported_editor').length, 0);
 });
 
 test('catches array type with non-array editor as error', () => {
@@ -889,7 +982,7 @@ test('output_schema accepts all documented column types', () => {
   assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
 });
 
-test('catches default value type mismatch as error', () => {
+test('warns about default value type mismatch without blocking upload validation', () => {
   const issues = validateInputSchema({
     b: 'items',
     properties: [
@@ -899,9 +992,10 @@ test('catches default value type mismatch as error', () => {
     ],
   });
 
-  const typeMismatchErrors = issues.filter((i) => i.code === 'input_default_type_mismatch' && i.severity === 'error');
-  assert.ok(typeMismatchErrors.length >= 2, 'default type mismatches must be errors');
-  assert.match(typeMismatchErrors[0].message, /code 4000/);
+  const typeMismatchWarnings = issues.filter((i) => i.code === 'input_default_type_mismatch' && i.severity === 'warn');
+  assert.equal(typeMismatchWarnings.length, 2);
+  assert.equal(issues.some((i) => i.code === 'input_default_type_mismatch' && i.severity === 'error'), false);
+  assert.match(typeMismatchWarnings[0].message, /local default runs and submitted input may fail/);
 });
 
 test('allows null defaults on optional numeric fields as platform-compatible empty values', () => {
@@ -945,7 +1039,7 @@ test('rejects Chinese characters in property name as error', () => {
   assert.match(nameErrors[0].message, /unsupported characters/);
 });
 
-test('catches requestListSource param default type mismatch as error', () => {
+test('warns about requestListSource param default type mismatch', () => {
   const issues = validateInputSchema({
     b: 'sources',
     properties: [
@@ -958,9 +1052,9 @@ test('catches requestListSource param default type mismatch as error', () => {
     ],
   });
 
-  const paramTypeErrors = issues.filter((i) => i.code === 'input_default_param_type_mismatch' && i.severity === 'error');
-  assert.ok(paramTypeErrors.length >= 1, 'param default type mismatch must be error');
-  assert.match(paramTypeErrors[0].message, /code 4000/);
+  const paramTypeWarnings = issues.filter((i) => i.code === 'input_default_param_type_mismatch' && i.severity === 'warn');
+  assert.equal(paramTypeWarnings.length, 1);
+  assert.match(paramTypeWarnings[0].message, /local default runs and submitted input may fail/);
 });
 
 test('catches requestListSource non-object default items as error', () => {
@@ -975,7 +1069,7 @@ test('catches requestListSource non-object default items as error', () => {
   assert.ok(errors.length >= 2, 'non-object requestListSource defaults must be errors');
 });
 
-test('catches requestListSource missing required param in default as error', () => {
+test('warns about requestListSource missing required param in default', () => {
   const issues = validateInputSchema({
     b: 'sources',
     properties: [
@@ -992,9 +1086,9 @@ test('catches requestListSource missing required param in default as error', () 
     ],
   });
 
-  const errors = issues.filter((i) => i.code === 'input_default_param_missing' && i.severity === 'error');
-  assert.ok(errors.length >= 1, 'missing required param in default must be error');
-  assert.match(errors[0].message, /code 4000/);
+  const warnings = issues.filter((i) => i.code === 'input_default_param_missing' && i.severity === 'warn');
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0].message, /local default runs and submitted input need this required parameter/);
 });
 
 test('accepts valid requestListSource defaults without error', () => {
@@ -1096,8 +1190,7 @@ test('reports editor-type mismatch for each property independently', () => {
   });
 
   const errors = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error');
-  assert.ok(errors.length >= 3, 'each property with editor-type mismatch must get its own error');
+  assert.ok(errors.length >= 2, 'each property with editor-type mismatch must get its own error');
   assert.ok(errors.some((e) => e.message.includes('properties[1]')), 'textarea+array error for property 1');
-  assert.ok(errors.some((e) => e.message.includes('properties[2]')), 'input+integer error for property 2');
   assert.ok(errors.some((e) => e.message.includes('properties[3]')), 'array+input error for property 3');
 });

@@ -109,20 +109,17 @@ export function expandSplitInput(input, schema, splitIndex) {
   if (!Object.prototype.hasOwnProperty.call(input ?? {}, splitKey)) {
     throw new CliError(`missing concurrency field [${splitKey}]`);
   }
-  const list = input?.[splitKey];
-  if (!Array.isArray(list)) {
-    throw new CliError(`field [${splitKey}] must be an array`);
-  }
-  if (list.length === 0) {
+  const items = meaningfulConcurrencyItems(input?.[splitKey], splitKey);
+  if (items.length === 0) {
     throw new CliError(`concurrency field [${splitKey}] is empty`);
   }
 
   const index = Number.parseInt(splitIndex, 10);
-  if (!Number.isInteger(index) || index < 0 || index >= list.length) {
-    throw new CliError(`--split index ${splitIndex} is out of range for input["${splitKey}"] length ${list.length}.`);
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) {
+    throw new CliError(`--split index ${splitIndex} is out of range for input["${splitKey}"] non-empty length ${items.length}.`);
   }
 
-  const item = list[index];
+  const item = items[index];
   const expanded = { ...input };
   delete expanded[splitKey];
 
@@ -281,6 +278,9 @@ function meaningfulConcurrencyItems(value, fieldName) {
       throw new CliError(`item at index ${index} in [${fieldName}] must be an object or primitive value`);
     }
     if (item && typeof item === 'object') {
+      if (Object.prototype.hasOwnProperty.call(item, fieldName)) {
+        throw new CliError(`item at index ${index} in [${fieldName}] must not override concurrency field`);
+      }
       sawObject = true;
     } else if (item !== null) {
       sawPrimitive = true;

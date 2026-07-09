@@ -12,17 +12,24 @@ const SUPPORTED_EDITORS = new Set([
   'requestList',
   'requestListSource',
   'stringList',
+  'json',
 ]);
 const EDITOR_EXPECTED_TYPES = new Map([
+  ['input', ['string', 'integer', 'number']],
+  ['textarea', ['string']],
   ['number', ['integer', 'number']],
+  ['select', ['string', 'integer']],
+  ['radio', ['string', 'integer']],
   ['switch', ['boolean']],
   ['checkbox', ['array']],
+  ['datepicker', ['string']],
   ['requestList', ['array']],
   ['requestListSource', ['array']],
   ['stringList', ['array']],
+  ['json', ['object']],
 ]);
 const SELECTOR_EDITORS = new Set(['select', 'radio', 'checkbox']);
-const STRING_ONLY_EDITORS = new Set(['input', 'textarea', 'datepicker']);
+const STRING_ONLY_EDITORS = new Set(['textarea', 'datepicker']);
 const ARRAY_ONLY_EDITORS = new Set(['requestList', 'requestListSource', 'stringList', 'checkbox']);
 
 export function validateInputSchema(schema, filePath = 'input_schema.json') {
@@ -92,12 +99,12 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
       issues.push(warn(`${prefix}.editor "${property.editor}" is not documented by CoreClaw. Verify platform rendering before upload.`, 'input_property_unsupported_editor'));
     }
 
-    if (property.editor && EDITOR_EXPECTED_TYPES.has(property.editor)) {
-      const expectedTypes = EDITOR_EXPECTED_TYPES.get(property.editor);
+    const expectedEditorTypes = expectedTypesForEditor(property);
+    if (expectedEditorTypes) {
       const normalizedType = normalizeType(propertyType);
-      if (!expectedTypes.includes(normalizedType)) {
+      if (!expectedEditorTypes.includes(normalizedType) && !shouldUseArrayEditorMismatch(property, normalizedType)) {
         issues.push(error(
-          `${prefix}.editor "${property.editor}" requires type ${formatTypeList(expectedTypes)}, but property type is "${normalizedType}". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.`,
+          `${prefix}.editor "${property.editor}" requires type ${formatTypeList(expectedEditorTypes)}, but property type is "${normalizedType}". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.`,
           'input_editor_type_mismatch',
         ));
       }
@@ -141,6 +148,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
   issues.push(...validateMaxResultsNaming(schema));
   issues.push(...validateConcurrencySchema(schema));
+  issues.push(...validateSplitConfigurationHints(schema));
 
   const hasConcurrencyFields = normalizedConcurrencyFields(schema).length > 0;
   const splitKey = normalizedLegacySplitKey(schema);
@@ -199,6 +207,10 @@ function warn(message, code = 'schema_warning') {
   return { severity: 'warn', code, message };
 }
 
+function info(message, code = 'schema_info') {
+  return { severity: 'info', code, message };
+}
+
 function normalizeType(type) {
   return LEGACY_COMPAT_TYPES.get(type) ?? type;
 }
@@ -252,12 +264,12 @@ function validatePropertyParamList(property, prefix) {
       issues.push(warn(`${paramPrefix}.editor "${param.editor}" is not documented by CoreClaw. Verify platform rendering before upload.`, 'input_param_unsupported_editor'));
     }
 
-    if (param.editor && EDITOR_EXPECTED_TYPES.has(param.editor)) {
-      const expectedTypes = EDITOR_EXPECTED_TYPES.get(param.editor);
+    const expectedEditorTypes = expectedTypesForEditor(param);
+    if (expectedEditorTypes) {
       const normalizedType = normalizeType(paramType);
-      if (!expectedTypes.includes(normalizedType)) {
+      if (!expectedEditorTypes.includes(normalizedType)) {
         issues.push(warn(
-          `${paramPrefix}.editor "${param.editor}" is documented for type ${formatTypeList(expectedTypes)}, but param type is "${normalizedType}".`,
+          `${paramPrefix}.editor "${param.editor}" is documented for type ${formatTypeList(expectedEditorTypes)}, but param type is "${normalizedType}".`,
           'input_param_editor_type_mismatch',
         ));
       }
@@ -301,6 +313,23 @@ function validateSelectorOptions(item, prefix, codes) {
   return issues;
 }
 
+function expectedTypesForEditor(item) {
+  if (!item?.editor || !EDITOR_EXPECTED_TYPES.has(item.editor)) {
+    return null;
+  }
+  if (item.editor === 'select' && item.multiple === true) {
+    return ['array'];
+  }
+  return EDITOR_EXPECTED_TYPES.get(item.editor);
+}
+
+function shouldUseArrayEditorMismatch(item, normalizedType) {
+  return normalizedType === 'array'
+    && item?.editor
+    && !ARRAY_ONLY_EDITORS.has(item.editor)
+    && !(item.editor === 'select' && item.multiple === true);
+}
+
 function validateSelectMultiple(item, prefix, invalidCode, editorCode) {
   if (!Object.prototype.hasOwnProperty.call(item, 'multiple')) {
     return [];
@@ -338,7 +367,7 @@ function validatePropertyDefault(property, prefix) {
   const propertyType = inferInputType(property);
   const expectedType = inputTypeLabel(propertyType, property);
   if (!valueMatchesInputType(property.default, propertyType, property)) {
-    issues.push(error(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}. The platform will reject type-mismatched defaults (code 4000).`, 'input_default_type_mismatch'));
+    issues.push(warn(`${prefix}.default should match declared type "${expectedType}", but got ${valueType(property.default)}. CoreClaw currently accepts some schema defaults that the form treats as empty, but local default runs and submitted input may fail unless the default matches the declared type.`, 'input_default_type_mismatch'));
     return issues;
   }
 
@@ -404,7 +433,7 @@ function validateParamDefault(item, param, prefix) {
   }
   if (!Object.prototype.hasOwnProperty.call(item, name)) {
     if (param.required === true) {
-      return [error(`${prefix}.${name} is required by param_list but missing from the default item. The platform will reject defaults missing required params (code 4000).`, 'input_default_param_missing')];
+      return [warn(`${prefix}.${name} is required by param_list but missing from the default item. CoreClaw may accept the schema, but local default runs and submitted input need this required parameter.`, 'input_default_param_missing')];
     }
     return [];
   }
@@ -412,7 +441,7 @@ function validateParamDefault(item, param, prefix) {
   const issues = [];
   const paramType = inferInputType(param);
   if (!valueMatchesInputType(item[name], paramType, param)) {
-    issues.push(error(`${prefix}.${name} should match declared type "${inputTypeLabel(paramType, param)}", but got ${valueType(item[name])}. The platform will reject type-mismatched defaults (code 4000).`, 'input_default_param_type_mismatch'));
+    issues.push(warn(`${prefix}.${name} should match declared type "${inputTypeLabel(paramType, param)}", but got ${valueType(item[name])}. CoreClaw may accept the schema, but local default runs and submitted input may fail unless the value matches the declared type.`, 'input_default_param_type_mismatch'));
   }
   issues.push(...defaultNumericBoundIssues(item[name], param, `${prefix}.${name}`, 'input_default_param_bound_mismatch'));
   if (SELECTOR_EDITORS.has(param.editor) && Array.isArray(param.options) && param.options.length > 0) {
@@ -650,6 +679,17 @@ function validateConcurrencySchema(schema) {
     issues.push(error('input_schema.json concurrency.remove_fields must be an array of field names.', 'input_schema_concurrency_remove_fields_invalid'));
     return issues;
   }
+  if (Object.prototype.hasOwnProperty.call(concurrency, 'limits') && !Array.isArray(concurrency.limits)) {
+    issues.push(error('input_schema.json concurrency.limits must be an array of limit rule objects.', 'input_schema_concurrency_limits_invalid'));
+    return issues;
+  }
+
+  const knownConcurrencyKeys = new Set(['fields', 'remove_fields', 'limits']);
+  for (const key of Object.keys(concurrency)) {
+    if (!knownConcurrencyKeys.has(key)) {
+      issues.push(warn(`input_schema.json concurrency has unknown key "${key}". Only "fields", "remove_fields", and "limits" are documented.`, 'input_schema_concurrency_unknown_key'));
+    }
+  }
 
   const fields = normalizedConcurrencyFields(schema);
   const removeFields = normalizedConcurrencyRemoveFields(schema);
@@ -685,7 +725,70 @@ function validateConcurrencySchema(schema) {
     }
   }
 
+  issues.push(...validateConcurrencyLimits(concurrency.limits ?? [], fieldSet));
+
   return issues;
+}
+
+function validateConcurrencyLimits(limits, fieldSet) {
+  const issues = [];
+
+  for (const [index, limit] of limits.entries()) {
+    const prefix = `input_schema.json concurrency.limits[${index}]`;
+    if (!limit || typeof limit !== 'object' || Array.isArray(limit)) {
+      issues.push(error(`${prefix} must be an object with field and max.`, 'input_schema_concurrency_limit_invalid'));
+      continue;
+    }
+
+    if (typeof limit.field !== 'string' || limit.field.trim().length === 0) {
+      issues.push(error(`${prefix}.field is required and must be a non-empty string.`, 'input_schema_concurrency_limit_field_required'));
+    } else if (!fieldSet.has(limit.field.trim())) {
+      issues.push(error(`${prefix}.field "${limit.field}" must be one of concurrency.fields.`, 'input_schema_concurrency_limit_field_not_in_fields'));
+    }
+
+    if (!isFiniteNumber(limit.max) || limit.max <= 0) {
+      issues.push(error(`${prefix}.max must be a number greater than 0.`, 'input_schema_concurrency_limit_max_invalid'));
+    }
+
+    if (Object.prototype.hasOwnProperty.call(limit, 'regex')) {
+      if (typeof limit.regex !== 'string') {
+        issues.push(error(`${prefix}.regex must be a string when present.`, 'input_schema_concurrency_limit_regex_invalid'));
+      } else {
+        try {
+          new RegExp(limit.regex);
+        } catch (regexError) {
+          issues.push(error(`${prefix}.regex is not a valid regular expression: ${regexError.message}`, 'input_schema_concurrency_limit_regex_invalid'));
+        }
+      }
+    }
+  }
+
+  return issues;
+}
+
+function validateSplitConfigurationHints(schema) {
+  if (normalizedConcurrencyFields(schema).length > 0 || normalizedLegacySplitKey(schema)) {
+    return [];
+  }
+  if (!Array.isArray(schema.properties)) {
+    return [];
+  }
+
+  const batchFields = schema.properties
+    .filter((property) => property
+      && typeof property.name === 'string'
+      && normalizeType(inferInputType(property)) === 'array'
+      && ['requestList', 'requestListSource', 'stringList'].includes(property.editor))
+    .map((property) => property.name);
+
+  if (batchFields.length === 0) {
+    return [];
+  }
+
+  return [info(
+    `input_schema.json defines batch array field(s) ${batchFields.map((field) => `"${field}"`).join(', ')} but neither concurrency.fields nor legacy b is configured. CoreClaw will run the whole submitted input as one task; add concurrency.fields only if these arrays should be split into separate tasks.`,
+    'input_batch_fields_without_split',
+  )];
 }
 
 function normalizedConcurrencyFields(schema) {
