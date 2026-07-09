@@ -681,7 +681,7 @@ test('validateProject does not require PySocks for curl_cffi requests aliases', 
   assert.equal(result.issues.some((issue) => issue.code === 'missing_socks_proxy_dependency'), false);
 });
 
-test('validateProject warns about hardcoded User-Agent strings', () => {
+test('validateProject allows HTTP client User-Agent headers from proxy examples', () => {
   const dir = makePythonProject();
   fs.writeFileSync(path.join(dir, 'requirements.txt'), [
     'grpcio>=1.80.0',
@@ -702,11 +702,39 @@ test('validateProject warns about hardcoded User-Agent strings', () => {
   ].join('\n'));
 
   const result = validateProject(dir);
+
+  assert.equal(result.issues.some((item) => item.code === 'hardcoded_user_agent'), false);
+});
+
+test('validateProject warns about browser User-Agent overrides', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'playwright>=1.52.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import os',
+    'from playwright.async_api import async_playwright',
+    '',
+    'async def run():',
+    '    auth = os.environ.get("PROXY_AUTH")',
+    '    chrome_ws = os.environ.get("ChromeWs")',
+    '    async with async_playwright() as playwright:',
+    '        browser = await playwright.chromium.connect_over_cdp(f"ws://{auth}@{chrome_ws}")',
+    '        context = await browser.new_context(user_agent="Mozilla/5.0 Chrome/120.0.0.0")',
+    '        await context.close()',
+    '        await browser.close()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
   const issue = result.issues.find((item) => item.code === 'hardcoded_user_agent');
 
   assert.equal(Boolean(issue), true);
   assert.equal(issue.severity, 'warn');
-  assert.match(issue.message, /hardcoded User-Agent/);
+  assert.match(issue.message, /browser User-Agent/);
 });
 
 test('validateProject errors when HTTP worker does not use proxy (upgraded from warn)', () => {

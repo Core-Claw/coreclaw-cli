@@ -241,6 +241,15 @@ const BROWSER_FRAMEWORK_PATTERNS = {
     { pattern: /\brequire\(['""]selenium-webdriver['""]\)|from\s+['""]selenium-webdriver['""]/, packages: ['selenium-webdriver'] },
   ],
 };
+const BROWSER_USER_AGENT_OVERRIDE_PATTERNS = [
+  /\bnew_context\s*\([\s\S]{0,300}\buser_agent\s*=/i,
+  /\bnewContext\s*\([\s\S]{0,300}\buserAgent\s*:/,
+  /\bset_extra_http_headers\s*\([\s\S]{0,300}['"]User-Agent['"]/i,
+  /\bsetExtraHTTPHeaders\s*\([\s\S]{0,300}['"]User-Agent['"]/,
+  /\bsetUserAgent\s*\(/,
+  /\badd_argument\s*\([\s\S]{0,120}(?:--)?user-agent=/i,
+  /(?:--)?user-agent=/i,
+];
 const PYTHON_BROWSER_IMPORT_ROOTS = new Map([
   ['playwright', 'playwright'],
   ['selenium', 'selenium'],
@@ -1269,13 +1278,13 @@ export function validateHardcodedUserAgent(project) {
   for (const filePath of sourceFiles) {
     const text = fs.readFileSync(filePath, 'utf8');
     const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
-    if (/[\"']User-Agent[\"']\s*:\s*[\"'].*(?:Chrome|Mozilla|Firefox)/i.test(text)) {
+    if (BROWSER_USER_AGENT_OVERRIDE_PATTERNS.some((pattern) => pattern.test(text))) {
       evidence.push(relativePath);
       if (evidence.length >= 5) break;
     }
   }
   if (evidence.length === 0) return [];
-  return [{ severity: 'warn', code: 'hardcoded_user_agent', message: `Project contains hardcoded User-Agent strings (${evidence.join(', ')}). The platform provides browser fingerprinting; hardcoded User-Agent headers may trigger anti-bot detection.`, docs: ['worker-definition/platform-features/browser-fingerprinting.md'], evidence: { files: evidence }, remediation: 'Remove hardcoded User-Agent headers and rely on the platform browser fingerprint environment instead.' }];
+  return [{ severity: 'warn', code: 'hardcoded_user_agent', message: `Project overrides browser User-Agent settings (${evidence.join(', ')}). The platform provides browser fingerprinting; hardcoded browser User-Agent values may trigger anti-bot detection.`, docs: ['worker-definition/platform-features/browser-fingerprinting.md'], evidence: { files: evidence }, remediation: 'Remove browser User-Agent overrides and rely on the platform browser fingerprint environment instead.' }];
 }
 
 export function validateBrowserFrameworkDependencies(project) {
