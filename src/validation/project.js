@@ -209,6 +209,7 @@ const BROWSER_AUTOMATION_DOCS = [
   'worker-definition/browser-automation/selenium.md',
   'worker-definition/browser-automation/drissionpage.md',
   'worker-definition/browser-automation/lightpanda.md',
+  'worker-definition/browser-automation/camoufox.md',
 ];
 const NODE_DEPENDENCY_DOCS = [
   'worker-definition/project-structure.md',
@@ -372,9 +373,11 @@ export function validateProject(projectDir, options = {}) {
     issues.push(...validateOutputSchema(readJson(outputPath), outputPath));
   } else {
     issues.push({
-      severity: 'warn',
-      code: 'missing_output_schema_legacy',
-      message: 'Missing output_schema.json. CoreClaw currently accepts legacy workers without it, but new workers should include it for stable table export and upload-time compatibility.',
+      severity: 'error',
+      code: 'missing_output_schema',
+      message: 'Missing output_schema.json. CoreClaw lists output_schema.json as a required worker file in every language project tree, and the platform ZIP validation checks for it alongside the entry file and input_schema.json. Cloud upload will be rejected without it.',
+      docs: ['worker-definition/output-schema.md', 'worker-definition/project-structure.md', 'builds-and-runs.md'],
+      remediation: 'Create output_schema.json as a JSON array of {name, type, description} column definitions matching the keys your Worker pushes via push_data.',
     });
   }
 
@@ -383,11 +386,15 @@ export function validateProject(projectDir, options = {}) {
   }
 
   issues.push(...validateStaticPushDataKeys(project));
+  issues.push(...validateUpsertUniqueKey(project));
+  issues.push(...validateHeaderBeforePush(project));
   issues.push(...validateSocksProxyDependencies(project));
   issues.push(...validateNodeSocksProxyDependencies(project));
   issues.push(...validateHardcodedUserAgent(project));
+  issues.push(...validateHardcodedProxyCredentials(project));
   issues.push(...validateBrowserFrameworkDependencies(project));
   issues.push(...validateProtobufVersionMatch(project));
+  issues.push(...validateCamoufoxPlaywrightVersion(project));
 
   return {
     ...project,
@@ -408,12 +415,12 @@ export function validateBrowserEndpointContract(project) {
 
   const missing = [
     scan.readsProxyAuth ? null : 'PROXY_AUTH',
-    scan.readsAnyBrowserEndpoint ? null : 'ChromeWs/ChromeHttp/LightpandaDomain',
+    scan.readsAnyBrowserEndpoint ? null : 'ChromeWs/ChromeHttp/CamoufoxDomain/LightpandaDomain',
   ].filter(Boolean);
   return [{
     severity: 'warn',
     code: 'browser_endpoint_env_not_used',
-    message: `Project appears to use browser automation (${scan.evidence.join(', ')}) but does not read ${missing.join(' and ')}. CoreClaw browser workers should connect to the platform-hosted remote browser through ChromeWs, ChromeHttp, or LightpandaDomain with credentials from PROXY_AUTH instead of launching or assuming a local browser.`,
+    message: `Project appears to use browser automation (${scan.evidence.join(', ')}) but does not read ${missing.join(' and ')}. CoreClaw browser workers should connect to the platform-hosted remote browser through ChromeWs, ChromeHttp, CamoufoxDomain, or LightpandaDomain with credentials from PROXY_AUTH instead of launching or assuming a local browser.`,
     docs: BROWSER_AUTOMATION_DOCS,
     evidence: {
       browser_client_files: scan.evidence,
@@ -421,7 +428,7 @@ export function validateBrowserEndpointContract(project) {
       observed_env: scan.observedEnv,
       source_file_count: scan.source_file_count,
     },
-    remediation: 'Read PROXY_AUTH plus ChromeWs, ChromeHttp, or LightpandaDomain at runtime and build the documented remote browser endpoint. Use LOCAL_DEV-only branches for launching a local browser during development.',
+    remediation: 'Read PROXY_AUTH plus ChromeWs, ChromeHttp, CamoufoxDomain, or LightpandaDomain at runtime and build the documented remote browser endpoint. Use LOCAL_DEV-only branches for launching a local browser during development.',
   }];
 }
 
@@ -432,6 +439,7 @@ export function scanSourceForBrowserContract(projectDir, language) {
     proxyAuth: PROXY_AUTH_PATTERNS[language],
     chromeWs: envReadPattern(language, 'ChromeWs'),
     chromeHttp: envReadPattern(language, 'ChromeHttp'),
+    camoufoxDomain: envReadPattern(language, 'CamoufoxDomain'),
     lightpandaDomain: envReadPattern(language, 'LightpandaDomain'),
     cdpEndpoint: envReadPattern(language, 'CDP_ENDPOINT'),
     browserWsEndpoint: envReadPattern(language, 'BROWSER_WS_ENDPOINT'),
@@ -456,6 +464,7 @@ export function scanSourceForBrowserContract(projectDir, language) {
     reads.proxyAuth ? 'PROXY_AUTH' : null,
     reads.chromeWs ? 'ChromeWs' : null,
     reads.chromeHttp ? 'ChromeHttp' : null,
+    reads.camoufoxDomain ? 'CamoufoxDomain' : null,
     reads.lightpandaDomain ? 'LightpandaDomain' : null,
     reads.cdpEndpoint ? 'CDP_ENDPOINT' : null,
     reads.browserWsEndpoint ? 'BROWSER_WS_ENDPOINT' : null,
@@ -468,6 +477,7 @@ export function scanSourceForBrowserContract(projectDir, language) {
     readsAnyBrowserEndpoint: Boolean(
       reads.chromeWs
       || reads.chromeHttp
+      || reads.camoufoxDomain
       || reads.lightpandaDomain
       || reads.cdpEndpoint
       || reads.browserWsEndpoint,
@@ -1252,24 +1262,39 @@ export function validateNodeSocksProxyDependencies(project) {
   const sourceFiles = collectSourceFiles(project.projectDir, project.projectDir, NODE_SOURCE_SCAN_EXTENSIONS);
   let usesSocksUrl = false;
   let usesSocksAgent = false;
+  let usesAxios = false;
+  let setsProxyFalse = false;
   for (const filePath of sourceFiles) {
     const text = fs.readFileSync(filePath, 'utf8');
     if (!usesSocksUrl && /socks[45]:\/\//.test(text)) usesSocksUrl = true;
     if (!usesSocksAgent && /socks-proxy-agent/.test(text)) usesSocksAgent = true;
-    if (usesSocksUrl && usesSocksAgent) break;
+    if (!usesAxios && /\brequire\s*\(\s*['"]axios['"]\s*\)|\bfrom\s+['"]axios['"]/.test(text)) usesAxios = true;
+    if (!setsProxyFalse && /\bproxy\s*:\s*false\b/.test(text)) setsProxyFalse = true;
+    if (usesSocksUrl && usesSocksAgent && usesAxios && setsProxyFalse) break;
   }
   if (!usesSocksUrl && !usesSocksAgent) return [];
+  const issues = [];
   if (usesSocksAgent) {
     const packagePath = path.join(project.projectDir, 'package.json');
     if (!fs.existsSync(packagePath)) {
-      return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project uses socks-proxy-agent, but package.json does not exist. Cloud runs will fail with a module not found error.', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "socks-proxy-agent" to package.json dependencies.' }];
-    }
-    const declared = readDeclaredDependencies('node', packagePath);
-    if (!declared.has('socks-proxy-agent')) {
-      return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project uses SOCKS5 proxy with socks-proxy-agent, but package.json does not declare "socks-proxy-agent". Cloud runs will fail with a module not found error.', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "socks-proxy-agent" to package.json dependencies.' }];
+      issues.push({ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project uses socks-proxy-agent, but package.json does not exist. Cloud runs will fail with a module not found error.', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "socks-proxy-agent" to package.json dependencies.' });
+    } else {
+      const declared = readDeclaredDependencies('node', packagePath);
+      if (!declared.has('socks-proxy-agent')) {
+        issues.push({ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project uses SOCKS5 proxy with socks-proxy-agent, but package.json does not declare "socks-proxy-agent". Cloud runs will fail with a module not found error.', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "socks-proxy-agent" to package.json dependencies.' });
+      }
     }
   }
-  return [];
+  if (usesAxios && usesSocksAgent && !setsProxyFalse) {
+    issues.push({
+      severity: 'warn',
+      code: 'axios_proxy_not_disabled',
+      message: 'Project uses axios with a SOCKS proxy agent but does not set "proxy: false" on the axios config. axios applies its own HTTP proxy by default, which prevents the SOCKS agent from working. The docs require setting proxy=false in Node.js when using a SOCKS agent.',
+      docs: [PROXY_SUPPORT_DOC],
+      remediation: 'Add "proxy: false" to the axios config object alongside httpAgent/httpsAgent.',
+    });
+  }
+  return issues;
 }
 
 export function validateHardcodedUserAgent(project) {
@@ -1393,4 +1418,162 @@ export function validateProtobufVersionMatch(project) {
 
 function stripJsonBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+const CAMOUFOX_DOC = 'worker-definition/browser-automation/camoufox.md';
+const CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION = '1.49.1';
+const UPSERT_DOC = 'worker-definition/output-schema.md';
+const SDK_MODULES_DOC = 'worker-definition/sdk-modules.md';
+
+export function validateCamoufoxPlaywrightVersion(project) {
+  if (project.language !== 'python') return [];
+  const scan = scanSourceForBrowserContract(project.projectDir, project.language);
+  if (!scan.usesBrowserAutomation || !scan.observedEnv.includes('CamoufoxDomain')) {
+    return [];
+  }
+
+  const depPath = path.join(project.projectDir, 'requirements.txt');
+  if (!fs.existsSync(depPath)) {
+    return [{
+      severity: 'error',
+      code: 'camoufox_playwright_not_pinned',
+      message: `Project reads CamoufoxDomain but requirements.txt is missing. Camoufox workers must pin playwright==${CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION} (camoufox.md).`,
+      docs: [CAMOUFOX_DOC],
+      remediation: `Create requirements.txt and pin "playwright==${CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION}".`,
+    }];
+  }
+
+  const text = fs.readFileSync(depPath, 'utf8');
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const match = line.match(/^playwright(?:\[[^\]]*\])?\s*(?:(==|>=|<=|~=|!=)\s*(.+))?$/i);
+    if (!match) continue;
+    const operator = match[1];
+    const version = (match[2] ?? '').trim();
+    if (operator === '==' && version === CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION) {
+      return [];
+    }
+    return [{
+      severity: 'error',
+      code: 'camoufox_playwright_not_pinned',
+      message: `Camoufox workers must pin playwright==${CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION} in requirements.txt, but found "playwright${operator ? operator + version : ''}". Camoufox connects through Playwright Firefox and only the documented version is validated against the platform-hosted backend (camoufox.md).`,
+      docs: [CAMOUFOX_DOC],
+      remediation: `Pin "playwright==${CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION}" in requirements.txt.`,
+    }];
+  }
+
+  return [{
+    severity: 'error',
+    code: 'camoufox_playwright_not_pinned',
+    message: `Camoufox workers must declare playwright==${CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION} in requirements.txt, but playwright is not declared. Camoufox connects through Playwright Firefox (camoufox.md).`,
+    docs: [CAMOUFOX_DOC],
+    remediation: `Add "playwright==${CAMOUFOX_REQUIRED_PLAYWRIGHT_VERSION}" to requirements.txt.`,
+  }];
+}
+
+const UPSERT_CALL_PATTERN = /\b(?:upsert_data|upsertData|UpsertData)\s*\(/g;
+const UPSERT_KEY_LITERAL_PATTERN = /['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\)/;
+
+export function validateUpsertUniqueKey(project) {
+  const outputPath = path.join(project.projectDir, 'output_schema.json');
+  if (!fs.existsSync(outputPath)) return [];
+  const outputSchema = readJson(outputPath);
+  if (!Array.isArray(outputSchema)) return [];
+
+  const outputNames = new Set(
+    outputSchema
+      .filter((col) => typeof col?.name === 'string')
+      .map((col) => col.name),
+  );
+
+  const issues = [];
+  const reported = new Set();
+  for (const filePath of collectSourceFiles(project.projectDir)) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    UPSERT_CALL_PATTERN.lastIndex = 0;
+    let callMatch;
+    while ((callMatch = UPSERT_CALL_PATTERN.exec(text)) !== null) {
+      const callStart = callMatch.index;
+      const tail = text.slice(callStart);
+      const keyMatch = tail.match(UPSERT_KEY_LITERAL_PATTERN);
+      if (!keyMatch) continue;
+      const key = keyMatch[1];
+      if (reported.has(key)) continue;
+      if (!outputNames.has(key)) {
+        reported.add(key);
+        issues.push({
+          severity: 'error',
+          code: 'upsert_unique_key_not_in_output_schema',
+          message: `Source calls upsert with unique key "${key}" (in ${relativePath}) but output_schema.json has no column named "${key}". The platform needs this column to match and update existing rows; upsert_data will fail to deduplicate without it.`,
+          docs: [UPSERT_DOC],
+          evidence: { upsert_key: key, source_file: relativePath },
+          remediation: `Add a column {"name": "${key}", "type": "..."} to output_schema.json, or change the upsert unique key to an existing column name.`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+const HEADER_CALL_PATTERN = /\b(?:set_table_header|setTableHeader|SetTableHeader)\s*\(/g;
+const PUSH_DATA_CALL_PATTERN = /\b(?:push_data|pushData|PushData)\s*\(/g;
+
+export function validateHeaderBeforePush(project) {
+  const issues = [];
+  for (const filePath of collectSourceFiles(project.projectDir)) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    let firstHeader = null;
+    let firstPush = null;
+    HEADER_CALL_PATTERN.lastIndex = 0;
+    let m;
+    while ((m = HEADER_CALL_PATTERN.exec(text)) !== null) {
+      if (firstHeader === null) firstHeader = m.index;
+    }
+    PUSH_DATA_CALL_PATTERN.lastIndex = 0;
+    while ((m = PUSH_DATA_CALL_PATTERN.exec(text)) !== null) {
+      if (firstPush === null) firstPush = m.index;
+    }
+    if (firstHeader !== null && firstPush !== null && firstHeader > firstPush) {
+      issues.push({
+        severity: 'warn',
+        code: 'push_data_before_table_header',
+        message: `${relativePath} calls push_data before set_table_header. The SDK requires the table header to be defined before the first data push so the platform can render columns correctly.`,
+        docs: [SDK_MODULES_DOC, UPSERT_DOC],
+        evidence: { source_file: relativePath },
+        remediation: 'Move the set_table_header call ahead of any push_data call in this file.',
+      });
+    }
+  }
+  return issues;
+}
+
+const HARDCODED_PROXY_CREDENTIAL_PATTERN = /socks[45]:\/\/[^\s'"/@]*:[^\s'"/@]*@/;
+
+export function validateHardcodedProxyCredentials(project) {
+  const evidence = [];
+  for (const filePath of collectSourceFiles(project.projectDir)) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    const lines = text.split(/\r?\n/);
+    for (const [index, line] of lines.entries()) {
+      if (HARDCODED_PROXY_CREDENTIAL_PATTERN.test(line)) {
+        evidence.push({ file: relativePath, line: index + 1 });
+        if (evidence.length >= 5) break;
+      }
+    }
+    if (evidence.length >= 5) break;
+  }
+  if (evidence.length === 0) return [];
+  const files = [...new Set(evidence.map((item) => item.file))].sort();
+  return [{
+    severity: 'error',
+    code: 'hardcoded_proxy_credentials',
+    message: `Project hardcodes proxy credentials in a SOCKS URL (${files.join(', ')}). The docs require reading platform-injected PROXY_AUTH at runtime; hardcoded credentials leak secrets and will not match the platform proxy.`,
+    docs: [PROXY_SUPPORT_DOC],
+    evidence: { files: evidence },
+    remediation: 'Replace the hardcoded credentials with process.env.PROXY_AUTH / os.environ.get("PROXY_AUTH") and build the SOCKS URL at runtime.',
+  }];
 }

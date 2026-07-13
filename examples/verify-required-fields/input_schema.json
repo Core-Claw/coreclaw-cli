@@ -1,0 +1,12 @@
+{
+  "description": "Verification probe v2: each property omits a different documented-required field, to learn which omissions the platform rejects at upload. All have defaults so the run does not depend on form input.",
+  "properties": [
+    { "name": "p_missing_title", "type": "string", "editor": "input", "description": "has everything except title", "default": "a", "required": false },
+    { "title": "P missing description", "name": "p_missing_description", "type": "string", "editor": "input", "default": "b", "required": false },
+    { "title": "P missing editor", "name": "p_missing_editor", "type": "string", "description": "has no editor", "default": "c", "required": false },
+    { "title": "P missing required", "name": "p_missing_required", "type": "string", "editor": "input", "description": "has no required flag", "default": "d" },
+    { "title": "P missing type", "name": "p_missing_type", "editor": "input", "description": "has no type", "default": "e", "required": false },
+    { "title": "P naked only name", "name": "p_naked", "default": "f" },
+    { "title": "P fully valid", "name": "p_valid", "type": "string", "editor": "input", "description": "all fields present", "default": "g", "required": false }
+  ]
+}

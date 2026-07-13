@@ -23,7 +23,8 @@
       "description": "Socket timeout for the proxy connection and HTTP response.",
       "default": 10000,
       "minimum": 1000,
-      "maximum": 60000
+      "maximum": 60000,
+      "required": false
     }
   ]
 }

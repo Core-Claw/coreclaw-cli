@@ -481,13 +481,14 @@ test('stageVerifyProject prepares Go verify runtime from the upload binary inste
 });
 
 test('verifyCommand strict mode fails before runtime on validation warnings', async () => {
-  const dir = makeNodeProject({ outputSchema: false });
+  const dir = makeNodeProject();
+  fs.rmSync(path.join(dir, 'README.md'));
 
   await assert.rejects(
     () => verifyCommand(dir, { strict: true, install: false, pack: false }),
     (error) => error instanceof CliError
       && /Preflight validation found 1 warning\(s\)/.test(error.message)
-      && /missing_output_schema_legacy/.test(error.message),
+      && /missing_readme/.test(error.message),
   );
 
   assert.equal(fs.existsSync(path.join(dir, '.coreclaw', 'runs')), false);
@@ -500,7 +501,7 @@ function makeNodeProject(options = {}) {
   fs.writeFileSync(path.join(dir, 'input_schema.json'), JSON.stringify({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList', default: [] },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'Items', required: true, default: [] },
     ],
   }));
   if (options.outputSchema !== false) {

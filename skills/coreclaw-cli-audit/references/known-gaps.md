@@ -1,6 +1,6 @@
 ﻿# Known Gaps and Historical Fixes
 
-Last Updated: 2026-06-30
+Last Updated: 2026-07-11
 
 ## Resolved Issues
 
@@ -8,7 +8,7 @@ Last Updated: 2026-06-30
 
 **Issue**: CLI validation treated legacy `b` as required and local `--split` only supported single-field `b` splitting. The platform now prefers `concurrency.fields` with optional `remove_fields`, while keeping `b` only as legacy fallback.
 
-**Documentation**: `C:/Users/user/Desktop/concurrency_rules.html`
+**Documentation**: `C:/Users/user/Desktop/urls/最新脚本并发拆分规则说明.html`
 
 **Fix**:
 - Added schema validation for `concurrency`, `fields`, and `remove_fields`
@@ -100,7 +100,7 @@ Last Updated: 2026-06-30
 
 **Commit**: b87e766
 
-**Status**: ✅ Resolved
+**Status**: ✅ Resolved (then **reversed on 2026-07-13**: platform verification with `examples/verify-code4000` v2 proved the platform does NOT reject any of the 11 mismatched combos — all upload and run. Downgraded back to `warn` and removed "code 4000" wording. See the resolved C1 entry above.)
 
 ### 2026-06-17: requestList/stringList default shape only warned
 
@@ -130,6 +130,63 @@ Last Updated: 2026-06-30
 
 ## Pending Issues
 
+### Resolved: editor/type mismatch downgraded to warn; "code 4000" wording removed (plan C1)
+
+**Date**: 2026-07-13
+
+**Issue**: `src/validation/schema.js` messages (and tests + reference docs) told users the platform rejects editor/type mismatches with "Invalid custom parameters (code 4000)". The official `api/error-codes.md` table has no code 4000 — business-layer codes start at 10000 (`SYSTEM_ERROR`).
+
+**Platform verification (2026-07-13)**: Uploaded `examples/verify-code4000` v2 — 11 mismatched editor/type combos in one schema (textarea+array, switch+array, json+string, select-multiple+string, input+boolean, number+string, checkbox+string, requestList+string, radio+object, datepicker+integer, stringList+string). The platform **accepted the upload and ran all 11 successfully**, delivering each field's value per its declared type. The only observed side effect was a form-rendering glitch (checkbox+string options were unselectable in the UI) — no hard rejection.
+
+**Fix** (`src/validation/schema.js`):
+- Downgraded `input_editor_type_mismatch` (3 sites: expected-types, string-only-editors, array-with-non-array-editor) and `input_select_multiple_type_mismatch` from `error` to `warn`.
+- Replaced all "The platform will reject this as 'Invalid custom parameters' (code 4000)" wording with "The platform accepts the schema and runs it, but the form control may render or behave incorrectly".
+- Updated 5 tests in `test/schema.test.js` (renamed "as error" → "as warn", assert warn severity + absence of "code 4000" wording).
+
+**Tests**: 366 pass, 0 fail.
+
+**Status**: ✅ Resolved
+
+### Resolved: documented required property fields severity (plan C2)
+
+**Date**: 2026-07-13
+
+**Issue**: `input-schema.md` L229-236 marks `title`/`name`/`type`/`editor`/`description`/`required` as Required=Yes on every property. The CLI previously only validated `name`+`type`.
+
+**Platform verification (2026-07-13)**: Uploaded `examples/verify-required-fields` v2 — 7 properties each omitting a different field (missing title / description / editor / required / type / naked-name-only / valid control). The platform **accepted the upload and ran all 7 successfully**, delivering each default value. Even `p_missing_type` and `p_naked` (only name+default) were accepted.
+
+**Fix**: `input_property_missing_title/editor/description/required` remain **warn** severity (confirmed correct — platform does not enforce these as hard requirements; the warnings serve as documentation-convention reminders).
+
+**Status**: ✅ Resolved (kept as warn)
+
+### Resolved: 2026-07-11 docs sweep — six new validators
+
+**Issue**: Full docs comparison (scraper-webui-docs) found documented rules the CLI did not enforce: CamoufoxDomain as a browser endpoint, Camoufox playwright pinning, upsert unique-key existence, header-before-push ordering, axios `proxy:false`, and hardcoded proxy credentials.
+
+**Fix** (all in `src/validation/project.js`):
+- `scanSourceForBrowserContract` now recognizes `CamoufoxDomain` (builds-and-runs.md L72-74); `BROWSER_AUTOMATION_DOCS` includes camoufox.md.
+- `validateCamoufoxPlaywrightVersion` — python worker reading `CamoufoxDomain` must pin `playwright==1.49.1` (camoufox.md L18) → **error**.
+- `validateUpsertUniqueKey` — statically scans `upsert_data`/`upsertData`/`UpsertData` literal key arg, errors if the key is not an output_schema.json column (output-schema.md L101-129) → **error**.
+- `validateHeaderBeforePush` — warns when a `set_table_header` call appears after a `push_data` call in the same file (sdk-modules.md L241) → **warn**. Scoped to "header exists but late" so the runtime hard-error on missing header is not duplicated.
+- `validateNodeSocksProxyDependencies` extended — warns when axios + socks-proxy-agent is used without `proxy: false` (proxy-support.md L192) → **warn**.
+- `validateHardcodedProxyCredentials` — detects literal `socks5://user:pass@` URLs (proxy-support.md L190, camoufox.md L32) → **error**. Template-literal URLs (`${PROXY_AUTH}`) are intentionally not flagged.
+
+**Tests**: 11 new test cases in `test/project.test.js`. 365 pass, 0 fail.
+
+**Status**: ✅ Resolved
+
+### Resolved: output_schema.json missing upgraded to error
+
+**Date**: 2026-07-11
+
+**Issue**: CLI warned when output_schema.json was absent ("legacy compat"), but the docs list it as required: project-structure.md includes output_schema.json in every language's required-files tree, and builds-and-runs.md L35 states platform ZIP validation checks "entry file, input_schema.json, output_schema.json".
+
+**Fix**: Upgraded `missing_output_schema` (renamed from `missing_output_schema_legacy`) from `warn` to `error`. Code renamed so stale ignore-profiles do not silently swallow a hard error.
+
+**Tests**: Updated project/validate/pack/verify/audit tests to use the new code and to use `missing_readme` as the canonical warning trigger for warn-gate tests. 354 pass, 0 fail.
+
+**Status**: ✅ Resolved
+
 ### Low Priority: requestListSource default validation severity
 
 **Current**: `warn` for invalid requestListSource defaults
@@ -137,8 +194,8 @@ Last Updated: 2026-06-30
 
 ### Low Priority: output_schema.json missing from project
 
-**Current**: `warn` when output_schema.json is absent
-**Consideration**: Docs list it as required but code intentionally allows legacy workers without it. Keeping as `warn` for backward compatibility.
+**Current**: `error` when output_schema.json is absent (upgraded 2026-07-11).
+**Consideration**: Resolved — docs list it as required (project-structure.md, builds-and-runs.md L35). See Resolved section above.
 
 ---
 
@@ -154,8 +211,8 @@ Last Updated: 2026-06-30
 
 ### Severity Guidelines
 
-- **error**: Platform will reject the worker (schema validation failure, missing required fields, code 4000)
-- **warn**: Best practice violation but worker might still work (deprecated fields, optional improvements)
+- **error**: Platform will reject the worker at upload or runtime (missing required files/fields like output_schema.json, HTTP scripts not reading proxy, hardcoded proxy credentials, camoufox playwright pin, upsert key not in output_schema). Editor/type mismatches are **not** in this category — platform verification (2026-07-13) confirmed they are accepted.
+- **warn**: Platform accepts but the form may misbehave or it's a best-practice convention (editor/type mismatch, missing documented-required title/editor/description/required, unknown editor, legacy type alias, missing README)
 - **info**: Informational only (case mismatches, optional recommendations)
 
 ### Testing Strategy

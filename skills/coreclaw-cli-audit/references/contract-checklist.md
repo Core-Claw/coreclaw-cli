@@ -1,10 +1,10 @@
 ﻿# Contract Checklist
 
-Last Updated: 2026-06-30
+Last Updated: 2026-07-11
 
 ## Priority 1: input-schema.md
 
-Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-guide\worker-definition\input-schema.md`
+Source: `D:/Coreclaw_Work/github/scraper-webui-docs/src/content/docs/developer-guide/worker-definition/input-schema.md`
 
 ### Root Fields
 
@@ -25,21 +25,25 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 - [x] R012: `name` must be unique — validated with error on duplicates
 - [x] R013: `name` must use ASCII letters/numbers/underscore/dash/dot — validated with error
 - [x] R014: `type` must be one of supported types (string/integer/number/boolean/array/object) — validated with error
+- [x] R014a: `title` documented required (string) — validated with **warn** (platform verification 2026-07-13: accepted; `examples/verify-required-fields` v2 — even missing type/naked-only-name accepted)
+- [x] R014b: `editor` documented required (string) — validated with **warn** (platform verification 2026-07-13: accepted)
+- [x] R014c: `description` documented required (string) — validated with **warn** (platform verification 2026-07-13: accepted)
+- [x] R014d: `required` documented required (boolean) — validated with **warn** (platform verification 2026-07-13: accepted)
 - [x] R015: `editor` must be documented — validated with warn for unknown editors
-- [x] R016: `editor` must match expected type — validated with **error** (platform rejects with code 4000)
+- [x] R016: `editor` should match expected type — validated with **warn** (platform verification 2026-07-13: `examples/verify-code4000` v2 — all 11 mismatched combos accepted and ran; form controls may render incorrectly, e.g. checkbox options unselectable)
 
-### Editor-Type Compatibility (Critical — platform rejects mismatches)
+### Editor-Type Compatibility (platform accepts mismatches — form may misbehave)
 
-- [x] R020: `number` editor requires integer/number type — error
-- [x] R021: `switch` editor requires boolean type — error
-- [x] R022: `checkbox` editor requires array type — error
-- [x] R023: `requestList` editor requires array type — error
-- [x] R024: `requestListSource` editor requires array type — error
-- [x] R025: `stringList` editor requires array type — error
-- [x] R026: `input` editor requires string type — error (string-only check)
-- [x] R027: `textarea` editor requires string type — error (string-only check)
-- [x] R028: `datepicker` editor requires string type — error (string-only check)
-- [x] R029: Array type requires array-compatible editor — error
+- [x] R020: `number` editor expects integer/number type — warn
+- [x] R021: `switch` editor expects boolean type — warn
+- [x] R022: `checkbox` editor expects array type — warn
+- [x] R023: `requestList` editor expects array type — warn
+- [x] R024: `requestListSource` editor expects array type — warn
+- [x] R025: `stringList` editor expects array type — warn
+- [x] R026: `input` editor expects string type — warn (string-only check)
+- [x] R027: `textarea` editor expects string type — warn (string-only check)
+- [x] R028: `datepicker` editor expects string type — warn (string-only check)
+- [x] R029: Array type expects array-compatible editor — warn
 
 ### Selector Options
 
@@ -66,7 +70,7 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 
 ## Priority 2: output-schema.md
 
-Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-guide\worker-definition\output-schema.md`
+Source: `D:/Coreclaw_Work/github/scraper-webui-docs/src/content/docs/developer-guide/worker-definition/output-schema.md`
 
 - [x] R070: Must be JSON array — validated with error
 - [x] R071: Each column must be object — validated with error
@@ -78,7 +82,7 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 
 ## Priority 3: project-structure.md
 
-Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-guide\worker-definition\project-structure.md`
+Source: `D:/Coreclaw_Work/github/scraper-webui-docs/src/content/docs/developer-guide/worker-definition/project-structure.md`
 
 ### Required Files
 
@@ -86,7 +90,7 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 - [x] R081: Node.js requires main.js, package.json, input_schema.json, sdk.js, sdk_pb.js, sdk_grpc_pb.js — validated
 - [x] R082: Go requires main.go, go.mod, go.sum, input_schema.json, GoSdk/*.go — validated
 - [x] R083: README.md recommended — warn if missing
-- [x] R084: output_schema.json recommended — warn if missing (legacy compat)
+- [x] R084: output_schema.json required — **error** if missing (upgraded from warn; builds-and-runs.md L35 lists it in platform ZIP validation, project-structure.md lists it in every language required-files tree)
 
 ### Entry File
 
@@ -94,7 +98,7 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 
 ## Priority 4: sdk-modules.md
 
-Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-guide\worker-definition\sdk-modules.md`
+Source: `D:/Coreclaw_Work/github/scraper-webui-docs/src/content/docs/developer-guide/worker-definition/sdk-modules.md`
 
 - [x] R090: Node.js runtime deps: @grpc/grpc-js, google-protobuf — validated
 - [x] R091: Python runtime deps: grpcio, protobuf — validated
@@ -145,9 +149,21 @@ Source: `E:\docs\docs-coreclaw\scraper-webui-docs\src\content\docs\developer-gui
 - [x] R180: set_table_header key not in output_schema.json — **warn** (static)
 - [x] R181: output_schema.json column not in set_table_header — **warn** (static)
 
+## Priority 9: 2026-07-11 docs sweep (browser endpoints, SDK, proxy, camoufox)
+
+Sources: builds-and-runs.md, browser-automation/{camoufox,overview}.md, sdk-modules.md, output-schema.md, proxy-support.md
+
+- [x] R210: Browser endpoint scan recognizes `CamoufoxDomain` — **warn** when browser worker reads no documented endpoint (builds-and-runs.md L72-74)
+- [x] R211: Camoufox workers (read CamoufoxDomain, python) must pin `playwright==1.49.1` — **error** (camoufox.md L18)
+- [x] R212: `upsert_data`/`upsertData`/`UpsertData` unique key must exist in output_schema.json — **error** (output-schema.md L101-129)
+- [x] R213: `set_table_header` must precede first `push_data` — **warn** (sdk-modules.md L241)
+- [x] R214: Node axios + SOCKS agent must set `proxy: false` — **warn** (proxy-support.md L192)
+- [x] R215: Hardcoded proxy credentials in a SOCKS URL — **error** (proxy-support.md L190, camoufox.md L32)
+- [x] R216: `missing_output_schema` upgraded to **error** (was warn; builds-and-runs.md L35 + project-structure.md required-files trees)
+
 ## Priority 8: concurrency-rules.html
 
-Source: `C:/Users/user/Desktop/concurrency_rules.html`
+Source: `C:/Users/user/Desktop/urls/最新脚本并发拆分规则说明.html` (2026-07 version, includes limits)
 
 - [x] R190: New runtime split uses `concurrency.fields` before legacy `b` — validated in `expandSplitInput`
 - [x] R191: Legacy `b` is trimmed and remains compatible when `concurrency.fields` is absent — tested

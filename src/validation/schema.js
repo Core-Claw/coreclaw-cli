@@ -86,6 +86,21 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
       issues.push(error(`${prefix}.required must be a boolean (true/false), but got ${typeof property.required}. The platform ignores non-boolean required values, so the field will be treated as optional.`, 'input_property_required_invalid'));
     }
 
+    // Documented required property fields (input-schema.md: title/name/type/editor/description/required are Required=Yes).
+    // Warn (not error) until platform rejection behavior is confirmed — see plan C2.
+    if (property.title === undefined || typeof property.title !== 'string' || property.title.length === 0) {
+      issues.push(warn(`${prefix}.title is documented as required (string). The form needs a label to render this field.`, 'input_property_missing_title'));
+    }
+    if (property.editor === undefined || typeof property.editor !== 'string' || property.editor.length === 0) {
+      issues.push(warn(`${prefix}.editor is documented as required (string). Without an editor the platform cannot render a form control for this field.`, 'input_property_missing_editor'));
+    }
+    if (property.description === undefined || typeof property.description !== 'string') {
+      issues.push(warn(`${prefix}.description is documented as required (string). It is shown as helper text below the field and helps script discoverability.`, 'input_property_missing_description'));
+    }
+    if (property.required === undefined) {
+      issues.push(warn(`${prefix}.required is documented as required (boolean). Without it the platform treats the field as optional.`, 'input_property_missing_required'));
+    }
+
     const propertyType = inferInputType(property);
     if (!SUPPORTED_TYPES.has(propertyType)) {
       if (LEGACY_COMPAT_TYPES.has(propertyType)) {
@@ -103,8 +118,8 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     if (expectedEditorTypes) {
       const normalizedType = normalizeType(propertyType);
       if (!expectedEditorTypes.includes(normalizedType) && !shouldUseArrayEditorMismatch(property, normalizedType)) {
-        issues.push(error(
-          `${prefix}.editor "${property.editor}" requires type ${formatTypeList(expectedEditorTypes)}, but property type is "${normalizedType}". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.`,
+        issues.push(warn(
+          `${prefix}.editor "${property.editor}" is documented for type ${formatTypeList(expectedEditorTypes)}, but property type is "${normalizedType}". The platform accepts the schema and runs it, but the form control may render or behave incorrectly (verified: mismatched editor/type combos upload and run, but some controls become unusable). Change the type or use a compatible editor.`,
           'input_editor_type_mismatch',
         ));
       }
@@ -114,8 +129,8 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     if (property.editor && STRING_ONLY_EDITORS.has(property.editor) && normalizeType(propertyType) !== 'string') {
       const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch' && i.message.startsWith(prefix));
       if (!alreadyReported) {
-        issues.push(error(
-          `${prefix}.editor "${property.editor}" only renders string values, but type is "${normalizeType(propertyType)}". The platform will reject this as "Invalid custom parameters" (code 4000). Use editor "stringList" or "requestList" for array inputs.`,
+        issues.push(warn(
+          `${prefix}.editor "${property.editor}" only renders string values, but type is "${normalizeType(propertyType)}". The platform accepts the schema and runs it, but the form control may render or behave incorrectly. Use editor "stringList" or "requestList" for array inputs.`,
           'input_editor_type_mismatch',
         ));
       }
@@ -127,8 +142,8 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
     if (isArrayWithNonArrayEditor && !isSelectMultiple) {
       const alreadyReported = issues.some((i) => i.code === 'input_editor_type_mismatch' && i.message.startsWith(prefix));
       if (!alreadyReported) {
-        issues.push(error(
-          `${prefix} has type "array" but editor "${property.editor}" does not support array rendering. The platform will reject this as "Invalid custom parameters" (code 4000). Use "stringList", "requestList", "requestListSource", or "checkbox" for array fields.`,
+        issues.push(warn(
+          `${prefix} has type "array" but editor "${property.editor}" does not support array rendering. The platform accepts the schema and runs it, but the form control may render or behave incorrectly. Use "stringList", "requestList", "requestListSource", or "checkbox" for array fields.`,
           'input_editor_type_mismatch',
         ));
       }
@@ -343,7 +358,7 @@ function validateSelectMultiple(item, prefix, invalidCode, editorCode) {
     issues.push(warn(`${prefix}.multiple is documented for editor "select", but editor is "${item.editor ?? 'undefined'}".`, editorCode));
   }
   if (item.multiple === true && item.editor === 'select' && item.type !== undefined && item.type !== 'array') {
-    issues.push(error(`${prefix} has "multiple": true but type is "${item.type}". When select allows multiple values, the type must be "array" so the platform receives a list. The platform will reject type mismatches (code 4000).`, 'input_select_multiple_type_mismatch'));
+    issues.push(warn(`${prefix} has "multiple": true but type is "${item.type}". When select allows multiple values, the type should be "array" so the platform receives a list. The platform accepts the schema, but a non-array type may cause the selected values to be delivered as a scalar instead of a list.`, 'input_select_multiple_type_mismatch'));
   }
   return issues;
 }

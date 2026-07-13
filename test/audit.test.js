@@ -44,7 +44,7 @@ test('discoverWorkerDirs all mode includes non-product worker-like roots', () =>
 
 test('auditCommand can fail on warnings for strict pre-upload gates', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-audit-warn-gate-'));
-  makeNodeWorker(path.join(root, 'worker-warning'), { outputSchema: false });
+  makeNodeWorker(path.join(root, 'worker-warning'), { omitReadme: true });
 
   const softReport = await auditCommand(root, { soft: true });
   assert.equal(softReport.totals.warn, 1);
@@ -58,30 +58,30 @@ test('auditCommand can fail on warnings for strict pre-upload gates', async () =
 
 test('auditCommand can ignore known issue codes while keeping evidence', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-audit-ignore-codes-'));
-  makeNodeWorker(path.join(root, 'worker-warning'), { outputSchema: false });
+  makeNodeWorker(path.join(root, 'worker-warning'), { omitReadme: true });
 
   const report = await auditCommand(root, {
     failOnWarn: true,
-    ignoreIssueCodes: 'missing_output_schema_legacy',
+    ignoreIssueCodes: 'missing_readme',
   });
 
   assert.equal(report.totals.pass, 1);
   assert.equal(report.totals.warn, 0);
   assert.equal(report.totals.ignored_issue_count, 1);
   assert.equal(report.workers[0].issues.length, 0);
-  assert.equal(report.workers[0].ignored_issues[0].code, 'missing_output_schema_legacy');
+  assert.equal(report.workers[0].ignored_issues[0].code, 'missing_readme');
 });
 
 test('auditCommand writes ignored issue counts and codes to reports', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-audit-reports-'));
   const outFile = path.join(root, 'audit.json');
   const markdownFile = path.join(root, 'audit.md');
-  makeNodeWorker(path.join(root, 'worker-warning'), { outputSchema: false });
+  makeNodeWorker(path.join(root, 'worker-warning'), { omitReadme: true });
 
   await auditCommand(root, {
     output: outFile,
     markdown: markdownFile,
-    ignoreIssueCodes: 'missing_output_schema_legacy',
+    ignoreIssueCodes: 'missing_readme',
   });
 
   const report = JSON.parse(fs.readFileSync(outFile, 'utf8'));
@@ -89,7 +89,7 @@ test('auditCommand writes ignored issue counts and codes to reports', async () =
   assert.equal(report.totals.ignored_issue_count, 1);
   assert.equal(report.workers[0].ignored_issue_count, 1);
   assert.match(markdown, /Ignored/);
-  assert.match(markdown, /missing_output_schema_legacy/);
+  assert.match(markdown, /missing_readme/);
 });
 
 test('auditCommand writes structured issue details to reports', async () => {
@@ -136,7 +136,7 @@ test('auditCommand applies reusable audit profile paths and gates', async () => 
   makeNodeWorker(path.join(root, 'worker-warning'), { outputSchema: false });
   fs.writeFileSync(profileFile, `${JSON.stringify({
     fail_on_warn: true,
-    ignore_issue_codes: ['missing_output_schema_legacy'],
+    ignore_issue_codes: ['missing_output_schema'],
     output: '../audit.json',
     markdown: '../audit.md',
   }, null, 2)}\n`);
@@ -145,7 +145,7 @@ test('auditCommand applies reusable audit profile paths and gates', async () => 
 
   assert.equal(report.options.audit_profile_path, profileFile);
   assert.equal(report.options.fail_on_warn, true);
-  assert.deepEqual(report.options.ignored_issue_codes, ['missing_output_schema_legacy']);
+  assert.deepEqual(report.options.ignored_issue_codes, ['missing_output_schema']);
   assert.equal(report.totals.pass, 1);
   assert.equal(report.totals.warn, 0);
   assert.equal(report.totals.ignored_issue_count, 1);
@@ -160,7 +160,7 @@ test('auditCommand merges profile and command-line ignored issue codes', async (
   makeNodeWorker(path.join(root, 'worker-package-main'), { packageMain: 'src/index.js' });
   fs.writeFileSync(profileFile, `${JSON.stringify({
     fail_on_warn: true,
-    ignore_issue_codes: ['missing_output_schema_legacy'],
+    ignore_issue_codes: ['missing_output_schema'],
   }, null, 2)}\n`);
 
   const report = await auditCommand(root, {
@@ -172,7 +172,7 @@ test('auditCommand merges profile and command-line ignored issue codes', async (
   assert.equal(report.totals.warn, 0);
   assert.deepEqual(
     report.options.ignored_issue_codes,
-    ['missing_output_schema_legacy', 'node_package_main_not_main_js'],
+    ['missing_output_schema', 'node_package_main_not_main_js'],
   );
   assert.equal(report.totals.ignored_issue_count, 2);
 });
@@ -180,11 +180,13 @@ test('auditCommand merges profile and command-line ignored issue codes', async (
 function makeNodeWorker(dir, options = {}) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'main.js'), options.mainJs ?? '');
-  fs.writeFileSync(path.join(dir, 'README.md'), '# Test\n');
+  if (!options.omitReadme) {
+    fs.writeFileSync(path.join(dir, 'README.md'), '# Test\n');
+  }
   fs.writeFileSync(path.join(dir, 'input_schema.json'), JSON.stringify({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList', default: [] },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'Items', required: true, default: [] },
     ],
   }));
   if (options.outputSchema !== false) {

@@ -1,0 +1,5 @@
+[
+  { "name": "field", "type": "string", "description": "Field" },
+  { "name": "value", "type": "string", "description": "Value" },
+  { "name": "status", "type": "string", "description": "Status" }
+]

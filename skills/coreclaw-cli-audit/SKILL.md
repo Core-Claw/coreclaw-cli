@@ -29,7 +29,7 @@ description: >
 - 平台特性：`developer-guide/worker-definition/platform-features/*.md`
 
 **并发规则补充来源：**
-- 当前规则 HTML：`C:/Users/user/Desktop/concurrency_rules.html`
+- 当前规则 HTML：`C:/Users/user/Desktop/urls/最新脚本并发拆分规则说明.html`（2026-07 版，含 limits）
 - 本仓库摘录：`skills/coreclaw-cli-audit/references/concurrency-rules.md`
 
 ## 审计流程
@@ -50,8 +50,8 @@ description: >
 对每条提取的规则，检查：
 1. `src/validation/schema.js` 是否有对应的校验函数
 2. `src/runtime/input.js` 是否正确模拟本地 `--split` 运行时行为
-3. 校验的 severity 是否正确（平台拒绝 = `error`，不只是 `warn`）
-4. 错误消息是否包含修复建议（建议提及 code 4000）
+3. 校验的 severity 是否正确（平台拒绝 = `error`，平台接受但表单/运行可能异常 = `warn`）
+4. 错误消息是否包含修复建议（不要写 "code 4000"——平台实测不拒绝 editor/type 不匹配，且该码不在 error-codes.md）
 5. `test/schema.test.js` 是否有对应的测试用例
 
 特别注意：`b` 已不是必填字段。新规则优先 `concurrency.fields`，没有有效新规则时才回退旧版 `b`。审计时不要把缺少 `b` 当作错误。
@@ -77,9 +77,11 @@ description: >
 
 | 严重性 | 含义 | 示例 |
 |--------|------|------|
-| `error` | 平台会拒绝（code 4000） | editor-type 不匹配、类型错误、缺失必填字段 |
-| `warn` | 最佳实践但平台可能接受 | 未知 editor、遗留类型别名、缺失 README |
-| `info` | 仅提示 | 大小写不一致 |
+| `error` | 平台 upload/运行时硬拒 | 缺失必填文件、缺失 output_schema.json、HTTP 脚本不读代理、硬编码代理凭证、Camoufox 未 pin playwright、upsert key 不在 output_schema |
+| `warn` | 平台接受但表单/运行可能异常或最佳实践 | editor-type 不匹配（实测平台不拒，但表单可能异常）、未知 editor、遗留类型别名、缺失 README、缺文档标必填的 title/editor/description/required |
+| `info` | 仅提示 | 大小写不一致、batch 字段未配 split |
+
+> 注：平台实测（2026-07-13）确认 editor/type 不匹配**不被拒绝**，已全部降为 warn。历史 "code 4000" 措辞已移除（该码不在 api/error-codes.md）。
 
 ## 运行审计脚本
 

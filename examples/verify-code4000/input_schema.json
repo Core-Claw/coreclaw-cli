@@ -1,0 +1,16 @@
+{
+  "description": "Verification probe v2: packs many editor/type mismatch combinations into one schema to learn which the platform rejects at upload or runtime. Each property has a default so the run does not depend on form input.",
+  "properties": [
+    { "title": "T1 textarea+array", "name": "t1_textarea_array", "type": "array", "editor": "textarea", "description": "textarea with array type", "default": ["a", "b"], "required": false },
+    { "title": "T2 switch+array", "name": "t2_switch_array", "type": "array", "editor": "switch", "description": "switch with array type", "default": ["x"], "required": false },
+    { "title": "T3 json+string", "name": "t3_json_string", "type": "string", "editor": "json", "description": "json editor with string type", "default": "hello", "required": false },
+    { "title": "T4 select-multiple+string", "name": "t4_select_multiple_string", "type": "string", "editor": "select", "multiple": true, "description": "select multiple with string type (should be array)", "default": "en", "required": false, "options": [{ "label": "English", "value": "en" }, { "label": "Chinese", "value": "zh" }] },
+    { "title": "T5 input+boolean", "name": "t5_input_boolean", "type": "boolean", "editor": "input", "description": "input with boolean type", "default": true, "required": false },
+    { "title": "T6 number+string", "name": "t6_number_string", "type": "string", "editor": "number", "description": "number editor with string type", "default": "not-a-number", "required": false },
+    { "title": "T7 checkbox+string", "name": "t7_checkbox_string", "type": "string", "editor": "checkbox", "description": "checkbox with string type", "default": "tags", "required": false, "options": [{ "label": "A", "value": "a" }, { "label": "B", "value": "b" }] },
+    { "title": "T8 requestList+string", "name": "t8_requestlist_string", "type": "string", "editor": "requestList", "description": "requestList with string type", "default": [{ "url": "https://example.com" }], "required": false },
+    { "title": "T9 radio+object", "name": "t9_radio_object", "type": "object", "editor": "radio", "description": "radio with object type", "default": {}, "required": false, "options": [{ "label": "One", "value": 1 }] },
+    { "title": "T10 datepicker+integer", "name": "t10_datepicker_integer", "type": "integer", "editor": "datepicker", "description": "datepicker with integer type", "default": 42, "required": false },
+    { "title": "T11 stringList+string", "name": "t11_stringlist_string", "type": "string", "editor": "stringList", "description": "stringList with string type", "default": ["k1", "k2"], "required": false }
+  ]
+}

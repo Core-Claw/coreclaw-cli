@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { formatIssues, hasExactPathCase, readJson, scanSourceForBrowserContract, scanSourceForProxyContract, validateProject } from '../src/validation/project.js';
 
-test('validateProject accepts legacy workers without output_schema.json as warnings', () => {
+test('validateProject rejects workers without output_schema.json as errors', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-'));
   fs.writeFileSync(path.join(dir, 'main.js'), '');
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
@@ -26,9 +26,10 @@ test('validateProject accepts legacy workers without output_schema.json as warni
 
   const result = validateProject(dir);
 
-  assert.equal(result.ok, true);
-  assert.equal(result.issues.some((issue) => issue.severity === 'error'), false);
-  assert.equal(result.issues.some((issue) => issue.code === 'missing_output_schema_legacy'), true);
+  assert.equal(result.ok, false);
+  const issue = result.issues.find((item) => item.code === 'missing_output_schema');
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
 });
 
 test('validateProject warns when README.md is missing from upload-ready workers', () => {
@@ -303,6 +304,33 @@ test('validateProject does not treat browser CDP workers as direct HTTP proxy wo
   assert.equal(result.issues.some((issue) => issue.code === 'browser_endpoint_env_not_used'), false);
 });
 
+test('validateProject recognizes CamoufoxDomain as a documented browser endpoint', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'playwright==1.49.1',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'from playwright.async_api import async_playwright',
+    'import os',
+    '',
+    'async def run():',
+    '    auth = os.environ.get("PROXY_AUTH")',
+    '    domain = os.environ.get("CamoufoxDomain")',
+    '    async with async_playwright() as playwright:',
+    '        browser = await playwright.firefox.connect(domain)',
+    '        await browser.close()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.some((issue) => issue.code === 'browser_endpoint_env_not_used'), false);
+});
+
 test('validateProject warns when browser automation does not read CoreClaw browser endpoint env', () => {
   const dir = makeNodeProject();
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
@@ -329,8 +357,8 @@ test('validateProject warns when browser automation does not read CoreClaw brows
   assert.equal(result.ok, true);
   assert.equal(Boolean(issue), true);
   assert.deepEqual(issue.evidence.browser_client_files, ['main.js']);
-  assert.deepEqual(issue.evidence.missing_env, ['PROXY_AUTH', 'ChromeWs/ChromeHttp/LightpandaDomain']);
-  assert.match(issue.remediation, /ChromeWs, ChromeHttp, or LightpandaDomain/);
+  assert.deepEqual(issue.evidence.missing_env, ['PROXY_AUTH', 'ChromeWs/ChromeHttp/CamoufoxDomain/LightpandaDomain']);
+  assert.match(issue.remediation, /ChromeWs, ChromeHttp, CamoufoxDomain, or LightpandaDomain/);
   assert.match(formatted, /Docs: worker-definition\/browser-automation\/overview\.md/);
 });
 
@@ -821,6 +849,225 @@ test('validateProject accepts pinned protobuf version', () => {
   assert.equal(result.issues.some((issue) => issue.code === 'protobuf_version_not_pinned'), false);
 });
 
+test('validateProject errors when a Camoufox worker does not pin playwright==1.49.1', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio==1.80.0',
+    'protobuf==5.29.0',
+    'playwright==1.40.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'from playwright.async_api import async_playwright',
+    'import os',
+    'async def run():',
+    '    domain = os.environ.get("CamoufoxDomain")',
+    '    async with async_playwright() as p:',
+    '        browser = await p.firefox.connect(domain)',
+    '        await browser.close()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'camoufox_playwright_not_pinned');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.match(issue.message, /playwright==1.49.1/);
+});
+
+test('validateProject accepts a Camoufox worker with playwright==1.49.1 pinned', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio==1.80.0',
+    'protobuf==5.29.0',
+    'playwright==1.49.1',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'from playwright.async_api import async_playwright',
+    'import os',
+    'async def run():',
+    '    domain = os.environ.get("CamoufoxDomain")',
+    '    async with async_playwright() as p:',
+    '        browser = await p.firefox.connect(domain)',
+    '        await browser.close()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'camoufox_playwright_not_pinned'), false);
+});
+
+test('validateProject does not require playwright pinning for non-Camoufox workers', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio==1.80.0',
+    'protobuf==5.29.0',
+    'playwright==1.40.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'from playwright.async_api import async_playwright',
+    'import os',
+    'async def run():',
+    '    ws = os.environ.get("ChromeWs")',
+    '    async with async_playwright() as p:',
+    '        browser = await p.chromium.connect_over_cdp(ws)',
+    '        await browser.close()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'camoufox_playwright_not_pinned'), false);
+});
+
+test('validateProject errors when upsert unique key is not in output_schema.json', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'output_schema.json'), JSON.stringify([
+    { name: 'id', type: 'string' },
+    { name: 'title', type: 'string' },
+  ]));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const coresdk = require('./sdk')",
+    'async function main() {',
+    "  await coresdk.result.upsertData({ id: '1', title: 'x' }, 'missing_key')",
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'upsert_unique_key_not_in_output_schema');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.equal(issue.evidence.upsert_key, 'missing_key');
+});
+
+test('validateProject accepts upsert unique key that exists in output_schema.json', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'output_schema.json'), JSON.stringify([
+    { name: 'id', type: 'string' },
+    { name: 'title', type: 'string' },
+  ]));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const coresdk = require('./sdk')",
+    'async function main() {',
+    "  await coresdk.result.upsertData({ id: '1', title: 'x' }, 'id')",
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'upsert_unique_key_not_in_output_schema'), false);
+});
+
+test('validateProject warns when push_data is called before set_table_header', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const coresdk = require('./sdk')",
+    'async function main() {',
+    "  await coresdk.result.pushData({ ok: true })",
+    "  await coresdk.result.setTableHeader([{ label: 'OK', key: 'ok', format: 'text' }])",
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'push_data_before_table_header');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'warn');
+});
+
+test('validateProject accepts set_table_header called before push_data', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const coresdk = require('./sdk')",
+    'async function main() {',
+    "  await coresdk.result.setTableHeader([{ label: 'OK', key: 'ok', format: 'text' }])",
+    "  await coresdk.result.pushData({ ok: true })",
+    '}',
+    'main()',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'push_data_before_table_header'), false);
+});
+
+test('validateProject warns when Node axios uses SOCKS agent without proxy:false', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+      axios: '^1.7.0',
+      'socks-proxy-agent': '^8.0.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const axios = require('axios')",
+    "const { SocksProxyAgent } = require('socks-proxy-agent')",
+    "const agent = new SocksProxyAgent('socks5://user:pass@proxy.example.com')",
+    "await axios.get('https://example.com', { httpAgent: agent, httpsAgent: agent })",
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'axios_proxy_not_disabled');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'warn');
+  assert.match(issue.message, /proxy: false/);
+});
+
+test('validateProject does not warn about axios proxy when proxy:false is set', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+    dependencies: {
+      '@grpc/grpc-js': '^1.14.3',
+      'google-protobuf': '^4.0.2',
+      axios: '^1.7.0',
+      'socks-proxy-agent': '^8.0.0',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const axios = require('axios')",
+    "const { SocksProxyAgent } = require('socks-proxy-agent')",
+    "const agent = new SocksProxyAgent('socks5://user:pass@proxy.example.com')",
+    "await axios.get('https://example.com', { httpAgent: agent, httpsAgent: agent, proxy: false })",
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'axios_proxy_not_disabled'), false);
+});
+
+test('validateProject errors when source hardcodes proxy credentials in a SOCKS URL', () => {
+  const dir = makeNodeProject();
+  fs.writeFileSync(path.join(dir, 'main.js'), [
+    "const url = 'socks5://alice:s3cret@proxy.example.com:1080'",
+    "console.log(url)",
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'hardcoded_proxy_credentials');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.match(issue.message, /PROXY_AUTH/);
+});
+
 
 function makeNodeProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coreclaw-project-node-'));
@@ -829,6 +1076,7 @@ function makeNodeProject() {
   fs.writeFileSync(path.join(dir, 'sdk_pb.js'), '');
   fs.writeFileSync(path.join(dir, 'sdk_grpc_pb.js'), '');
   writeInputSchema(dir);
+  writeOutputSchema(dir);
   return dir;
 }
 
@@ -838,6 +1086,7 @@ function makePythonProject() {
     fs.writeFileSync(path.join(dir, file), '');
   }
   writeInputSchema(dir);
+  writeOutputSchema(dir);
   return dir;
 }
 
@@ -865,6 +1114,7 @@ function makeGoProject() {
     fs.writeFileSync(path.join(dir, 'GoSdk', file), '');
   }
   writeInputSchema(dir);
+  writeOutputSchema(dir);
   return dir;
 }
 
@@ -872,7 +1122,13 @@ function writeInputSchema(dir) {
   fs.writeFileSync(path.join(dir, 'input_schema.json'), JSON.stringify({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList', default: [] },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'Items to process', required: true, default: [] },
     ],
   }));
+}
+
+function writeOutputSchema(dir) {
+  fs.writeFileSync(path.join(dir, 'output_schema.json'), JSON.stringify([
+    { name: 'value', type: 'string' },
+  ]));
 }

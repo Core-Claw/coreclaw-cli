@@ -89,7 +89,7 @@ test('runCli prints example workers as JSON', async () => {
   const output = await captureStdout(() => runCli(['node', 'coreclaw', 'examples', '--json-output']));
   const report = JSON.parse(output);
 
-  assert.equal(report.count, 4);
+  assert.equal(report.count, 6);
   assert.equal(report.examples.some((example) => example.name === 'node-http-proxy'), true);
   assert.equal(report.examples.some((example) => example.verify.includes('--require-lightpanda-shim')), true);
 });

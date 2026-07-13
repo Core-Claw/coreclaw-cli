@@ -7,27 +7,39 @@ import { validateCommand } from '../src/commands/validate.js';
 import { CliError } from '../src/utils/errors.js';
 
 test('validateCommand strict mode fails on upload-readiness warnings', async () => {
-  const dir = makeNodeProject({ outputSchema: false });
+  const dir = makeNodeProject();
+  fs.rmSync(path.join(dir, 'README.md'));
 
   await assert.rejects(
     () => validateCommand(dir, { strict: true }),
     (error) => error instanceof CliError
       && /Validation found 1 warning\(s\)/.test(error.message)
-      && /missing_output_schema_legacy/.test(error.message),
+      && /missing_readme/.test(error.message),
   );
 });
 
 test('validateCommand soft mode allows strict warnings for report generation', async () => {
-  const dir = makeNodeProject({ outputSchema: false });
+  const dir = makeNodeProject();
+  fs.rmSync(path.join(dir, 'README.md'));
 
   const result = await validateCommand(dir, { strict: true, soft: true });
 
   assert.equal(result.ok, true);
-  assert.equal(result.issues.some((issue) => issue.code === 'missing_output_schema_legacy'), true);
+  assert.equal(result.issues.some((issue) => issue.code === 'missing_readme'), true);
+});
+
+test('validateCommand reports missing output_schema.json as a hard error', async () => {
+  const dir = makeNodeProject({ outputSchema: false });
+
+  await assert.rejects(
+    () => validateCommand(dir, {}),
+    (error) => error instanceof CliError && /Validation failed/.test(error.message),
+  );
 });
 
 test('validateCommand json-output prints a machine-readable validation report', async () => {
-  const dir = makeNodeProject({ outputSchema: false });
+  const dir = makeNodeProject();
+  fs.rmSync(path.join(dir, 'README.md'));
 
   const output = await captureConsole(() => validateCommand(dir, { jsonOutput: true, soft: true }));
   const report = JSON.parse(output.stdout);
@@ -37,7 +49,7 @@ test('validateCommand json-output prints a machine-readable validation report', 
   assert.equal(report.project_dir, dir);
   assert.equal(report.language, 'node');
   assert.equal(report.warning_count, 1);
-  assert.equal(report.issues.some((issue) => issue.code === 'missing_output_schema_legacy'), true);
+  assert.equal(report.issues.some((issue) => issue.code === 'missing_readme'), true);
 });
 
 function makeNodeProject(options = {}) {
@@ -47,7 +59,7 @@ function makeNodeProject(options = {}) {
   fs.writeFileSync(path.join(dir, 'input_schema.json'), JSON.stringify({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList', default: [] },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'Items', required: true, default: [] },
     ],
   }));
   if (options.outputSchema !== false) {

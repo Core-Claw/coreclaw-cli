@@ -16,6 +16,24 @@ test('validates documented input schema b field', () => {
   assert.equal(issues.filter((issue) => issue.severity === 'error').length, 0);
 });
 
+test('warns when documented required property fields are missing', () => {
+  const issues = validateInputSchema({
+    description: 'demo',
+    properties: [
+      { name: 'lonely', type: 'string' },
+    ],
+  });
+  const codes = issues.filter((issue) => issue.severity === 'warn').map((issue) => issue.code);
+
+  assert.deepEqual(codes, [
+    'input_property_missing_title',
+    'input_property_missing_editor',
+    'input_property_missing_description',
+    'input_property_missing_required',
+  ]);
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+});
+
 test('accepts concurrency fields without legacy b', () => {
   const issues = validateInputSchema({
     description: 'demo',
@@ -110,8 +128,8 @@ test('rejects b that does not point to an array property', () => {
 test('reports batch array fields without split config as info only', () => {
   const issues = validateInputSchema({
     properties: [
-      { name: 'keywords', type: 'array', editor: 'stringList', default: ['pizza'] },
-      { name: 'max_results', type: 'integer', editor: 'number', default: 10 },
+      { title: 'Keywords', name: 'keywords', type: 'array', editor: 'stringList', description: 'd', required: false, default: ['pizza'] },
+      { title: 'Max Results', name: 'max_results', type: 'integer', editor: 'number', description: 'd', required: false, default: 10 },
     ],
   });
   const hint = issues.find((issue) => issue.code === 'input_batch_fields_without_split');
@@ -582,8 +600,8 @@ test('schema validation issues always include stable codes', () => {
     b: 'missing',
     properties: [
       'bad',
-      { name: 'bad name', type: 'float', editor: 'slider', required: true },
-      { name: 'limit', type: 'number' },
+      { title: 'Bad', name: 'bad name', type: 'float', editor: 'slider', description: 'd', required: true },
+      { title: 'Limit', name: 'limit', type: 'number', editor: 'number', description: 'd', required: false },
     ],
   });
   const outputIssues = validateOutputSchema([
@@ -612,48 +630,48 @@ test('schema validation issues always include stable codes', () => {
   ]);
 });
 
-test('errors when input editor does not match the documented type', () => {
+test('warns when input editor does not match the documented type', () => {
   const issues = validateInputSchema({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList' },
-      { name: 'limit', type: 'string', editor: 'number' },
-      { name: 'enabled', type: 'string', editor: 'switch' },
-      { name: 'sections', type: 'string', editor: 'checkbox' },
-      { name: 'urls', type: 'string', editor: 'requestList' },
-      { name: 'terms', type: 'string', editor: 'stringList' },
-      { name: 'mode', type: 'boolean', editor: 'select' },
-      { name: 'category', type: 'object', editor: 'radio' },
-      { name: 'config', type: 'string', editor: 'json' },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'd', required: true },
+      { title: 'Limit', name: 'limit', type: 'string', editor: 'number', description: 'd', required: false },
+      { title: 'Enabled', name: 'enabled', type: 'string', editor: 'switch', description: 'd', required: false },
+      { title: 'Sections', name: 'sections', type: 'string', editor: 'checkbox', description: 'd', required: false },
+      { title: 'URLs', name: 'urls', type: 'string', editor: 'requestList', description: 'd', required: false },
+      { title: 'Terms', name: 'terms', type: 'string', editor: 'stringList', description: 'd', required: false },
+      { title: 'Mode', name: 'mode', type: 'boolean', editor: 'select', description: 'd', required: false },
+      { title: 'Category', name: 'category', type: 'object', editor: 'radio', description: 'd', required: false },
+      { title: 'Config', name: 'config', type: 'string', editor: 'json', description: 'd', required: false },
     ],
   });
 
-  assert.ok(issues.some((issue) => issue.severity === 'error'));
-  assert.deepEqual(issues.filter((issue) => issue.code === 'input_editor_type_mismatch').map((issue) => issue.message), [
-    'input_schema.properties[1].editor "number" requires type "integer" or "number", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-    'input_schema.properties[2].editor "switch" requires type "boolean", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-    'input_schema.properties[3].editor "checkbox" requires type "array", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-    'input_schema.properties[4].editor "requestList" requires type "array", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-    'input_schema.properties[5].editor "stringList" requires type "array", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-    'input_schema.properties[6].editor "select" requires type "string" or "integer", but property type is "boolean". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-    'input_schema.properties[7].editor "radio" requires type "string" or "integer", but property type is "object". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-    'input_schema.properties[8].editor "json" requires type "object", but property type is "string". The platform will reject this as "Invalid custom parameters" (code 4000). Change the type or use a compatible editor.',
-  ]);
+  const mismatches = issues.filter((issue) => issue.code === 'input_editor_type_mismatch');
+  // Platform verification (2026-07-13): mismatched editor/type combos upload and run, so this is warn, not error.
+  assert.equal(mismatches.every((issue) => issue.severity === 'warn'), true);
+  assert.equal(mismatches.length, 8);
+  assert.equal(issues.some((issue) => issue.severity === 'error'), false);
+  // Wording must not claim a hard rejection or a "code 4000".
+  assert.equal(mismatches.every((issue) => !/code 4000/.test(issue.message) && !/Invalid custom parameters/.test(issue.message)), true);
+  assert.equal(mismatches.every((issue) => /platform accepts the schema/i.test(issue.message)), true);
 });
 
 test('warns about selector option and default drift, errors on invalid list items', () => {
   const issues = validateInputSchema({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList', default: [{ value: 'missing-string' }] },
-      { name: 'language', type: 'string', editor: 'select', default: 'de', options: [{ label: 'English', value: 'en' }] },
-      { name: 'category', type: 'integer', editor: 'radio', options: [{ label: 'Missing value' }, { value: 2 }] },
-      { name: 'sections', type: 'array', editor: 'checkbox' },
-      { name: 'limit', type: 'integer', editor: 'number', default: '10' },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'd', required: true, default: [{ value: 'missing-string' }] },
+      { title: 'Language', name: 'language', type: 'string', editor: 'select', description: 'd', required: false, default: 'de', options: [{ label: 'English', value: 'en' }] },
+      { title: 'Category', name: 'category', type: 'integer', editor: 'radio', description: 'd', required: false, options: [{ label: 'Missing value' }, { value: 2 }] },
+      { title: 'Sections', name: 'sections', type: 'array', editor: 'checkbox', description: 'd', required: false },
+      { title: 'Limit', name: 'limit', type: 'integer', editor: 'number', description: 'd', required: false, default: '10' },
       {
+        title: 'Sources',
         name: 'sources',
         type: 'array',
         editor: 'requestListSource',
+        description: 'd',
+        required: false,
         default: [{}, 'bad'],
         param_list: [{ param: 'query', type: 'string', required: true }],
       },
@@ -810,21 +828,23 @@ test('warns about invalid numeric bounds and default bounds drift', () => {
   assert.equal(issues.some((issue) => issue.code === 'input_default_param_option_not_declared'), true);
 });
 
-test('catches textarea with array type as error (tiktok-scraper regression)', () => {
+test('catches textarea with array type as warn (tiktok-scraper regression)', () => {
   const issues = validateInputSchema({
     description: 'Premium TikTok Data Extractor',
     b: 'queries',
     properties: [
-      { title: 'Scraping Type', name: 'type', type: 'string', editor: 'select', options: [{ label: 'Profile', value: 'profile' }], required: true },
-      { title: 'Queries', name: 'queries', type: 'array', editor: 'textarea', required: true },
-      { title: 'Max Results', name: 'max_results', type: 'integer', editor: 'input', default: 10 },
+      { title: 'Scraping Type', name: 'type', type: 'string', editor: 'select', options: [{ label: 'Profile', value: 'profile' }], description: 'd', required: true },
+      { title: 'Queries', name: 'queries', type: 'array', editor: 'textarea', description: 'd', required: true },
+      { title: 'Max Results', name: 'max_results', type: 'integer', editor: 'input', description: 'd', required: false, default: 10 },
     ],
   });
 
-  const editorErrors = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error');
-  assert.ok(editorErrors.length >= 1, 'textarea + array must be caught as error');
-  assert.match(editorErrors[0].message, /Invalid custom parameters/);
-  assert.match(editorErrors[0].message, /stringList/);
+  // Platform verification (2026-07-13): textarea + array uploads and runs, so this is warn, not error.
+  const editorWarns = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'warn');
+  assert.ok(editorWarns.length >= 1, 'textarea + array must be caught as warn');
+  assert.equal(issues.some((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error'), false);
+  assert.match(editorWarns[0].message, /platform accepts the schema/i);
+  assert.match(editorWarns[0].message, /stringList/);
 });
 
 test('accepts stringList with array type (correct tiktok-scraper fix)', () => {
@@ -856,17 +876,19 @@ test('accepts documented input editor numeric types and json editor object type'
   assert.equal(issues.filter((i) => i.code === 'input_property_unsupported_editor').length, 0);
 });
 
-test('catches array type with non-array editor as error', () => {
+test('catches array type with non-array editor as warn', () => {
   const issues = validateInputSchema({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'input' },
+      { title: 'Items', name: 'items', type: 'array', editor: 'input', description: 'd', required: true },
     ],
   });
 
-  const errors = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error');
-  assert.ok(errors.length >= 1, 'array + input editor must be caught as error');
-  assert.match(errors[0].message, /Invalid custom parameters/);
+  // Platform verification (2026-07-13): array + non-array editor uploads and runs, so this is warn, not error.
+  const warns = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'warn');
+  assert.ok(warns.length >= 1, 'array + input editor must be caught as warn');
+  assert.equal(issues.some((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error'), false);
+  assert.match(warns[0].message, /platform accepts the schema/i);
 });
 
 test('catches invalid stringList default shape as error', () => {
@@ -936,13 +958,12 @@ test('schema validation issues always include stable codes after upgrade', () =>
   const inputIssues = validateInputSchema({
     properties: [
       null,
-      { name: '@bad!', type: 'float' },
+      { title: 'Bad', name: '@bad!', type: 'string', editor: 'input', description: 'd', required: false },
     ],
   });
   assert.deepEqual(inputIssues.map((issue) => issue.code), [
     'input_property_invalid',
     'input_property_name_invalid',
-    'input_property_unsupported_type',
   ]);
 });
 
@@ -1111,18 +1132,20 @@ test('accepts valid requestListSource defaults without error', () => {
   assert.equal(issues.filter((i) => i.severity === 'error').length, 0);
 });
 
-test('catches select multiple with non-array type as error', () => {
+test('catches select multiple with non-array type as warn', () => {
   const issues = validateInputSchema({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList' },
-      { name: 'languages', type: 'string', editor: 'select', multiple: true, options: [{ label: 'English', value: 'en' }] },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'd', required: true },
+      { title: 'Languages', name: 'languages', type: 'string', editor: 'select', multiple: true, description: 'd', required: false, options: [{ label: 'English', value: 'en' }] },
     ],
   });
 
-  const errors = issues.filter((i) => i.code === 'input_select_multiple_type_mismatch' && i.severity === 'error');
-  assert.ok(errors.length >= 1, 'select multiple with string type must be error');
-  assert.match(errors[0].message, /type must be "array"/);
+  // Platform verification (2026-07-13): select multiple + string uploads and runs (delivers scalar "en"), so warn, not error.
+  const warns = issues.filter((i) => i.code === 'input_select_multiple_type_mismatch' && i.severity === 'warn');
+  assert.ok(warns.length >= 1, 'select multiple with string type must be warn');
+  assert.equal(issues.some((i) => i.code === 'input_select_multiple_type_mismatch' && i.severity === 'error'), false);
+  assert.match(warns[0].message, /type should be "array"/);
 });
 
 test('accepts select multiple with array type', () => {
@@ -1182,15 +1205,16 @@ test('reports editor-type mismatch for each property independently', () => {
   const issues = validateInputSchema({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList' },
-      { name: 'a', type: 'array', editor: 'textarea' },
-      { name: 'b', type: 'integer', editor: 'input' },
-      { name: 'c', type: 'array', editor: 'input' },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'd', required: true },
+      { title: 'A', name: 'a', type: 'array', editor: 'textarea', description: 'd', required: false },
+      { title: 'B', name: 'b', type: 'integer', editor: 'input', description: 'd', required: false },
+      { title: 'C', name: 'c', type: 'array', editor: 'input', description: 'd', required: false },
     ],
   });
 
-  const errors = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'error');
-  assert.ok(errors.length >= 2, 'each property with editor-type mismatch must get its own error');
-  assert.ok(errors.some((e) => e.message.includes('properties[1]')), 'textarea+array error for property 1');
-  assert.ok(errors.some((e) => e.message.includes('properties[3]')), 'array+input error for property 3');
+  // Platform verification (2026-07-13): mismatched editor/type uploads and runs, so warn, not error.
+  const warns = issues.filter((i) => i.code === 'input_editor_type_mismatch' && i.severity === 'warn');
+  assert.ok(warns.length >= 2, 'each property with editor-type mismatch must get its own warn');
+  assert.ok(warns.some((e) => e.message.includes('properties[1]')), 'textarea+array warn for property 1');
+  assert.ok(warns.some((e) => e.message.includes('properties[3]')), 'array+input warn for property 3');
 });

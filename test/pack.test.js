@@ -117,13 +117,13 @@ test('packCommand print-files previews staged Go upload binary contents', async 
 
 test('packCommand strict mode fails on static upload-readiness warnings', async () => {
   const dir = makeNodeProject();
-  fs.rmSync(path.join(dir, 'output_schema.json'));
+  fs.rmSync(path.join(dir, 'README.md'));
 
   await assert.rejects(
     () => packCommand(dir, { output: path.join(dir, 'dist', 'worker.zip'), strict: true }),
     (error) => error instanceof CliError
       && /Package validation found 1 warning\(s\) and --strict is enabled/.test(error.message)
-      && /missing_output_schema_legacy/.test(error.message),
+      && /missing_readme/.test(error.message),
   );
 
   assert.equal(fs.existsSync(path.join(dir, 'dist', 'worker.zip')), false);
@@ -338,7 +338,7 @@ function writeInputSchema(dir) {
   fs.writeFileSync(path.join(dir, 'input_schema.json'), JSON.stringify({
     b: 'items',
     properties: [
-      { name: 'items', type: 'array', editor: 'stringList', default: [] },
+      { title: 'Items', name: 'items', type: 'array', editor: 'stringList', description: 'Items', required: true, default: [] },
     ],
   }));
 }

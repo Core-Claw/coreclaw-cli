@@ -1205,9 +1205,11 @@ function createNodeFixture(mainJs) {
     b: 'items',
     properties: [
       {
+        title: 'Items',
         name: 'items',
         type: 'array',
         editor: 'stringList',
+        description: 'Items',
         default: [{ string: 'x' }],
         required: true,
       },
