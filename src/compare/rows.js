@@ -414,7 +414,7 @@ function extractCloudRows(value, filePath) {
 
   const downloadUrl = valueAtPath(value, 'data.download_url') ?? valueAtPath(value, 'download_url');
   if (downloadUrl) {
-    throw new CliError(`Cloud output JSON contains only an export download_url, not result rows: ${filePath}. Download the JSON export file first, or use the /api/v1/run/result/list response JSON.`);
+    throw new CliError(`Cloud output JSON contains only an export download_url, not result rows: ${filePath}. Download the JSON export file first, or use the /api/v2/worker-runs/{runId}/result response JSON.`);
   }
   throw new CliError(`Cloud output must be a JSON array or contain result rows at data.list, data.rows, data.items, rows, items, or results: ${filePath}`);
 }

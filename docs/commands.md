@@ -18,7 +18,7 @@
 
 - `account` - 查看 CoreClaw 账户余额和流量额度
 - `workers` - 通过公开 API 搜索、查看和运行 CoreClaw Worker
-- `tasks` - 运行已保存的 CoreClaw Task 模板
+- `tasks` - 管理 CoreClaw Task 模板：列出 / 创建 / 查看 / 更新 / 删除 / 输入 / 运行
 - `runs` - 查看 CoreClaw 云端 run、日志、结果、导出和控制操作
 - `prove` - 执行本地预检、启动云端 run、保存结果并对比一致性
 
@@ -26,7 +26,7 @@
 
 - `verify` - 在干净的类上传 staging 目录中执行上传预检
 - `pack` - 创建入口文件位于 ZIP 根目录的 CoreClaw 上传包
-- `release` - 整理发布候选 Worker 的本地包、云端测试和 Console 发布证据
+- `release` - 发布 Worker：publish 上传 ZIP 版本 / dossier 整理发布候选证据
 
 ### 检查与对比
 
@@ -184,23 +184,32 @@ coreclaw workers run <scraper_slug> --input cloud-request.json --wait --run-evid
 
 ### `tasks`
 
-运行已保存的 CoreClaw Task 模板
+管理 CoreClaw Task 模板：列出 / 创建 / 查看 / 更新 / 删除 / 输入 / 运行
 
 用法：
 
 ```bash
-coreclaw tasks run <task_slug> --callback-url https://example.com/webhook [--json-output]
-coreclaw tasks run <task_slug> --callback-url https://example.com/webhook --wait [--results-output task-results.json]
-coreclaw tasks run <task_slug> --callback-url https://example.com/webhook --wait --run-evidence-output task-evidence.json
+coreclaw tasks list [<worker_slug>] [--offset 0 --limit 20] [--json-output]
+coreclaw tasks create <worker_slug> --title "Daily scrape" --input request.json [--version v1] [--schedule-type 1 --schedule-time 09:00]
+coreclaw tasks get <task_slug> [--json-output]
+coreclaw tasks update <task_slug> --title "New title" [--schedule-enabled 0]
+coreclaw tasks delete <task_slug>
+coreclaw tasks input get <task_slug> [--json-output]
+coreclaw tasks input put <task_slug> --input request.json [--version v2]
+coreclaw tasks run <task_slug> [--callback-url https://example.com/webhook] [--wait]
 ```
 
 示例：
 
 ```bash
-coreclaw tasks run <task_slug> --callback-url https://example.com/webhook
-coreclaw tasks run <task_slug> --callback-url https://example.com/webhook --json-output
-coreclaw tasks run <task_slug> --callback-url https://example.com/webhook --wait --results-output task-results.json
-coreclaw tasks run <task_slug> --callback-url https://example.com/webhook --wait --run-evidence-output task-evidence.json
+coreclaw tasks list
+coreclaw tasks create my-worker --title "Daily coffee" --input input.json
+coreclaw tasks get demo-task --json-output
+coreclaw tasks update demo-task --title "Renamed"
+coreclaw tasks delete demo-task
+coreclaw tasks input get demo-task
+coreclaw tasks input put demo-task --input new-input.json
+coreclaw tasks run demo-task --callback-url https://example.com/webhook --wait --results-output task-results.json
 ```
 
 ### `runs`
@@ -304,22 +313,23 @@ coreclaw pack ./go-worker --output ./dist/go-worker.zip --go go --strict
 
 ### `release`
 
-整理发布候选 Worker 的本地包、云端测试和 Console 发布证据
+发布 Worker：publish 上传 ZIP 版本 / dossier 整理发布候选证据
 
 用法：
 
 ```bash
+coreclaw release publish <worker_slug> [project] --title "My Worker" --description "..." [--categories 1,2] [--icon https://...] [--version v1]
 coreclaw release dossier [project] --package worker.zip [--cloud-run run_slug] [--compare-report report.json]
-coreclaw release dossier [project] --package worker.zip --run-evidence run-evidence.json --compare-report report.json
 coreclaw release dossier [project] [--diagnosis diagnosis.json] [--cost-report cost.json] [--output release.json] [--markdown release.md]
 ```
 
 示例：
 
 ```bash
+coreclaw release publish my-worker ./worker --title "Demo" --description "A demo worker"
+coreclaw release publish my-worker ./worker --title "Demo" --description "..." --categories 1,3 --icon https://example.com/icon.png
 coreclaw release dossier ./worker --package ./dist/worker.zip --cloud-run <run_slug> --compare-report ./worker/.coreclaw/runs/<run-id>/cloud-comparison.json
 coreclaw release dossier ./worker --package ./dist/worker.zip --run-evidence run-evidence.json --compare-report cloud-comparison.json
-coreclaw release dossier ./worker --package ./dist/worker.zip --diagnosis diagnosis.json --cost-report cost.json --output release.json --markdown release.md
 ```
 
 ## 检查与对比
