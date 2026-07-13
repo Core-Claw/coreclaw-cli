@@ -91,18 +91,14 @@ test('doctorCommand cloud mode checks account and public worker detail without s
       if (pathname === '/json/version') {
         return { ok: false };
       }
-      if (pathname === '/api/v1/account/info') {
-        return jsonResponse({ code: 0, message: 'success', data: { balance: '10.00', traffic: '1000' } });
+      if (pathname === '/api/v2/users/account') {
+        return jsonResponse({ code: 0, message: 'success', data: { balance: '10.00' } });
       }
-      if (pathname === '/api/scraper') {
-        return jsonResponse({
-          code: 0,
-          message: 'success',
-          data: {
-            version: 'v2.0.0',
-            parameters: { custom: { properties: [{ name: 'urls', required: true }] } },
-          },
-        });
+      if (pathname === '/api/v2/workers/WORKER') {
+        return jsonResponse({ code: 0, message: 'success', data: { version: 'v2.0.0' } });
+      }
+      if (pathname === '/api/v2/workers/WORKER/input-schema') {
+        return jsonResponse({ code: 0, message: 'success', data: { properties: [{ name: 'urls', required: true }] } });
       }
       throw new Error(`Unexpected URL: ${url}`);
     },
@@ -112,7 +108,7 @@ test('doctorCommand cloud mode checks account and public worker detail without s
   assert.match(output, /\[ OK \] CoreClaw account/);
   assert.match(output, /\[ OK \] Worker detail: WORKER version=v2\.0\.0/);
   assert.match(output, /Cloud run: skipped/);
-  assert.equal(calls.some((url) => new URL(url).pathname === '/api/v1/scraper/run'), false);
+  assert.equal(calls.some((url) => new URL(url).pathname === '/api/v2/workers/WORKER/runs'), false);
 });
 
 test('doctorCommand cloud mode can run, wait, save results, and collect evidence when input is explicit', async () => {
@@ -121,7 +117,7 @@ test('doctorCommand cloud mode can run, wait, save results, and collect evidence
   const resultsPath = path.join(dir, 'cloud-results.json');
   const evidencePath = path.join(dir, 'run-evidence.json');
   fs.writeFileSync(inputPath, JSON.stringify({ parameters: { custom: { urls: ['https://example.com'] } } }));
-  const detailStatuses = [2, 3];
+  const detailStatuses = ['running', 'succeeded'];
   const collectCalls = [];
 
   const output = await withCapturedConsole(() => doctorCommand({
@@ -145,26 +141,27 @@ test('doctorCommand cloud mode can run, wait, save results, and collect evidence
       if (pathname === '/json/version') {
         return { ok: false };
       }
-      if (pathname === '/api/v1/account/info') {
-        return jsonResponse({ code: 0, message: 'success', data: { balance: '10.00', traffic: '1000' } });
+      if (pathname === '/api/v2/users/account') {
+        return jsonResponse({ code: 0, message: 'success', data: { balance: '10.00' } });
       }
-      if (pathname === '/api/scraper') {
-        return jsonResponse({ code: 0, message: 'success', data: { version: 'v2.0.0', parameters: { custom: { properties: [] } } } });
+      if (pathname === '/api/v2/workers/WORKER') {
+        return jsonResponse({ code: 0, message: 'success', data: { version: 'v2.0.0' } });
       }
-      if (pathname === '/api/v1/scraper/run') {
+      if (pathname === '/api/v2/workers/WORKER/input-schema') {
+        return jsonResponse({ code: 0, message: 'success', data: { properties: [] } });
+      }
+      if (pathname === '/api/v2/workers/WORKER/runs') {
         assert.deepEqual(JSON.parse(request.body), {
-          scraper_slug: 'WORKER',
           version: 'v2.0.0',
           input: { parameters: { custom: { urls: ['https://example.com'] } } },
           is_async: true,
         });
         return jsonResponse({ code: 0, message: 'success', data: { run_slug: 'RUN123' } });
       }
-      if (pathname === '/api/v1/run/detail') {
+      if (pathname === '/api/v2/worker-runs/RUN123') {
         return jsonResponse({ code: 0, message: 'success', data: { slug: 'RUN123', status: detailStatuses.shift(), results: 1 } });
       }
-      if (pathname === '/api/v1/run/result/list') {
-        assert.deepEqual(JSON.parse(request.body), { run_slug: 'RUN123', page_index: 1, page_size: 100 });
+      if (pathname === '/api/v2/worker-runs/RUN123/result') {
         return jsonResponse({ code: 0, message: 'success', data: { count: 1, list: [{ title: 'Cloud result' }] } });
       }
       throw new Error(`Unexpected URL: ${url}`);

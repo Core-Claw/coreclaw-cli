@@ -89,15 +89,21 @@ async function runCloudSmoke(options = {}) {
   console.log('');
   console.log('CoreClaw cloud smoke');
   const client = createClientFromOptions(options);
-  const account = await client.accountInfo();
-  console.log(`[ OK ] CoreClaw account: balance=${account.data?.balance ?? '-'} traffic=${account.data?.traffic ?? '-'}`);
+  const account = await client.getAccount();
+  console.log(`[ OK ] CoreClaw account: balance=${account.data?.balance ?? '-'}`);
 
   const scraperSlug = options.scraperSlug;
   let version = options.version;
   if (scraperSlug) {
-    const detail = await client.workerDetail(scraperSlug);
+    const detail = await client.getWorker(scraperSlug);
     version = resolveSmokeVersion(detail, version, scraperSlug);
-    const customProperties = detail.data?.parameters?.custom?.properties ?? [];
+    let customProperties = [];
+    try {
+      const schema = await client.getWorkerInputSchema(scraperSlug);
+      customProperties = schema?.data?.properties ?? [];
+    } catch {
+      // input-schema is best-effort; some workers may not expose it.
+    }
     const requiredCount = customProperties.filter((property) => property.required).length;
     console.log(`[ OK ] Worker detail: ${scraperSlug} version=${version} required_custom=${requiredCount}`);
   } else {
@@ -113,8 +119,7 @@ async function runCloudSmoke(options = {}) {
   }
 
   const input = readInputJson(options.cloudInput, '--cloud-input');
-  const runResponse = await client.runWorker({
-    scraperSlug,
+  const runResponse = await client.runWorker(scraperSlug, {
     version,
     input,
     callbackUrl: options.callbackUrl,
@@ -134,19 +139,18 @@ async function runCloudSmoke(options = {}) {
       sleepImpl: options.sleepImpl,
       nowImpl: options.nowImpl,
     });
-    const status = Number(detail.status);
+    const status = String(detail.status ?? '').toLowerCase();
     console.log(`Cloud run finished: ${statusLabel(status)}`);
-    if (status !== 3) {
+    if (status !== 'succeeded') {
       throw new CliError(`CoreClaw cloud smoke run ${runSlug} ended with status ${status}. Check logs with "coreclaw runs logs ${runSlug}".`);
     }
   }
 
   let results = null;
   if (options.resultsOutput) {
-    results = await client.runResults({
-      runSlug,
-      pageIndex: parsePositiveInteger(options.pageIndex, 1, '--page-index'),
-      pageSize: parsePositiveInteger(options.pageSize, 100, '--page-size'),
+    results = await client.listWorkerRunResults(runSlug, {
+      offset: parsePositiveInteger(options.pageIndex, 1, '--page-index') - 1,
+      limit: parsePositiveInteger(options.pageSize, 100, '--page-size'),
     });
     const resultsPath = writeJsonOutput(options.resultsOutput, results);
     console.log(`Cloud results: ${resultsPath}`);

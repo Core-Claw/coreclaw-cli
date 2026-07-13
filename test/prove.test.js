@@ -29,16 +29,16 @@ test('proveCommand runs local preflight, cloud run, saves results, and compares'
     apiKey: 'test-key',
     fetchImpl: async (url, request) => {
       calls.push({ url, request });
-      if (url.includes('/api/scraper?')) {
-        return jsonResponse({ code: 0, message: 'success', data: { version: 'v1.2.3' } });
-      }
-      if (url.endsWith('/api/v1/scraper/run')) {
+      if (url.endsWith('/api/v2/workers/WORKER/runs')) {
         return jsonResponse({ code: 0, message: 'success', data: { run_slug: 'CLOUD-RUN' } });
       }
-      if (url.endsWith('/api/v1/run/detail')) {
-        return jsonResponse({ code: 0, message: 'success', data: { slug: 'CLOUD-RUN', status: 3, results: 1, usage: '0.01' } });
+      if (url.endsWith('/api/v2/workers/WORKER')) {
+        return jsonResponse({ code: 0, message: 'success', data: { version: 'v1.2.3' } });
       }
-      if (url.endsWith('/api/v1/run/result/list')) {
+      if (url.endsWith('/api/v2/worker-runs/CLOUD-RUN')) {
+        return jsonResponse({ code: 0, message: 'success', data: { slug: 'CLOUD-RUN', status: 'succeeded', results: 1, usage: '0.01' } });
+      }
+      if (url.includes('/api/v2/worker-runs/CLOUD-RUN/result')) {
         return jsonResponse({ code: 0, message: 'success', data: { count: 1, list: [{ title: 'Example' }] } });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -62,13 +62,13 @@ test('proveCommand runs local preflight, cloud run, saves results, and compares'
   assert.equal(result.local.run_id, 'local-run');
   assert.equal(result.cloud.run_slug, 'CLOUD-RUN');
   assert.equal(result.cloud.version, 'v1.2.3');
-  assert.equal(result.cloud.detail.status, 3);
+  assert.equal(result.cloud.detail.status, 'succeeded');
   assert.deepEqual(readCloudRows(result.cloud_results_path), [{ title: 'Example' }]);
   assert.equal(compareCalls.length, 1);
   assert.equal(compareCalls[0].cloudPath, result.cloud_results_path);
   assert.equal(compareCalls[0].localPath, localRunDir);
   assert.equal(compareCalls[0].compareOptions.output, path.join(localRunDir, 'cloud-comparison.json'));
-  assert.equal(calls.some((call) => call.url.endsWith('/api/v1/run/result/list')), true);
+  assert.equal(calls.some((call) => call.url.includes('/api/v2/worker-runs/CLOUD-RUN/result')), true);
 });
 
 test('proveCommand can write release-ready run evidence and dossier after comparison passes', async () => {
@@ -90,13 +90,13 @@ test('proveCommand can write release-ready run evidence and dossier after compar
     runEvidenceOutput,
     releaseOutput,
     fetchImpl: async (url) => {
-      if (url.endsWith('/api/v1/scraper/run')) {
+      if (url.endsWith('/api/v2/workers/WORKER/runs')) {
         return jsonResponse({ code: 0, message: 'success', data: { run_slug: 'CLOUD-RUN' } });
       }
-      if (url.endsWith('/api/v1/run/detail')) {
-        return jsonResponse({ code: 0, message: 'success', data: { slug: 'CLOUD-RUN', status: 3, results: 1, usage: '0.01' } });
+      if (url.endsWith('/api/v2/worker-runs/CLOUD-RUN')) {
+        return jsonResponse({ code: 0, message: 'success', data: { slug: 'CLOUD-RUN', status: 'succeeded', results: 1, usage: '0.01' } });
       }
-      if (url.endsWith('/api/v1/run/result/list')) {
+      if (url.includes('/api/v2/worker-runs/CLOUD-RUN/result')) {
         return jsonResponse({ code: 0, message: 'success', data: { count: 1, list: [{ title: 'Example' }] } });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -119,7 +119,7 @@ test('proveCommand can write release-ready run evidence and dossier after compar
       return {
         run_slug: positionals[1],
         files: { json: collectOptions.output },
-        diagnosis: { status: 3, status_label: 'Succeeded', issues: [] },
+        diagnosis: { status: 'succeeded', status_label: 'Succeeded', issues: [] },
         cost: { usage_usd: '0.01', traffic_bytes: 10 },
       };
     },
@@ -164,7 +164,7 @@ test('proveCommand requires scraper slug and cloud input', async () => {
 
 test('pollRunUntilTerminal times out when the cloud run stays non-terminal', async () => {
   const client = {
-    runDetail: async () => ({ code: 0, message: 'success', data: { slug: 'RUN', status: 2 } }),
+    getWorkerRun: async () => ({ code: 0, message: 'success', data: { slug: 'RUN', status: 'running' } }),
   };
 
   await assert.rejects(

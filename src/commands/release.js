@@ -2,17 +2,71 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { inspectPackage, validatePackageReport } from './inspect-package.js';
 import { validateProject } from '../validation/project.js';
+import { packCommand } from './pack.js';
+import {
+  createClientFromOptions,
+  parseCommaList,
+  printOrReturn,
+  requireArg,
+} from './cloud-utils.js';
 import { CliError } from '../utils/errors.js';
 import { printJson, shouldPrintJson } from '../utils/output.js';
 import { resolveProjectPath } from '../utils/paths.js';
 
 export async function releaseCommand(positionals = [], options = {}) {
   const subcommand = positionals[0];
-  if (subcommand !== 'dossier') {
-    throw new CliError('release requires a supported subcommand. Usage: coreclaw release dossier [project]');
+  if (subcommand === 'dossier') {
+    return releaseDossier(positionals.slice(1), options);
   }
+  if (subcommand === 'publish') {
+    return publishWorker(positionals.slice(1), options);
+  }
+  throw new CliError('release requires a supported subcommand. Usage: coreclaw release dossier [project] | release publish <worker_slug> [project]');
+}
 
-  const projectDir = resolveProjectPath(positionals[1] ?? '.');
+async function publishWorker(args, options) {
+  const workerId = requireArg(args[0], 'release publish requires <worker_slug>.');
+  const projectDir = resolveProjectPath(args[1] ?? '.');
+  const client = createClientFromOptions(options);
+
+  // Build the upload ZIP first (reuses the pack pipeline + validation).
+  const defaultOutput = path.join(projectDir, 'dist', 'worker.zip');
+  const packagePath = await packCommand(projectDir, {
+    ...options,
+    output: options.zipOutput ?? defaultOutput,
+  });
+  const zipBuffer = fs.readFileSync(packagePath);
+
+  const title = requireArg(options.title, 'release publish requires --title.');
+  const description = requireArg(options.description, 'release publish requires --description.');
+  const categories = parseCommaList(options.categories).map((item) => Number.parseInt(item, 10)).filter(Number.isInteger);
+
+  const response = await client.createWorkerVersion(workerId, {
+    scraperFile: zipBuffer,
+    title,
+    description,
+    categories: categories.length > 0 ? categories : undefined,
+    icon: options.icon,
+  });
+
+  const result = {
+    worker_id: workerId,
+    package_path: packagePath,
+    version: response.data?.version ?? null,
+    response,
+  };
+  if (shouldPrintJson(options)) {
+    printJson(result);
+  } else {
+    console.log(`Published Worker version: ${response.data?.version ?? '-'}`);
+    console.log(`Worker: ${workerId}`);
+    console.log(`Package: ${packagePath}`);
+  }
+  return result;
+}
+
+async function releaseDossier(positionals, options) {
+  const projectDir = resolveProjectPath(positionals[0] ?? '.');
   const report = buildReleaseDossier(projectDir, options);
 
   if (options.output) {
@@ -90,9 +144,10 @@ export function buildReleaseDossier(projectPath = '.', options = {}) {
       cost: costEvidence(cost),
     },
     platform_constraints: {
-      upload_api_available: false,
-      publish_api_available: false,
-      reason: 'Current CoreClaw docs describe ZIP upload, version update, and Store publishing through Console/GitHub import, but do not document public upload or publish APIs.',
+      upload_api_available: true,
+      publish_api_available: true,
+      publish_api: 'POST /api/v2/workers/{workerId}/versions (multipart/form-data: scraper_file + title + description + categories)',
+      reason: 'CoreClaw API v2 documents worker version creation (upload) and update via POST/PUT /api/v2/workers/{workerId}/versions. Use "coreclaw release publish <worker_slug>" to publish a built ZIP.',
       docs: [
         'developer-guide/deployment.md',
         'developer-guide/publishing-and-monetization/publish-your-worker.md',

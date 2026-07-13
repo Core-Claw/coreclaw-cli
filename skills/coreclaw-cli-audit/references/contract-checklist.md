@@ -161,6 +161,49 @@ Sources: builds-and-runs.md, browser-automation/{camoufox,overview}.md, sdk-modu
 - [x] R215: Hardcoded proxy credentials in a SOCKS URL — **error** (proxy-support.md L190, camoufox.md L32)
 - [x] R216: `missing_output_schema` upgraded to **error** (was warn; builds-and-runs.md L35 + project-structure.md required-files trees)
 
+## Priority 10: API v2 contract (cloud client vs exported-api-docs/openapi.json)
+
+Source: `D:/Coreclaw_Work/github/exported-api-docs/openapi.json` (37 operations, all `/api/v2/*`). The CLI cloud client (`src/cloud/client.js`) covers all 37 operationIds. Auth is HTTP Bearer (`Authorization: Bearer <token>`) with `?token=` query fallback; public endpoints (store, proxy/region, input-schema, internal) send no auth.
+
+- [x] R300: `getAccount` → GET /api/v2/users/account
+- [x] R301: `listStore` → GET /api/v2/store (public)
+- [x] R302: `listProxyRegions` → GET /api/v2/proxy/region (public)
+- [x] R303: `listWorkers` → GET /api/v2/workers
+- [x] R304: `getWorker` → GET /api/v2/workers/{workerId}
+- [x] R305: `getWorkerInputSchema` → GET /api/v2/workers/{workerId}/input-schema (public)
+- [x] R306: `getWorkerInternal` → GET /api/v2/workers/{workerId}/internal (public)
+- [x] R307: `runWorker` → POST /api/v2/workers/{workerId}/runs (input at top level, not wrapped in parameters.custom)
+- [x] R308: `createWorkerVersion` → POST /api/v2/workers/{workerId}/versions (multipart/form-data: scraper_file + title + description + categories)
+- [x] R309: `updateWorkerVersion` → PUT /api/v2/workers/{workerId}/versions/{version} (multipart)
+- [x] R310: `listWorkerRuns` → GET /api/v2/worker-runs (offset/limit pagination, lowercase status enum)
+- [x] R311: `getWorkerRun` → GET /api/v2/worker-runs/{runId}
+- [x] R312: `getWorkerRunLog` → GET /api/v2/worker-runs/{runId}/log
+- [x] R313: `listWorkerRunResults` → GET /api/v2/worker-runs/{runId}/result (offset/limit)
+- [x] R314: `exportWorkerRunResults` → GET /api/v2/worker-runs/{runId}/result/export (format enum + filter_keys)
+- [x] R315: `abortWorkerRun` → POST /api/v2/worker-runs/{runId}/abort (no body)
+- [x] R316: `rerunWorkerRun` → POST /api/v2/worker-runs/{runId}/rerun (callback_url, is_async, limit, offset)
+- [x] R317: `getLastWorkerRun` → GET /api/v2/worker-runs/last
+- [x] R318: `getLastWorkerRunLog` → GET /api/v2/worker-runs/last/log
+- [x] R319: `listLastWorkerRunResults` → GET /api/v2/worker-runs/last/result
+- [x] R320: `exportLastWorkerRunResults` → GET /api/v2/worker-runs/last/export
+- [x] R321: `abortLastWorkerRun` → POST /api/v2/worker-runs/last/abort
+- [x] R322: `rerunLastWorkerRun` → POST /api/v2/worker-runs/last/rerun
+- [x] R323: `getWorkerLastRun` → GET /api/v2/workers/{workerId}/runs/last
+- [x] R324: `getWorkerLastRunLog` → GET /api/v2/workers/{workerId}/runs/last/log
+- [x] R325: `listWorkerLastRunResults` → GET /api/v2/workers/{workerId}/runs/last/result
+- [x] R326: `exportWorkerLastRunResults` → GET /api/v2/workers/{workerId}/runs/last/export
+- [x] R327: `abortWorkerLastRun` → POST /api/v2/workers/{workerId}/runs/last/abort
+- [x] R328: `rerunWorkerLastRun` → POST /api/v2/workers/{workerId}/runs/last/rerun
+- [x] R329: `listWorkerTasks` → GET /api/v2/worker-tasks
+- [x] R330: `createWorkerTask` → POST /api/v2/worker-tasks (worker_id, title, input required; schedule fields)
+- [x] R331: `getWorkerTask` → GET /api/v2/worker-tasks/{workerTaskId}
+- [x] R332: `updateWorkerTask` → PUT /api/v2/worker-tasks/{workerTaskId} (no input/version — use R335)
+- [x] R333: `deleteWorkerTask` → DELETE /api/v2/worker-tasks/{workerTaskId}
+- [x] R334: `getWorkerTaskInput` → GET /api/v2/worker-tasks/{workerTaskId}/input
+- [x] R335: `updateWorkerTaskInput` → PUT /api/v2/worker-tasks/{workerTaskId}/input (input required, optional version)
+- [x] R336: `runWorkerTask` → POST /api/v2/worker-tasks/{workerTaskId}/runs (no input — reuses task's stored input)
+- [x] R337: Response envelope `{code, message, data, request_id}`; code===0 = success; error envelope has `details[]`; business codes start at 10000 (no 4000)
+
 ## Priority 8: concurrency-rules.html
 
 Source: `C:/Users/user/Desktop/urls/最新脚本并发拆分规则说明.html` (2026-07 version, includes limits)

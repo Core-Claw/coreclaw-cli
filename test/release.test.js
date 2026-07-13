@@ -61,7 +61,8 @@ test('release dossier summarizes package, cloud comparison, diagnosis, and cost 
   assert.equal(report.cloud.compare.ok, true);
   assert.equal(report.cloud.diagnosis.status, 3);
   assert.equal(report.cloud.cost.usage_usd, 0.0123);
-  assert.equal(report.platform_constraints.upload_api_available, false);
+  assert.equal(report.platform_constraints.upload_api_available, true);
+  assert.equal(report.platform_constraints.publish_api_available, true);
   assert.equal(JSON.parse(fs.readFileSync(output, 'utf8')).readiness.ok, true);
   const markdownText = fs.readFileSync(markdown, 'utf8');
   assert.match(markdownText, /^# CoreClaw 发布交付报告/m);

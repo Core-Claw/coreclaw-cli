@@ -4,13 +4,15 @@ import { createCoreClawClient, resolveApiKey } from '../cloud/client.js';
 import { CliError } from '../utils/errors.js';
 import { printJson, shouldPrintJson } from '../utils/output.js';
 
-const TERMINAL_STATUSES = new Set([3, 4, 5]);
+const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'aborting']);
 
 export function createClientFromOptions(options = {}) {
   return createCoreClawClient({
     apiKey: resolveApiKey(options),
     apiBaseUrl: options.apiBaseUrl,
     fetchImpl: options.fetchImpl ?? globalThis.fetch,
+    FormDataImpl: options.FormDataImpl ?? globalThis.FormData,
+    BlobImpl: options.BlobImpl ?? globalThis.Blob,
   });
 }
 
@@ -98,17 +100,26 @@ export function parseCommaList(value) {
 }
 
 export function statusLabel(status) {
-  return {
-    0: 'All',
-    1: 'Ready',
-    2: 'Running',
-    3: 'Succeeded',
-    4: 'Failed',
-    5: 'Aborted',
-  }[Number(status)] ?? String(status ?? 'unknown');
+  const label = String(status ?? '').toLowerCase();
+  if (label === 'ready') {
+    return 'Ready';
+  }
+  if (label === 'running') {
+    return 'Running';
+  }
+  if (label === 'succeeded') {
+    return 'Succeeded';
+  }
+  if (label === 'failed') {
+    return 'Failed';
+  }
+  if (label === 'aborting') {
+    return 'Aborting';
+  }
+  return String(status ?? 'unknown');
 }
 
-export async function pollRunUntilTerminal(client, runSlug, {
+export async function pollRunUntilTerminal(client, runId, {
   timeoutMs = 10 * 60 * 1000,
   pollIntervalMs = 5000,
   sleepImpl = sleep,
@@ -117,13 +128,13 @@ export async function pollRunUntilTerminal(client, runSlug, {
   const started = nowImpl();
   let detail = null;
   while (true) {
-    const response = await client.runDetail(runSlug);
-    detail = response.data ?? {};
-    if (TERMINAL_STATUSES.has(Number(detail.status))) {
+    const response = await client.getWorkerRun(runId);
+    detail = response?.data ?? {};
+    if (TERMINAL_STATUSES.has(String(detail.status ?? '').toLowerCase())) {
       return detail;
     }
     if (nowImpl() - started >= timeoutMs) {
-      throw new CliError(`Timed out waiting for CoreClaw run ${runSlug}. Last status: ${detail.status ?? 'unknown'}.`);
+      throw new CliError(`Timed out waiting for CoreClaw run ${runId}. Last status: ${detail.status ?? 'unknown'}.`);
     }
     await sleepImpl(pollIntervalMs);
   }

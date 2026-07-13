@@ -321,9 +321,40 @@ function commandAllowedOptions(command) {
     case 'account':
       return cloud;
     case 'workers':
-      return new Set([...cloud, 'downloadOutput', 'filterKeys', 'format', 'input', 'limit', 'markdown', 'pageIndex', 'pageSize', 'pollInterval', 'resultsOutput', 'runEvidenceOutput', 'search', 'sync', 'version', 'wait', 'waitTimeout']);
+      return new Set([...cloud, 'downloadOutput', 'filterKeys', 'format', 'input', 'limit', 'markdown', 'offset', 'owned', 'pageIndex', 'pageSize', 'pollInterval', 'resultsOutput', 'runEvidenceOutput', 'search', 'sync', 'version', 'wait', 'waitTimeout']);
     case 'tasks':
-      return new Set([...cloud, 'downloadOutput', 'filterKeys', 'format', 'pageIndex', 'pageSize', 'pollInterval', 'resultsOutput', 'runEvidenceOutput', 'wait', 'waitTimeout']);
+      return new Set([
+        ...cloud,
+        'callbackUrl',
+        'categories',
+        'description',
+        'downloadOutput',
+        'filterKeys',
+        'format',
+        'icon',
+        'input',
+        'inputJson',
+        'inputValue',
+        'limit',
+        'offset',
+        'pageIndex',
+        'pageSize',
+        'pollInterval',
+        'resultsOutput',
+        'runEvidenceOutput',
+        'scheduleDay',
+        'scheduleEnabled',
+        'scheduleOnceDate',
+        'scheduleTime',
+        'scheduleType',
+        'scheduleWeekday',
+        'sync',
+        'title',
+        'version',
+        'wait',
+        'waitTimeout',
+        'workerId',
+      ]);
     case 'runs':
       return new Set([
         ...cloud,
@@ -331,12 +362,15 @@ function commandAllowedOptions(command) {
         'downloadOutput',
         'filterKeys',
         'format',
+        'limit',
         'markdown',
+        'offset',
         'output',
         'pageIndex',
         'pageSize',
         'scraperSlug',
         'status',
+        'sync',
       ]);
     case 'prove':
       return new Set([
@@ -361,7 +395,26 @@ function commandAllowedOptions(command) {
     case 'migrate':
       return new Set(['jsonOutput', 'markdown', 'output', 'schemaOutput']);
     case 'release':
-      return new Set(['cloudRun', 'compareReport', 'costReport', 'diagnosis', 'jsonOutput', 'markdown', 'output', 'package', 'runEvidence']);
+      return new Set([
+        ...cloud,
+        'categories',
+        'cloudRun',
+        'compareReport',
+        'costReport',
+        'description',
+        'diagnosis',
+        'go',
+        'icon',
+        'jsonOutput',
+        'markdown',
+        'node',
+        'output',
+        'package',
+        'python',
+        'runEvidence',
+        'title',
+        'zipOutput',
+      ]);
     case 'run':
       return runtime;
     case 'verify':

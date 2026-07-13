@@ -10,7 +10,7 @@ export async function accountCommand(positionals = [], options = {}) {
 
 async function accountInfo(options) {
   const client = createClientFromOptions(options);
-  const response = await client.accountInfo();
+  const response = await client.getAccount();
   if (options.jsonOutput) {
     return printOrReturn(response, options);
   }
@@ -18,9 +18,8 @@ async function accountInfo(options) {
   const data = response.data ?? {};
   console.log('CoreClaw account');
   console.log(`Balance: ${data.balance ?? '-'}`);
-  console.log(`Traffic: ${data.traffic ?? '-'}`);
-  if (data.traffic_expiration_at !== undefined && data.traffic_expiration_at !== null) {
-    console.log(`Traffic expiration: ${data.traffic_expiration_at}`);
+  if (data.balance_expiration_at !== undefined && data.balance_expiration_at !== null) {
+    console.log(`Balance expiration: ${data.balance_expiration_at}`);
   }
   return response;
 }

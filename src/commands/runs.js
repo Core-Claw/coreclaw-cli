@@ -46,11 +46,11 @@ export async function runsCommand(positionals = [], options = {}) {
 
 async function listRuns(options) {
   const client = createClientFromOptions(options);
-  const response = await client.listRuns({
-    pageIndex: parsePositiveInteger(options.pageIndex, 1, '--page-index'),
-    pageSize: parsePositiveInteger(options.pageSize, 20, '--page-size'),
-    status: parseNonNegativeInteger(options.status, 0, '--status'),
-    scraperSlug: options.scraperSlug,
+  const response = await client.listWorkerRuns({
+    workerId: options.scraperSlug ?? options.workerId,
+    status: options.status,
+    offset: parseNonNegativeInteger(options.offset ?? (parsePositiveInteger(options.pageIndex, 1, '--page-index') - 1), 0, '--offset'),
+    limit: parsePositiveInteger(options.pageSize ?? options.limit, 20, '--page-size'),
   });
   if (options.jsonOutput) {
     return printOrReturn(response, options);
@@ -65,9 +65,9 @@ async function listRuns(options) {
 }
 
 async function detailRun(args, options) {
-  const runSlug = requireArg(args[0], 'runs detail requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs detail requires <run_id>.');
   const client = createClientFromOptions(options);
-  const response = await client.runDetail(runSlug);
+  const response = await client.getWorkerRun(runId);
   if (options.jsonOutput) {
     return printOrReturn(response, options);
   }
@@ -77,15 +77,15 @@ async function detailRun(args, options) {
 }
 
 async function runLogs(args, options) {
-  const runSlug = requireArg(args[0], 'runs logs requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs logs requires <run_id>.');
   const client = createClientFromOptions(options);
-  const response = await client.runLogs(runSlug);
+  const response = await client.getWorkerRunLog(runId);
   if (options.jsonOutput) {
     return printOrReturn(response, options);
   }
 
   const data = response.data ?? {};
-  console.log(`Run logs: ${runSlug}`);
+  console.log(`Run logs: ${runId}`);
   if (data.all_logs_url) {
     console.log(`All logs: ${data.all_logs_url}`);
   }
@@ -96,12 +96,11 @@ async function runLogs(args, options) {
 }
 
 async function runResults(args, options) {
-  const runSlug = requireArg(args[0], 'runs results requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs results requires <run_id>.');
   const client = createClientFromOptions(options);
-  const response = await client.runResults({
-    runSlug,
-    pageIndex: parsePositiveInteger(options.pageIndex, 1, '--page-index'),
-    pageSize: parsePositiveInteger(options.pageSize, 20, '--page-size'),
+  const response = await client.listWorkerRunResults(runId, {
+    offset: parseNonNegativeInteger(options.offset ?? (parsePositiveInteger(options.pageIndex, 1, '--page-index') - 1), 0, '--offset'),
+    limit: parsePositiveInteger(options.pageSize ?? options.limit, 20, '--page-size'),
   });
   const outputPath = writeJsonOutput(options.output, response);
   if (options.jsonOutput) {
@@ -118,14 +117,14 @@ async function runResults(args, options) {
 }
 
 async function exportRun(args, options) {
-  const runSlug = requireArg(args[0], 'runs export requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs export requires <run_id>.');
   const format = options.format ?? 'json';
-  if (!['json', 'csv'].includes(format)) {
-    throw new CliError('--format must be json or csv.');
+  const supportedFormats = ['json', 'csv', 'jsonl', 'xlsx', 'xls', 'xml', 'html', 'rss'];
+  if (!supportedFormats.includes(format)) {
+    throw new CliError(`--format must be one of: ${supportedFormats.join(', ')}.`);
   }
   const client = createClientFromOptions(options);
-  const response = await client.exportRun({
-    runSlug,
+  const response = await client.exportWorkerRunResults(runId, {
     filterKeys: parseCommaList(options.filterKeys),
     format,
   });
@@ -174,15 +173,15 @@ async function downloadExportFile(downloadUrl, outputPath, fetchImpl) {
 }
 
 async function diagnoseRun(args, options) {
-  const runSlug = requireArg(args[0], 'runs diagnose requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs diagnose requires <run_id>.');
   const client = createClientFromOptions(options);
-  const pageSize = parsePositiveInteger(options.pageSize, 20, '--page-size');
-  const detailResponse = await client.runDetail(runSlug);
+  const pageSize = parsePositiveInteger(options.pageSize ?? options.limit, 20, '--page-size');
+  const detailResponse = await client.getWorkerRun(runId);
   const [logsResult, resultsResult] = await Promise.all([
-    optionalApiCall('logs', () => client.runLogs(runSlug)),
-    optionalApiCall('results', () => client.runResults({ runSlug, pageIndex: 1, pageSize })),
+    optionalApiCall('logs', () => client.getWorkerRunLog(runId)),
+    optionalApiCall('results', () => client.listWorkerRunResults(runId, { offset: 0, limit: pageSize })),
   ]);
-  const report = buildRunDiagnosis(runSlug, {
+  const report = buildRunDiagnosis(runId, {
     detail: detailResponse.data ?? {},
     logs: logsResult.response?.data ?? {},
     results: resultsResult.response?.data ?? {},
@@ -202,10 +201,10 @@ async function diagnoseRun(args, options) {
 }
 
 async function costRun(args, options) {
-  const runSlug = requireArg(args[0], 'runs cost requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs cost requires <run_id>.');
   const client = createClientFromOptions(options);
-  const detailResponse = await client.runDetail(runSlug);
-  const report = buildRunCostReport(runSlug, detailResponse.data ?? {});
+  const detailResponse = await client.getWorkerRun(runId);
+  const report = buildRunCostReport(runId, detailResponse.data ?? {});
   const outputPath = writeJsonOutput(options.output, report);
   if (options.jsonOutput) {
     return printOrReturn(report, options);
@@ -219,26 +218,27 @@ async function costRun(args, options) {
 }
 
 async function collectRun(args, options) {
-  const runSlug = requireArg(args[0], 'runs collect requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs collect requires <run_id>.');
   const format = options.format ?? 'json';
-  if (!['json', 'csv'].includes(format)) {
-    throw new CliError('--format must be json or csv.');
+  const supportedFormats = ['json', 'csv', 'jsonl', 'xlsx', 'xls', 'xml', 'html', 'rss'];
+  if (!supportedFormats.includes(format)) {
+    throw new CliError(`--format must be one of: ${supportedFormats.join(', ')}.`);
   }
 
   const client = createClientFromOptions(options);
   const pageIndex = parsePositiveInteger(options.pageIndex, 1, '--page-index');
-  const pageSize = parsePositiveInteger(options.pageSize, 20, '--page-size');
+  const pageSize = parsePositiveInteger(options.pageSize ?? options.limit, 20, '--page-size');
   const filterKeys = parseCommaList(options.filterKeys);
-  const detailResponse = await client.runDetail(runSlug);
+  const detailResponse = await client.getWorkerRun(runId);
   const [logsResult, resultsResult, exportResult] = await Promise.all([
-    optionalApiCall('logs', () => client.runLogs(runSlug)),
-    optionalApiCall('results', () => client.runResults({ runSlug, pageIndex, pageSize })),
-    optionalApiCall('export', () => client.exportRun({ runSlug, filterKeys, format })),
+    optionalApiCall('logs', () => client.getWorkerRunLog(runId)),
+    optionalApiCall('results', () => client.listWorkerRunResults(runId, { offset: pageIndex - 1, limit: pageSize })),
+    optionalApiCall('export', () => client.exportWorkerRunResults(runId, { filterKeys, format })),
   ]);
   const downloadPath = exportResult.response && options.downloadOutput
     ? await downloadExportFile(exportResult.response.data?.download_url, options.downloadOutput, options.fetchImpl ?? globalThis.fetch)
     : null;
-  const report = buildRunEvidenceBundle(runSlug, {
+  const report = buildRunEvidenceBundle(runId, {
     detailResponse,
     logsResult,
     resultsResult,
@@ -293,38 +293,42 @@ async function optionalApiCall(source, fn) {
 }
 
 async function rerun(args, options) {
-  const runSlug = requireArg(args[0], 'runs rerun requires <run_slug>.');
-  if (!options.callbackUrl) {
-    throw new CliError('runs rerun requires --callback-url from the documented CoreClaw Re-run API contract.');
-  }
+  const runId = requireArg(args[0], 'runs rerun requires <run_id>.');
   const client = createClientFromOptions(options);
-  const response = await client.rerun({ runSlug, callbackUrl: options.callbackUrl });
+  const response = await client.rerunWorkerRun(runId, {
+    callbackUrl: options.callbackUrl,
+    isAsync: options.sync ? false : true,
+  });
   if (options.jsonOutput) {
     return printOrReturn(response, options);
   }
 
   console.log(`Re-run started: ${response.data?.run_slug ?? '-'}`);
-  console.log(`Source run: ${runSlug}`);
+  console.log(`Source run: ${runId}`);
   return response;
 }
 
 async function abortRun(args, options) {
-  const runSlug = requireArg(args[0], 'runs abort requires <run_slug>.');
+  const runId = requireArg(args[0], 'runs abort requires <run_id>.');
   const client = createClientFromOptions(options);
-  const response = await client.abortRun(runSlug);
+  const response = await client.abortWorkerRun(runId);
   if (options.jsonOutput) {
     return printOrReturn(response, options);
   }
 
-  console.log(`Abort requested: ${runSlug}`);
+  console.log(`Abort requested: ${runId}`);
   return response;
 }
 
+function normalizeStatus(value) {
+  return String(value ?? '').toLowerCase();
+}
+
 function buildRunDiagnosis(runSlug, { detail = {}, logs = {}, results = {}, pageSize = 20, optionalErrors = [] } = {}) {
-  const status = Number(detail.status);
+  const status = normalizeStatus(detail.status);
   const logEntries = logs.list ?? [];
-  const errorLogs = logEntries.filter((entry) => Number(entry.type) === 4);
-  const warningLogs = logEntries.filter((entry) => Number(entry.type) === 3);
+  const errorLogs = logEntries.filter((entry) => normalizeLogType(entry.type) === 'error');
+  const warningLogs = logEntries.filter((entry) => normalizeLogType(entry.type) === 'warn');
   const issues = buildDiagnosisIssues({ status, detail, errorLogs, warningLogs, results, optionalErrors });
 
   return {
@@ -370,19 +374,19 @@ function buildRunDiagnosis(runSlug, { detail = {}, logs = {}, results = {}, page
 
 function buildDiagnosisIssues({ status, detail, errorLogs, warningLogs, results, optionalErrors = [] }) {
   const issues = [];
-  if (status === 4) {
+  if (status === 'failed') {
     issues.push({
       severity: 'error',
       code: 'RUN_FAILED',
       message: detail.err_msg || 'CoreClaw run failed. Check recent error logs and full logs.',
     });
-  } else if (status === 5) {
+  } else if (status === 'aborting' || status === 'aborted') {
     issues.push({
       severity: 'warning',
       code: 'RUN_ABORTED',
       message: 'CoreClaw run was aborted before completion.',
     });
-  } else if (status === 1 || status === 2) {
+  } else if (status === 'ready' || status === 'running') {
     issues.push({
       severity: 'info',
       code: 'RUN_NOT_TERMINAL',
@@ -411,7 +415,7 @@ function buildDiagnosisIssues({ status, detail, errorLogs, warningLogs, results,
     });
   }
   const resultCount = results.count ?? results.list?.length ?? detail.results ?? 0;
-  if (status === 3 && resultCount === 0) {
+  if (status === 'succeeded' && resultCount === 0) {
     issues.push({
       severity: 'warning',
       code: 'NO_RESULTS',
@@ -427,7 +431,7 @@ function buildDiagnosisNextCommands(runSlug, status) {
     `coreclaw runs detail ${runSlug}`,
     `coreclaw runs results ${runSlug} --output cloud-results.json`,
   ];
-  if (status === 4 || status === 5) {
+  if (status === 'failed' || status === 'aborting' || status === 'aborted') {
     commands.push(`coreclaw runs rerun ${runSlug} --callback-url https://example.com/webhook`);
   }
   return commands;
@@ -541,10 +545,11 @@ function buildRunEvidenceBundle(runSlug, {
 
 function buildRunCostReport(runSlug, detail = {}) {
   const trafficBytes = Number(detail.traffic ?? 0);
+  const status = normalizeStatus(detail.status);
   return {
     run_slug: runSlug,
-    status: Number(detail.status),
-    status_label: statusLabel(detail.status),
+    status,
+    status_label: statusLabel(status),
     worker: {
       scraper_slug: detail.scraper_slug ?? null,
       title: detail.scraper_title ?? null,
@@ -684,10 +689,15 @@ function printRunDetail(run) {
 }
 
 function logTypeLabel(type) {
-  return {
-    1: 'debug',
-    2: 'info',
-    3: 'warn',
-    4: 'error',
-  }[Number(type)] ?? String(type ?? 'log');
+  return normalizeLogType(type);
+}
+
+function normalizeLogType(type) {
+  // v2 logs return string types (debug/info/warn/error). v1 returned numeric 1-4; keep fallback for safety.
+  const numeric = { 1: 'debug', 2: 'info', 3: 'warn', 4: 'error' }[Number(type)];
+  if (numeric) {
+    return numeric;
+  }
+  const value = String(type ?? 'log').toLowerCase();
+  return ['debug', 'info', 'warn', 'error'].includes(value) ? value : 'log';
 }

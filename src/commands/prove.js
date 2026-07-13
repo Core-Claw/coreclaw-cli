@@ -52,8 +52,7 @@ async function proveCommandInternal(projectPath = '.', options = {}) {
 
   console.log('\n[2/4] Starting CoreClaw cloud run...');
   const version = await resolveWorkerVersion(client, options.scraperSlug, options.version);
-  const runResponse = await client.runWorker({
-    scraperSlug: options.scraperSlug,
+  const runResponse = await client.runWorker(options.scraperSlug, {
     version,
     input: cloudInput,
     callbackUrl: options.callbackUrl,
@@ -72,14 +71,13 @@ async function proveCommandInternal(projectPath = '.', options = {}) {
     sleepImpl: options.sleepImpl,
     nowImpl: options.nowImpl,
   });
-  if (detail.status !== 3) {
+  if (String(detail.status ?? '').toLowerCase() !== 'succeeded') {
     throw new CliError(`CoreClaw cloud run ${runSlug} ended with status ${detail.status}. Check logs with "coreclaw runs logs ${runSlug}".`);
   }
 
-  const resultsResponse = await client.runResults({
-    runSlug,
-    pageIndex: parsePositiveInteger(options.pageIndex, 1, '--page-index'),
-    pageSize: parsePositiveInteger(options.pageSize, 100, '--page-size'),
+  const resultsResponse = await client.listWorkerRunResults(runSlug, {
+    offset: parsePositiveInteger(options.pageIndex, 1, '--page-index') - 1,
+    limit: parsePositiveInteger(options.pageSize, 100, '--page-size'),
   });
   const cloudResultsPath = resolveCloudResultsPath(localRunDir, options);
   writeJsonOutput(cloudResultsPath, resultsResponse);
@@ -215,7 +213,7 @@ function buildProveCompareOptions(options = {}, output) {
 
 async function resolveWorkerVersion(client, scraperSlug, version) {
   if (!version || version === 'auto' || version === 'latest') {
-    const detail = await client.workerDetail(scraperSlug);
+    const detail = await client.getWorker(scraperSlug);
     const resolved = detail.data?.version;
     if (!resolved) {
       throw new CliError(`Cannot resolve latest version for Worker ${scraperSlug}. Pass --version explicitly.`);
