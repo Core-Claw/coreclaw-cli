@@ -57,6 +57,7 @@ const PYTHON_STDLIB_MODULES = new Set([
   'decimal',
   'difflib',
   'email',
+  'encodings',
   'enum',
   'errno',
   'functools',
@@ -1719,7 +1720,7 @@ export function validateAsyncioRunWithSdk(project) {
 
   if (evidence.length === 0) return [];
   return [{
-    severity: 'warn',
+    severity: 'info',
     code: 'asyncio_run_with_sdk',
     message: `Project calls asyncio.run() (${evidence.join(', ')}) while also using CoreSDK. If the platform SDK is already running in an event loop, asyncio.run() will raise RuntimeError. Consider using synchronous HTTP (requests) or running async code via the platform's async support.`,
     docs: ['worker-definition/examples/python-example.md'],
