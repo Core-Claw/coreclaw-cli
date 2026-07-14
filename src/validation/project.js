@@ -395,6 +395,11 @@ export function validateProject(projectDir, options = {}) {
   issues.push(...validateBrowserFrameworkDependencies(project));
   issues.push(...validateProtobufVersionMatch(project));
   issues.push(...validateCamoufoxPlaywrightVersion(project));
+  issues.push(...validateHardcodedApiKeys(project));
+  issues.push(...validateAiohttpWithoutProxy(project));
+  issues.push(...validateAsyncioRunWithSdk(project));
+  issues.push(...validateExternalWorkerSlugs(project));
+  issues.push(...validateDynamicCssSelectors(project));
 
   return {
     ...project,
@@ -1586,7 +1591,7 @@ export function validateHeaderBeforePush(project) {
   return issues;
 }
 
-const HARDCODED_PROXY_CREDENTIAL_PATTERN = /socks[45]:\/\/[^\s'"/@]*:[^\s'"/@]*@/;
+const HARDCODED_PROXY_CREDENTIAL_PATTERN = /socks[45]:\/\/[^\s'"\/@]*:[^\s'"\/@]*@/;
 
 export function validateHardcodedProxyCredentials(project) {
   const evidence = [];
@@ -1611,5 +1616,205 @@ export function validateHardcodedProxyCredentials(project) {
     docs: [PROXY_SUPPORT_DOC],
     evidence: { files: evidence },
     remediation: 'Replace the hardcoded credentials with process.env.PROXY_AUTH / os.environ.get("PROXY_AUTH") and build the SOCKS URL at runtime.',
+  }];
+}
+
+// ── New validators added based on runtime testing of 12 worker scripts ──
+
+const HARDCODED_API_KEY_PATTERNS = [
+  /['"](?:scraper_api|coreclaw_api|api_key|apikey|access_token)['"]\s*[:=]\s*['"][a-zA-Z0-9_-]{16,}['"]/i,
+  /\bscraper_api_[A-Z0-9]{10,}/,
+  /['"]Bearer\s+[a-zA-Z0-9._-]{20,}['"]/,
+  /get_api_key\(\)\s*[\s\S]{0,200}return\s+['"][a-zA-Z0-9._-]{16,}['"]/,
+];
+
+/**
+ * Detect hardcoded API keys / tokens in source code.
+ * Hardcoded secrets are a security risk and will not match the platform-injected credentials.
+ */
+export function validateHardcodedApiKeys(project) {
+  const evidence = [];
+  for (const filePath of collectSourceFiles(project.projectDir)) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    // Skip sdk files
+    if (relativePath.startsWith('sdk') || relativePath.includes('/sdk')) continue;
+    const lines = text.split(/\r?\n/);
+    for (const [index, line] of lines.entries()) {
+      for (const pattern of HARDCODED_API_KEY_PATTERNS) {
+        if (pattern.test(line)) {
+          evidence.push({ file: relativePath, line: index + 1, snippet: line.trim().slice(0, 120) });
+          if (evidence.length >= 5) break;
+        }
+      }
+      if (evidence.length >= 5) break;
+    }
+    if (evidence.length >= 5) break;
+  }
+  if (evidence.length === 0) return [];
+  const files = [...new Set(evidence.map((item) => item.file))].sort();
+  return [{
+    severity: 'error',
+    code: 'hardcoded_api_key',
+    message: `Project contains hardcoded API keys or tokens (${files.join(', ')}). Hardcoded secrets are a security risk and will not match the platform-injected credentials at runtime. Use environment variables or the platform SDK context instead.`,
+    docs: ['worker-definition/platform-features/proxy-support.md'],
+    evidence: { files: evidence },
+    remediation: 'Remove hardcoded API keys. Read credentials from environment variables (e.g., os.environ.get("API_KEY")) or use the platform SDK context for Worker-to-Worker calls.',
+  }];
+}
+
+/**
+ * Detect aiohttp usage without SOCKS5 proxy configuration.
+ * In CoreClaw sandbox, direct HTTP connections are blocked; aiohttp needs aiohttp_socks proxy.
+ */
+export function validateAiohttpWithoutProxy(project) {
+  if (project.language !== 'python') return [];
+  const sourceFiles = collectSourceFiles(project.projectDir);
+  const evidence = [];
+
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+
+    const usesAiohttp = /\bimport\s+aiohttp\b/.test(text) || /\baiohttp\.ClientSession\b/.test(text);
+    if (!usesAiohttp) continue;
+
+    const hasAiohttpSocks = /\baiohttp_socks\b/.test(text) || /\bProxyConnector\b/.test(text);
+    const hasSocksProxy = /\bsocks5:\/\//.test(text) && /\bproxy\b/i.test(text);
+
+    if (!hasAiohttpSocks && !hasSocksProxy) {
+      evidence.push(relativePath);
+    }
+  }
+
+  if (evidence.length === 0) return [];
+  return [{
+    severity: 'error',
+    code: 'aiohttp_without_proxy',
+    message: `Project uses aiohttp for HTTP requests (${evidence.join(', ')}) but does not configure SOCKS5 proxy. CoreClaw sandbox blocks direct outbound connections; aiohttp requests will fail silently without proxy configuration. Use aiohttp_socks.ProxyConnector or switch to requests + socks5 proxy.`,
+    docs: [PROXY_SUPPORT_DOC, 'worker-definition/examples/python-example.md'],
+    evidence: { files: evidence },
+    remediation: 'Either: (1) Add aiohttp_socks dependency and configure ProxyConnector with socks5://PROXY_AUTH@PROXY_DOMAIN, or (2) switch to requests library with socks5 proxy (recommended pattern in CoreClaw examples).',
+  }];
+}
+
+/**
+ * Detect asyncio.run() usage that may conflict with the platform's event loop.
+ * If the platform SDK is already running in an event loop, asyncio.run() will fail.
+ */
+export function validateAsyncioRunWithSdk(project) {
+  if (project.language !== 'python') return [];
+  const sourceFiles = collectSourceFiles(project.projectDir);
+  const evidence = [];
+
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    if (relativePath.startsWith('sdk')) continue;
+
+    if (/\basyncio\.run\s*\(/.test(text) && /\bCoreSDK\b/.test(text)) {
+      evidence.push(relativePath);
+    }
+  }
+
+  if (evidence.length === 0) return [];
+  return [{
+    severity: 'warn',
+    code: 'asyncio_run_with_sdk',
+    message: `Project calls asyncio.run() (${evidence.join(', ')}) while also using CoreSDK. If the platform SDK is already running in an event loop, asyncio.run() will raise RuntimeError. Consider using synchronous HTTP (requests) or running async code via the platform's async support.`,
+    docs: ['worker-definition/examples/python-example.md'],
+    evidence: { files: evidence },
+    remediation: 'Replace asyncio.run() with synchronous requests library calls, or use the platform documented async pattern.',
+  }];
+}
+
+const WORKER_SLUG_REFERENCE_PATTERN = /trigger_worker|callWorker|context\.callWorker|\/workers\/.+?\/runs/;
+
+/**
+ * Detect external Worker slug references that may not exist on the platform.
+ */
+export function validateExternalWorkerSlugs(project) {
+  const sourceFiles = collectSourceFiles(project.projectDir);
+  const slugs = new Set();
+  const evidence = [];
+
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    if (relativePath.startsWith('sdk')) continue;
+
+    if (!WORKER_SLUG_REFERENCE_PATTERN.test(text)) continue;
+
+    // Pattern 1: trigger_worker(api_key, "slug", ...) — slug as string literal
+    let match;
+    const slugLiteralPattern = /trigger_worker\s*\(\s*[^,]+,\s*['"]([a-zA-Z0-9_-]+)['"]/g;
+    while ((match = slugLiteralPattern.exec(text)) !== null) {
+      slugs.add(match[1]);
+      evidence.push({ file: relativePath, slug: match[1], pattern: 'trigger_worker' });
+    }
+
+    // Pattern 2: WORKER_SLUG = "01KPAFF816MDMRD5MSCH2SBT68" — slug as constant
+    const slugConstPattern = /(?:_SLUG|_WORKER)\s*=\s*['"]([a-zA-Z0-9_-]{10,})['"]/g;
+    while ((match = slugConstPattern.exec(text)) !== null) {
+      slugs.add(match[1]);
+      evidence.push({ file: relativePath, slug: match[1], pattern: 'constant' });
+    }
+
+    // Pattern 3: /workers/{slug}/runs — slug in URL path
+    const slugUrlPattern = /\/workers\/([a-zA-Z0-9_-]+)\/runs/g;
+    while ((match = slugUrlPattern.exec(text)) !== null) {
+      // Skip template variables like {worker_slug}
+      if (match[1].startsWith('{')) continue;
+      slugs.add(match[1]);
+      evidence.push({ file: relativePath, slug: match[1], pattern: 'url_path' });
+    }
+  }
+
+  if (evidence.length === 0) return [];
+  return [{
+    severity: 'warn',
+    code: 'external_worker_slug_reference',
+    message: `Project references external Worker slugs (${[...slugs].join(', ')}). These slugs must exist on the platform at runtime; if the referenced Worker is unavailable or renamed, the call will fail silently. Verify these slugs are correct and the Workers are deployed.`,
+    docs: ['worker-definition/sdk-modules.md'],
+    evidence: { slugs: [...slugs], files: evidence },
+    remediation: 'Verify the referenced Worker slugs exist on the platform. Add error handling for failed Worker calls (check run_slug is not None/empty).',
+  }];
+}
+
+const DYNAMIC_CSS_CLASS_PATTERN = /[a-z][a-z0-9]*__[a-z0-9]{6,}__[a-z]+/i;
+
+/**
+ * Detect CSS selectors that use dynamically-generated class names (e.g., CSS Modules hashes).
+ * These class names change on every frontend deployment and will break scraping.
+ */
+export function validateDynamicCssSelectors(project) {
+  const sourceFiles = collectSourceFiles(project.projectDir);
+  const evidence = [];
+
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(project.projectDir, filePath).replaceAll(path.sep, '/');
+    if (relativePath.startsWith('sdk')) continue;
+
+    const lines = text.split(/\r?\n/);
+    for (const [index, line] of lines.entries()) {
+      // Look for CSS selectors with dynamic hash patterns in select() / select_one() calls
+      if ((/\bselect(?:_one)?\s*\(/.test(line) || /\bselectors?\b/.test(line)) && DYNAMIC_CSS_CLASS_PATTERN.test(line)) {
+        evidence.push({ file: relativePath, line: index + 1 });
+        if (evidence.length >= 5) break;
+      }
+    }
+    if (evidence.length >= 5) break;
+  }
+
+  if (evidence.length === 0) return [];
+  const files = [...new Set(evidence.map((item) => item.file))].sort();
+  return [{
+    severity: 'warn',
+    code: 'dynamic_css_class_selector',
+    message: `CSS selectors use dynamically-generated class names (${files.join(', ')}). These class names (e.g., businessName__09f24__EAYoJ) are typically CSS Modules hashes that change on every frontend deployment, causing the scraper to silently return 0 results. Prefer stable selectors: data attributes, semantic HTML tags, or aria-labels.`,
+    docs: [],
+    evidence: { files: evidence },
+    remediation: 'Replace dynamic class selectors with stable alternatives: [data-testid], semantic tags (h2, article), aria-label attributes, or URL-based patterns. If dynamic classes are unavoidable, add fallback selectors.',
   }];
 }
