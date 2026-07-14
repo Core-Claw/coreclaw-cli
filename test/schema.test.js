@@ -791,7 +791,8 @@ test('warns about invalid requestListSource param_list definitions', () => {
     ],
   });
 
-  assert.equal(issues.filter((issue) => issue.severity === 'error').length, 0);
+  // editor "slider" is undocumented → now an error (form field will not render).
+  assert.equal(issues.filter((issue) => issue.code === 'input_param_unsupported_editor' && issue.severity === 'error').length, 1);
   assert.deepEqual(issues.filter((issue) => issue.code?.startsWith('input_param')).map((issue) => issue.code), [
     'input_param_missing_name',
     'input_param_duplicate_name',
@@ -883,7 +884,7 @@ test('accepts documented input editor numeric types and json editor object type'
   assert.equal(issues.filter((i) => i.code === 'input_property_unsupported_editor').length, 0);
 });
 
-test('warns that editor "text" may cause the form field to not render', () => {
+test('errors when editor "text" is used (form field will not render)', () => {
   const issues = validateInputSchema({
     properties: [
       { title: 'Location', name: 'location', type: 'string', editor: 'text', description: 'd', required: true, default: 'Seattle, WA' },
@@ -892,9 +893,9 @@ test('warns that editor "text" may cause the form field to not render', () => {
   const issue = issues.find((i) => i.code === 'input_property_unsupported_editor');
 
   assert.equal(Boolean(issue), true);
-  assert.equal(issue.severity, 'warn');
+  assert.equal(issue.severity, 'error');
   assert.match(issue.message, /"text" is not a documented editor/);
-  assert.match(issue.message, /may cause the form field to not render/);
+  assert.match(issue.message, /will cause the form field to not render/);
   assert.match(issue.message, /Use "input"/);
 });
 

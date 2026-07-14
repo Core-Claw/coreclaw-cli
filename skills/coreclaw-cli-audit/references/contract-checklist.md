@@ -30,7 +30,7 @@ Source: `D:/Coreclaw_Work/github/scraper-webui-docs/src/content/docs/developer-g
 - [x] R014b: `editor` documented required (string) — validated with **warn** (platform verification 2026-07-13: accepted)
 - [x] R014c: `description` documented required (string) — validated with **warn** (platform verification 2026-07-13: accepted)
 - [x] R014d: `required` documented required (boolean) — validated with **warn** (platform verification 2026-07-13: accepted)
-- [x] R015: `editor` must be documented — validated with warn for unknown editors
+- [x] R015: `editor` must be documented — validated with **error** for unknown editors (platform-verified 2026-07-14: undocumented editor like "text" causes the form field to not render; docs list exactly 12 editors: input, textarea, number, select, radio, checkbox, switch, datepicker, requestList, requestListSource, stringList, json)
 - [x] R016: `editor` should match expected type — validated with **warn** (platform verification 2026-07-13: `examples/verify-code4000` v2 — all 11 mismatched combos accepted and ran; form controls may render incorrectly, e.g. checkbox options unselectable)
 
 ### Editor-Type Compatibility (platform accepts mismatches — form may misbehave)

@@ -98,8 +98,8 @@ description: >
 
 | 严重性 | 含义 | 示例 |
 |--------|------|------|
-| `error` | 平台 upload/运行时硬拒 | 缺失必填文件、缺失 output_schema.json、HTTP 脚本不读代理、硬编码代理凭证、Camoufox 未 pin playwright、upsert key 不在 output_schema |
-| `warn` | 平台接受但表单/运行可能异常或最佳实践 | editor-type 不匹配（实测平台不拒，但表单可能异常）、未知 editor、遗留类型别名、缺失 README、缺文档标必填的 title/editor/description/required |
+| `error` | 平台 upload/运行时硬拒或表单不渲染 | 缺失必填文件、缺失 output_schema.json、HTTP 脚本不读代理、硬编码代理凭证、Camoufox 未 pin playwright、upsert key 不在 output_schema、**未知 editor 值（如 text，表单不显示）** |
+| `warn` | 平台接受但表单/运行可能异常或最佳实践 | editor-type 不匹配（实测平台不拒，但表单可能异常）、遗留类型别名、缺失 README、缺文档标必填的 title/editor/description/required |
 | `info` | 仅提示 | 大小写不一致、batch 字段未配 split |
 
 > 注：平台实测（2026-07-13）确认 editor/type 不匹配**不被拒绝**，已全部降为 warn。历史 "code 4000" 措辞已移除（该码不在 api/error-codes.md）。

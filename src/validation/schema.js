@@ -112,9 +112,9 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
 
     if (property.editor && !SUPPORTED_EDITORS.has(property.editor)) {
       const hint = property.editor === 'text'
-        ? ' The value "text" is not a documented editor and may cause the form field to not render. Use "input" for a single-line text field, "textarea" for multi-line, or "number" for numeric input.'
-        : ' An undocumented editor value may cause the form field to not render correctly. Use one of: input, textarea, number, select, radio, checkbox, switch, datepicker, requestList, requestListSource, stringList, json.';
-      issues.push(warn(`${prefix}.editor "${property.editor}" is not documented by CoreClaw.${hint}`, 'input_property_unsupported_editor'));
+        ? ' The value "text" is not a documented editor and will cause the form field to not render. Use "input" for a single-line text field, "textarea" for multi-line, or "number" for numeric input.'
+        : ' An undocumented editor value will cause the form field to not render. Use one of: input, textarea, number, select, radio, checkbox, switch, datepicker, requestList, requestListSource, stringList, json.';
+      issues.push(error(`${prefix}.editor "${property.editor}" is not documented by CoreClaw.${hint}`, 'input_property_unsupported_editor'));
     }
 
     const expectedEditorTypes = expectedTypesForEditor(property);
@@ -279,7 +279,7 @@ function validatePropertyParamList(property, prefix) {
     }
 
     if (param.editor && !SUPPORTED_EDITORS.has(param.editor)) {
-      issues.push(warn(`${paramPrefix}.editor "${param.editor}" is not documented by CoreClaw. An undocumented editor value may cause the form field to not render correctly. Use one of: input, textarea, number, select, radio, checkbox, switch, datepicker, requestList, requestListSource, stringList, json.`, 'input_param_unsupported_editor'));
+      issues.push(error(`${paramPrefix}.editor "${param.editor}" is not documented by CoreClaw. An undocumented editor value will cause the form field to not render. Use one of: input, textarea, number, select, radio, checkbox, switch, datepicker, requestList, requestListSource, stringList, json.`, 'input_param_unsupported_editor'));
     }
 
     const expectedEditorTypes = expectedTypesForEditor(param);

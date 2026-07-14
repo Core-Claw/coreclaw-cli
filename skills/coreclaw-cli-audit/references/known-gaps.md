@@ -130,6 +130,23 @@ Last Updated: 2026-07-11
 
 ## Pending Issues
 
+### Resolved: unsupported editor upgraded to error (platform-verified)
+
+**Date**: 2026-07-14
+
+**Issue**: `input_property_unsupported_editor` (and `input_param_unsupported_editor`) were `warn`, with a vague "Verify platform rendering before upload" message. Real scripts used `editor: "text"` (undocumented; docs say `input` for single-line text).
+
+**Platform verification (2026-07-14)**: Two workers used `editor: "text"` and the user observed the form fields did not render. An undocumented editor value causes the platform form to fail rendering that field — a serious usability bug, not a soft warning.
+
+**Fix** (`src/validation/schema.js`):
+- Both `input_property_unsupported_editor` and `input_param_unsupported_editor` upgraded `warn` → **error**.
+- Message strengthened: for `text` specifically, "will cause the form field to not render. Use \"input\" for a single-line text field..."; for other unknown editors, lists all 12 documented editor values.
+- Wording changed from "may cause" to "will cause" (confirmed behavior).
+
+**Tests**: 2 tests updated (text-editor → error severity; param_list slider → error). 375 pass, 0 fail.
+
+**Status**: ✅ Resolved
+
 ### Resolved: concurrency field non-array downgraded to warn (platform-verified)
 
 **Date**: 2026-07-14
