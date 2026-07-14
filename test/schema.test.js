@@ -883,6 +883,21 @@ test('accepts documented input editor numeric types and json editor object type'
   assert.equal(issues.filter((i) => i.code === 'input_property_unsupported_editor').length, 0);
 });
 
+test('warns that editor "text" may cause the form field to not render', () => {
+  const issues = validateInputSchema({
+    properties: [
+      { title: 'Location', name: 'location', type: 'string', editor: 'text', description: 'd', required: true, default: 'Seattle, WA' },
+    ],
+  });
+  const issue = issues.find((i) => i.code === 'input_property_unsupported_editor');
+
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'warn');
+  assert.match(issue.message, /"text" is not a documented editor/);
+  assert.match(issue.message, /may cause the form field to not render/);
+  assert.match(issue.message, /Use "input"/);
+});
+
 test('catches array type with non-array editor as warn', () => {
   const issues = validateInputSchema({
     b: 'items',
