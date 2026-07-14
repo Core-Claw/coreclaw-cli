@@ -1236,25 +1236,61 @@ function collectSourceFiles(rootDir, currentDir = rootDir, extensions = SOURCE_S
   return files;
 }
 
+const PYTHON_SOCKS_CAPABLE_CLIENTS = [
+  // requests / httpx need PySocks for socks5:// URLs
+  { client: 'requests', requires: ['pysocks', 'requests[socks]'] },
+  { client: 'httpx', requires: ['pysocks', 'httpx[socks]', 'socksio'] },
+  // aiohttp uses aiohttp-socks for SOCKS proxy support
+  { client: 'aiohttp', requires: ['aiohttp-socks'] },
+  // curl_cffi has built-in SOCKS support (libcurl), no extra dependency
+  { client: 'curl_cffi', requires: [] },
+];
+
+function pythonSocksClientRequires(sourceFiles) {
+  const requires = new Map();
+  for (const filePath of sourceFiles) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    if (!/socks[45]:\/\//.test(text)) continue;
+    if (/\bimport\s+requests\b|\bfrom\s+requests\b|\brequests\.(get|post|put|patch|delete|head|request|Session)\b/.test(text)) {
+      requires.set('requests', PYTHON_SOCKS_CAPABLE_CLIENTS.find((c) => c.client === 'requests'));
+    }
+    if (/\bimport\s+httpx\b|\bfrom\s+httpx\b|\bhttpx\.(get|post|put|patch|delete|head|request|Client|AsyncClient)\b/.test(text)) {
+      requires.set('httpx', PYTHON_SOCKS_CAPABLE_CLIENTS.find((c) => c.client === 'httpx'));
+    }
+    if (/\bimport\s+aiohttp\b|\baiohttp\.(ClientSession|request)\b/.test(text)) {
+      requires.set('aiohttp', PYTHON_SOCKS_CAPABLE_CLIENTS.find((c) => c.client === 'aiohttp'));
+    }
+    if (/\bimport\s+curl_cffi\b|\bfrom\s+curl_cffi\b|\bcurl_cffi\./.test(text)) {
+      requires.set('curl_cffi', PYTHON_SOCKS_CAPABLE_CLIENTS.find((c) => c.client === 'curl_cffi'));
+    }
+  }
+  return [...requires.values()];
+}
+
 export function validateSocksProxyDependencies(project) {
   if (project.language !== 'python') return [];
   const sourceFiles = collectSourceFiles(project.projectDir, project.projectDir, PYTHON_SOURCE_SCAN_EXTENSIONS);
-  let usesSocksUrl = false;
-  let usesRequests = false;
-  for (const filePath of sourceFiles) {
-    const text = fs.readFileSync(filePath, 'utf8');
-    if (!usesSocksUrl && /socks[45]:\/\//.test(text)) usesSocksUrl = true;
-    if (!usesRequests && HTTP_CLIENT_PATTERNS.python.some((p) => p.test(text))) usesRequests = true;
-    if (usesSocksUrl && usesRequests) break;
-  }
-  if (!usesSocksUrl || !usesRequests) return [];
+  const clients = pythonSocksClientRequires(sourceFiles);
+  if (clients.length === 0) return [];
+
   const depFile = path.join(project.projectDir, 'requirements.txt');
   if (!fs.existsSync(depFile)) {
-    return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project builds SOCKS5 proxy URLs and uses requests, but requirements.txt does not exist. requests requires PySocks for SOCKS proxy support; cloud runs will fail with "Missing dependencies for SOCKS support".', docs: [PROXY_SUPPORT_DOC], remediation: 'Create requirements.txt with "PySocks>=1.7.1" or "requests[socks]".' }];
+    const names = clients.map((c) => c.client).sort().join(', ');
+    const needed = clients.flatMap((c) => c.requires).filter((v, i, a) => a.indexOf(v) === i);
+    return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: `Project builds SOCKS5 proxy URLs and uses ${names}, but requirements.txt does not exist. ${needed.length > 0 ? `Required SOCKS dependency: ${needed.join(' or ')}.` : ''} Cloud runs will fail with "Missing dependencies for SOCKS support".`, docs: [PROXY_SUPPORT_DOC], remediation: needed.length > 0 ? `Create requirements.txt with ${needed.map((n) => `"${n}"`).join(' or ')}.` : 'Create requirements.txt.' }];
   }
   const declared = readDeclaredDependencies('python', depFile);
-  if (declared.has('pysocks') || declared.has('requests[socks]')) return [];
-  return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: 'Project builds SOCKS5 proxy URLs and uses requests, but requirements.txt does not declare "PySocks" or "requests[socks]". requests requires PySocks for SOCKS proxy support; cloud runs will fail with "Missing dependencies for SOCKS support".', docs: [PROXY_SUPPORT_DOC], remediation: 'Add "PySocks>=1.7.1" to requirements.txt, or replace "requests" with "requests[socks]".' }];
+
+  const missing = [];
+  for (const client of clients) {
+    if (client.requires.length === 0) continue;
+    if (!client.requires.some((dep) => declared.has(dep))) {
+      missing.push({ client: client.client, requires: client.requires });
+    }
+  }
+  if (missing.length === 0) return [];
+  const evidence = missing.map((m) => `${m.client} needs ${m.requires.map((n) => `"${n}"`).join(' or ')}`).join('; ');
+  return [{ severity: 'error', code: 'missing_socks_proxy_dependency', message: `Project builds SOCKS5 proxy URLs but requirements.txt is missing the SOCKS dependency for the detected HTTP client(s): ${evidence}. Cloud runs will fail with "Missing dependencies for SOCKS support".`, docs: [PROXY_SUPPORT_DOC], remediation: missing.flatMap((m) => m.requires).filter((v, i, a) => a.indexOf(v) === i).map((n) => `Add "${n}" to requirements.txt.`).join(' ') }];
 }
 
 export function validateNodeSocksProxyDependencies(project) {

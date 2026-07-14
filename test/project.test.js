@@ -647,7 +647,7 @@ test('validateProject errors when Python uses socks5 proxy but PySocks is missin
   assert.equal(result.ok, false);
   assert.equal(Boolean(issue), true);
   assert.equal(issue.severity, 'error');
-  assert.match(issue.message, /PySocks/);
+  assert.match(issue.message, /requests needs "pysocks" or "requests\[socks\]"/);
   assert.deepEqual(issue.docs, ['worker-definition/platform-features/proxy-support.md']);
 });
 
@@ -707,6 +707,63 @@ test('validateProject does not require PySocks for curl_cffi requests aliases', 
   const result = validateProject(dir);
 
   assert.equal(result.issues.some((issue) => issue.code === 'missing_socks_proxy_dependency'), false);
+});
+
+test('validateProject accepts aiohttp + aiohttp-socks as a valid SOCKS client', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'aiohttp==3.10.11',
+    'aiohttp-socks==0.9.0',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import os',
+    'import aiohttp',
+    'from aiohttp_socks import ProxyConnector',
+    '',
+    'proxy_domain = os.environ.get("PROXY_DOMAIN")',
+    'proxy_auth = os.environ.get("PROXY_AUTH")',
+    'proxy_url = f"socks5://{proxy_auth}@{proxy_domain}"',
+    'connector = ProxyConnector.from_url(proxy_url)',
+    'async with aiohttp.ClientSession(connector=connector) as session:',
+    '    await session.get("https://example.com")',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+
+  assert.equal(result.issues.some((issue) => issue.code === 'missing_socks_proxy_dependency'), false);
+});
+
+test('validateProject errors when aiohttp uses SOCKS but aiohttp-socks is missing', () => {
+  const dir = makePythonProject();
+  fs.writeFileSync(path.join(dir, 'requirements.txt'), [
+    'grpcio>=1.80.0',
+    'protobuf>=6.31.0',
+    'aiohttp==3.10.11',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'main.py'), [
+    'import os',
+    'import aiohttp',
+    '',
+    'proxy_domain = os.environ.get("PROXY_DOMAIN")',
+    'proxy_auth = os.environ.get("PROXY_AUTH")',
+    'proxy_url = f"socks5://{proxy_auth}@{proxy_domain}"',
+    'async with aiohttp.ClientSession() as session:',
+    '    await session.get("https://example.com", proxy=proxy_url)',
+    '',
+  ].join('\n'));
+
+  const result = validateProject(dir);
+  const issue = result.issues.find((item) => item.code === 'missing_socks_proxy_dependency');
+
+  assert.equal(result.ok, false);
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'error');
+  assert.match(issue.message, /aiohttp needs "aiohttp-socks"/);
 });
 
 test('validateProject allows HTTP client User-Agent headers from proxy examples', () => {
