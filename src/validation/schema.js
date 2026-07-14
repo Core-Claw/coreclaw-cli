@@ -170,7 +170,7 @@ export function validateInputSchema(schema, filePath = 'input_schema.json') {
   if (!hasConcurrencyFields && splitKey && !splitProperty) {
     issues.push(error(`input_schema.json b="${splitKey}" does not match any property name.`, 'input_schema_b_missing_property'));
   } else if (!hasConcurrencyFields && splitProperty && inferInputType(splitProperty) !== 'array') {
-    issues.push(error(`input_schema.json b="${splitKey}" must point to a property with type "array".`, 'input_schema_b_not_array'));
+    issues.push(warn(`input_schema.json b="${splitKey}" points to a property with type "${inferInputType(splitProperty)}", not "array". The platform accepts the schema, but a non-array field cannot be split into multiple tasks — it will run as a single task.`, 'input_schema_b_not_array'));
   }
 
   return issues;
@@ -723,7 +723,7 @@ function validateConcurrencySchema(schema) {
     if (!property) {
       issues.push(error(`input_schema.json concurrency field "${field}" does not match any property name.`, 'input_schema_concurrency_field_missing_property'));
     } else if (inferInputType(property) !== 'array') {
-      issues.push(error(`input_schema.json concurrency field "${field}" must point to a property with type "array".`, 'input_schema_concurrency_field_not_array'));
+      issues.push(warn(`input_schema.json concurrency field "${field}" points to a property with type "${inferInputType(property)}", not "array". The platform accepts the schema, but a non-array field cannot be split into multiple tasks — it will run as a single task. Use type "array" if this field should split the run into parallel tasks.`, 'input_schema_concurrency_field_not_array'));
     }
   }
 

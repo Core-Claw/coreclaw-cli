@@ -10,13 +10,14 @@ Source: `D:/Coreclaw_Work/github/scraper-webui-docs/src/content/docs/developer-g
 
 - [x] R001: `concurrency.fields` is the preferred task splitting config; `b` is optional legacy compatibility — validated without missing-`b` error
 - [x] R002: Active legacy `b` must match a property name — validated with error when no `concurrency.fields`
-- [x] R003: Active legacy `b` property type must be `array` — validated with error when no `concurrency.fields`
+- [x] R003: Active legacy `b` property type should be `array` — validated with **warn** (platform-verified 2026-07-14: platform accepts non-array `b`/concurrency field; runs as single task. Missing property stays error.)
 - [x] R004: `properties` must be array — validated with error
 - [x] R005: Unknown root keys produce warning; `concurrency` is documented and not warned — validated with warn
 - [x] R006: `description` is optional — correctly not enforced
 - [x] R007: `concurrency` must be an object when present — validated with error
 - [x] R008: `concurrency.fields` and `concurrency.remove_fields` must be arrays when present — validated with error
 - [x] R009: `concurrency.remove_fields` entries must be a subset of `fields` — validated with error
+- [x] R009a: `concurrency.fields` entry pointing to a non-array property — **warn** (platform-verified 2026-07-14: `input_schema_concurrency_field_not_array` downgraded error→warn; non-array field cannot split, runs as single task)
 
 ### Property Fields
 

@@ -130,6 +130,23 @@ Last Updated: 2026-07-11
 
 ## Pending Issues
 
+### Resolved: concurrency field non-array downgraded to warn (platform-verified)
+
+**Date**: 2026-07-14
+
+**Issue**: `input_schema_concurrency_field_not_array` and `input_schema_b_not_array` were `error`, claiming the platform rejects concurrency fields that point to non-array properties.
+
+**Platform verification (2026-07-14)**: Ran zillow-property-scanner (`01KWXWYADD2390HP9H1P7VRYPM`) whose `concurrency.fields: ["location"]` points to a `string` property. The platform **accepted the schema and the run succeeded** (1 subtask, 0 results — a script business-logic issue, not a schema rejection). A non-array concurrency field simply cannot be split, so the run executes as a single task.
+
+**Fix**:
+- `src/validation/schema.js`: both checks downgraded `error` → `warn`; messages now say "The platform accepts the schema, but a non-array field cannot be split into multiple tasks — it will run as a single task."
+- `src/runtime/input.js` `meaningConcurrencyItems`: a non-array value is now treated as "no value" (returns `[]`) instead of throwing `field [X] must be an array`, so local `--split` matches cloud behavior (which skips non-array fields rather than hard-erroring).
+- Tests updated: `warns when b points to a non-array property`; `legacy b reports missing field separately from non-array field` now expects the empty-field error for non-array values.
+
+**Tests**: 374 pass, 0 fail.
+
+**Status**: ✅ Resolved
+
 ### Resolved: editor/type mismatch downgraded to warn; "code 4000" wording removed (plan C1)
 
 **Date**: 2026-07-13

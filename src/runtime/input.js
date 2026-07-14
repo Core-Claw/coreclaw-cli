@@ -265,8 +265,12 @@ function meaningfulConcurrencyItems(value, fieldName) {
   if (value === undefined) {
     return [];
   }
+  // Platform-verified (2026-07-14): a non-array concurrency field value is
+  // treated as "no value" and skipped (the field does not participate in
+  // splitting); it does NOT hard-error. Mirror that here so local --split
+  // matches cloud behavior.
   if (!Array.isArray(value)) {
-    throw new CliError(`field [${fieldName}] must be an array`);
+    return [];
   }
 
   let sawObject = false;

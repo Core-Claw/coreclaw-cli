@@ -114,15 +114,19 @@ test('validates documented concurrency limits rules', () => {
   ]);
 });
 
-test('rejects b that does not point to an array property', () => {
+test('warns when b points to a non-array property', () => {
   const issues = validateInputSchema({
     b: 'keyword',
     properties: [
       { name: 'keyword', type: 'string', editor: 'input', default: 'python' },
     ],
   });
+  const issue = issues.find((i) => i.code === 'input_schema_b_not_array');
 
-  assert.match(issues.map((issue) => issue.message).join('\n'), /must point to a property with type "array"/);
+  // Platform-verified (2026-07-14): platform accepts non-array concurrency fields (runs as single task), so warn not error.
+  assert.equal(Boolean(issue), true);
+  assert.equal(issue.severity, 'warn');
+  assert.match(issue.message, /not "array"/);
 });
 
 test('reports batch array fields without split config as info only', () => {
@@ -305,9 +309,12 @@ test('legacy b reports missing field separately from non-array field', () => {
     () => expandSplitInput({}, schema, 0),
     (error) => error instanceof CliError && /missing concurrency field \[startUrls\]/.test(error.message),
   );
+  // Platform-verified (2026-07-14): a non-array value for a concurrency field is
+  // treated as "no value" (skipped), not a hard "must be an array" error. So a
+  // legacy b pointing at a non-array value surfaces as the empty-field error.
   assert.throws(
     () => expandSplitInput({ startUrls: 'https://example.com' }, schema, 0),
-    (error) => error instanceof CliError && /field \[startUrls\] must be an array/.test(error.message),
+    (error) => error instanceof CliError && /concurrency field \[startUrls\] is empty/.test(error.message),
   );
 });
 
