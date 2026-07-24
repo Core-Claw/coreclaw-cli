@@ -164,7 +164,7 @@ Sources: builds-and-runs.md, browser-automation/{camoufox,overview}.md, sdk-modu
 
 ## Priority 10: API v2 contract (cloud client vs exported-api-docs/openapi.json)
 
-Source: `D:/Coreclaw_Work/github/exported-api-docs/openapi.json` (37 operations, all `/api/v2/*`). The CLI cloud client (`src/cloud/client.js`) covers all 37 operationIds. Auth is HTTP Bearer (`Authorization: Bearer <token>`) with `?token=` query fallback; public endpoints (store, proxy/region, input-schema, internal) send no auth.
+Source: `D:/Coreclaw_Work/github/exported-api-docs/openapi.json` (37 operations, all `/api/v2/*`). The CLI cloud client (`src/cloud/client.js`) covers all 37 operationIds. The **published public contract** (scraper-webui-docs `public/openapi.json`) documents 34 of these; the remaining 3 — `getWorkerInternal`, `createWorkerVersion`, `updateWorkerVersion` — are internal/version-management operations excluded from the published spec (also intentionally unavailable via MCP) and are kept as preview capabilities. Auth is HTTP Bearer (`Authorization: Bearer <token>`), with the legacy `api-key` header and `?token=` query also supported by v2 (this client sends Bearer); public endpoints (store, proxy/region, input-schema) send no auth.
 
 - [x] R300: `getAccount` → GET /api/v2/users/account
 - [x] R301: `listStore` → GET /api/v2/store (public)
@@ -172,10 +172,10 @@ Source: `D:/Coreclaw_Work/github/exported-api-docs/openapi.json` (37 operations,
 - [x] R303: `listWorkers` → GET /api/v2/workers
 - [x] R304: `getWorker` → GET /api/v2/workers/{workerId}
 - [x] R305: `getWorkerInputSchema` → GET /api/v2/workers/{workerId}/input-schema (public)
-- [x] R306: `getWorkerInternal` → GET /api/v2/workers/{workerId}/internal (public)
-- [x] R307: `runWorker` → POST /api/v2/workers/{workerId}/runs (input at top level, not wrapped in parameters.custom)
-- [x] R308: `createWorkerVersion` → POST /api/v2/workers/{workerId}/versions (multipart/form-data: scraper_file + title + description + categories)
-- [x] R309: `updateWorkerVersion` → PUT /api/v2/workers/{workerId}/versions/{version} (multipart)
+- [x] R306: `getWorkerInternal` → GET /api/v2/workers/{workerId}/internal (**preview — excluded from published public contract**; requires auth)
+- [x] R307: `runWorker` → POST /api/v2/workers/{workerId}/runs (Worker form fields go under `input.parameters.custom`, not top-level `input`)
+- [x] R308: `createWorkerVersion` → POST /api/v2/workers/{workerId}/versions (**preview — excluded from published public contract**; multipart/form-data: scraper_file + title + description + categories)
+- [x] R309: `updateWorkerVersion` → PUT /api/v2/workers/{workerId}/versions/{version} (**preview — excluded from published public contract**; multipart)
 - [x] R310: `listWorkerRuns` → GET /api/v2/worker-runs (offset/limit pagination, lowercase status enum)
 - [x] R311: `getWorkerRun` → GET /api/v2/worker-runs/{runId}
 - [x] R312: `getWorkerRunLog` → GET /api/v2/worker-runs/{runId}/log

@@ -380,7 +380,7 @@ function buildDiagnosisIssues({ status, detail, errorLogs, warningLogs, results,
       code: 'RUN_FAILED',
       message: detail.err_msg || 'CoreClaw run failed. Check recent error logs and full logs.',
     });
-  } else if (status === 'aborting' || status === 'aborted') {
+  } else if (status === 'aborting') {
     issues.push({
       severity: 'warning',
       code: 'RUN_ABORTED',

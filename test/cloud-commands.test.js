@@ -70,7 +70,7 @@ test('workers run posts input at top level to v2 /api/v2/workers/{id}/runs', asy
   assert.match(output.stdout, /Run started: RUN123/);
   const runRequest = calls.find((call) => call.url.endsWith('/api/v2/workers/WORKER/runs'));
   assert.deepEqual(JSON.parse(runRequest.request.body), {
-    input: { keyword: 'coffee', limit: 10 },
+    input: { parameters: { custom: { keyword: 'coffee', limit: 10 } } },
     version: 'v2.0.0',
     is_async: true,
   });
@@ -342,7 +342,7 @@ test('tasks create posts worker_id, title, input to v2 /api/v2/worker-tasks', as
   assert.deepEqual(JSON.parse(calls[0].request.body), {
     worker_id: 'WORKER',
     title: 'Daily coffee',
-    input: { keyword: 'coffee' },
+    input: { parameters: { custom: { keyword: 'coffee' } } },
     description: 'desc',
     schedule_type: 1,
     schedule_enabled: 1,
@@ -385,7 +385,7 @@ test('tasks input put updates task input via v2 PUT /api/v2/worker-tasks/{id}/in
 
   assert.equal(calls[0].url, 'https://openapi.coreclaw.com/api/v2/worker-tasks/demo-task/input');
   assert.equal(calls[0].request.method, 'PUT');
-  assert.deepEqual(JSON.parse(calls[0].request.body), { input: { keyword: 'tea' }, version: 'v2' });
+  assert.deepEqual(JSON.parse(calls[0].request.body), { input: { parameters: { custom: { keyword: 'tea' } } }, version: 'v2' });
   assert.match(output.stdout, /Task input updated: demo-task/);
 });
 

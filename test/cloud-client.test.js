@@ -98,7 +98,7 @@ test('listWorkerRunResults sends v2 offset/limit pagination as query params', as
   assert.equal(calls[0].request.method, 'GET');
 });
 
-test('runWorker posts input at top level under v2 path with Bearer auth', async () => {
+test('runWorker wraps flat input under input.parameters.custom (v2 contract)', async () => {
   const calls = [];
   const client = createCoreClawClient({
     apiKey: 'test-key',
@@ -119,13 +119,43 @@ test('runWorker posts input at top level under v2 path with Bearer auth', async 
   assert.equal(calls[0].request.method, 'POST');
   assert.equal(calls[0].request.headers.authorization, 'Bearer test-key');
   assert.deepEqual(JSON.parse(calls[0].request.body), {
-    input: { keyword: 'coffee', limit: 10 },
+    input: { parameters: { custom: { keyword: 'coffee', limit: 10 } } },
     version: '1.0.0',
     is_async: true,
   });
 });
 
-test('createWorkerTask posts worker_id, title, input with schedule fields', async () => {
+test('runWorker leaves already-wrapped input untouched', async () => {
+  const calls = [];
+  const client = createCoreClawClient({
+    apiKey: 'test-key',
+    fetchImpl: async (url, request) => {
+      calls.push({ url, request });
+      return jsonResponse({ code: 0, message: 'success', data: { run_slug: 'run-456' } });
+    },
+  });
+
+  const wrapped = { parameters: { custom: { keyword: 'tea' } } };
+  await client.runWorker('demo-worker', { input: wrapped, isAsync: true });
+
+  assert.deepEqual(JSON.parse(calls[0].request.body).input, wrapped);
+});
+
+test('runWorker omits input when none is provided', async () => {
+  const calls = [];
+  const client = createCoreClawClient({
+    apiKey: 'test-key',
+    fetchImpl: async (url, request) => {
+      calls.push({ url, request });
+      return jsonResponse({ code: 0, message: 'success', data: { run_slug: 'run-789' } });
+    },
+  });
+
+  await client.runWorker('demo-worker', { isAsync: true });
+  assert.equal(JSON.parse(calls[0].request.body).input, undefined);
+});
+
+test('createWorkerTask wraps flat input under input.parameters.custom', async () => {
   const calls = [];
   const client = createCoreClawClient({
     apiKey: 'test-key',
@@ -149,7 +179,7 @@ test('createWorkerTask posts worker_id, title, input with schedule fields', asyn
   assert.deepEqual(JSON.parse(calls[0].request.body), {
     worker_id: 'demo-worker',
     title: 'Daily coffee scrape',
-    input: { keyword: 'coffee' },
+    input: { parameters: { custom: { keyword: 'coffee' } } },
     schedule_type: 1,
     schedule_enabled: 1,
     schedule_time: '09:00',

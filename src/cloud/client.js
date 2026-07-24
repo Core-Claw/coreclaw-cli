@@ -5,10 +5,18 @@ export const DEFAULT_API_BASE_URL = 'https://openapi.coreclaw.com';
 /**
  * CoreClaw API v2 client.
  *
- * Covers all 37 documented operations in exported-api-docs/openapi.json.
- * Auth: HTTP Bearer (Authorization: Bearer <token>) with ?token= query fallback
- * (QueryTokenAuth). Public endpoints (store, proxy/region, input-schema, internal)
- * send no auth.
+ * Covers all 37 operations in the source OpenAPI document
+ * (exported-api-docs/openapi.json). The published public contract documents
+ * 34 of these; the other 3 — getWorkerInternal, createWorkerVersion,
+ * updateWorkerVersion — are internal/version-management operations that the
+ * published spec excludes (also intentionally unavailable via MCP). They are
+ * kept here as preview capabilities (release publish uses createWorkerVersion)
+ * but are NOT part of the documented public API and may change without notice.
+ *
+ * Auth: HTTP Bearer (Authorization: Bearer <token>), with two fallback modes
+ * also supported by v2 — the legacy api-key header and ?token= query
+ * (QueryTokenAuth). This client sends Bearer. Public endpoints (store,
+ * proxy/region, input-schema) send no auth.
  *
  * Response envelope: { code, message, data, request_id }. code === 0 means success.
  * Error envelope: { code, message, details?, request_id? } returned on HTTP 4xx/5xx.
@@ -16,11 +24,14 @@ export const DEFAULT_API_BASE_URL = 'https://openapi.coreclaw.com';
 
 const V2 = '/api/v2';
 
+// Operations whose published spec marks them as public (no auth required).
+// Note: getWorkerInternal is intentionally NOT here — it is an excluded
+// internal operation in the published contract. It is still callable as a
+// preview feature but sends auth like any authenticated operation.
 const PUBLIC_OPERATIONS = new Set([
   'listStore',
   'listProxyRegions',
   'getWorkerInputSchema',
-  'getWorkerInternal',
 ]);
 
 export function resolveApiKey(options = {}, env = process.env) {
@@ -127,9 +138,9 @@ export function createCoreClawClient({
     auth: false,
   });
 
-  const getWorkerInternal = (workerId) => request('GET', `${V2}/workers/${encodePathParam(workerId)}/internal`, {
-    auth: false,
-  });
+  // Preview: /internal is excluded from the published public contract. Kept as
+  // a preview capability; requires auth like any authenticated operation.
+  const getWorkerInternal = (workerId) => request('GET', `${V2}/workers/${encodePathParam(workerId)}/internal`);
 
   const runWorker = (workerId, {
     input,
@@ -140,7 +151,7 @@ export function createCoreClawClient({
     offset,
   } = {}) => request('POST', `${V2}/workers/${encodePathParam(workerId)}/runs`, {
     body: stripEmpty({
-      input,
+      input: wrapWorkerInput(input),
       version,
       is_async: isAsync,
       callback_url: callbackUrl,
@@ -244,7 +255,7 @@ export function createCoreClawClient({
     body: stripEmpty({
       worker_id: workerId,
       title,
-      input,
+      input: wrapWorkerInput(input),
       version,
       description,
       schedule_type: scheduleType,
@@ -279,7 +290,7 @@ export function createCoreClawClient({
   const getWorkerTaskInput = (workerTaskId) => request('GET', `${V2}/worker-tasks/${encodePathParam(workerTaskId)}/input`);
 
   const updateWorkerTaskInput = (workerTaskId, { input, version }) => request('PUT', `${V2}/worker-tasks/${encodePathParam(workerTaskId)}/input`, {
-    body: stripEmpty({ input, version }),
+    body: stripEmpty({ input: wrapWorkerInput(input), version }),
   });
 
   const runWorkerTask = (workerTaskId, { callbackUrl, isAsync = true, limit, offset } = {}) => request('POST', `${V2}/worker-tasks/${encodePathParam(workerTaskId)}/runs`, {
@@ -370,6 +381,33 @@ function stripEmpty(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([_key, item]) => item !== undefined && item !== null && item !== ''),
   );
+}
+
+/**
+ * v2 runWorker requires Worker form fields under `input.parameters.custom`.
+ * Users typically pass a flat input file (the same shape used for local runs),
+ * e.g. `{ keywords: ["coffee"], max_results: 1 }`. Wrap such raw input so the
+ * caller does not have to know the v2 envelope. If the input is already wrapped
+ * (has `parameters.custom`) or is explicitly absent/null, leave it untouched.
+ *
+ * Verified 2026-07-24: flat `input` is rejected with code 11000; the wrapped
+ * form is accepted and returns data.run_slug.
+ */
+function wrapWorkerInput(input) {
+  if (input === undefined || input === null) {
+    return input;
+  }
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    return input;
+  }
+  if (
+    input.parameters &&
+    typeof input.parameters === 'object' &&
+    Object.prototype.hasOwnProperty.call(input.parameters, 'custom')
+  ) {
+    return input;
+  }
+  return { parameters: { custom: input } };
 }
 
 function buildMultipartVersion({ scraperFile, title, description, categories, icon }, FormDataImpl, BlobImpl) {
